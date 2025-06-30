@@ -1,0 +1,36 @@
+{
+  "name": "system-testing",
+  "version": "1.0.0",
+  "description": "System testing with Selenium and browsers.",
+  "keywords": [
+    "system",
+    "testing",
+    "selenium",
+    "chrome"
+  ],
+  "homepage": "https://github.com/kaspernj/system-testing#readme",
+  "bugs": {
+    "url": "https://github.com/kaspernj/system-testing/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kaspernj/system-testing.git"
+  },
+  "license": "ISC",
+  "author": "kasper@diestoeckels.de",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "diggerize": "^1.0.9",
+    "htmlfy": "^0.8.1",
+    "mime": "^4.0.7",
+    "moment": "^2.30.1",
+    "ws": "^8.18.3"
+  },
+  "peerDependencies": {
+    "selenium-webdriver": "^4.34.0"
+  }
+}
