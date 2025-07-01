@@ -1,7 +1,7 @@
 import {digg} from "diggerize"
 import EventEmitter from "events"
 
-import SystemTestCommunicator from "./system-test-communicator"
+import SystemTestCommunicator from "./system-test-communicator.js"
 
 const shared = {}
 

@@ -7,7 +7,6 @@ import moment from "moment"
 import {prettify} from "htmlfy"
 import SystemTestCommunicator from "./system-test-communicator.js"
 import SystemTestHttpServer from "./system-test-http-server.js"
-import {wait} from "awaitery"
 import {WebSocketServer} from "ws"
 
 class ElementNotFoundError extends Error { }
@@ -26,9 +25,9 @@ export default class SystemTest {
 
     await systemTest.communicator.sendCommand({type: "initialize"})
     await systemTest.visit("/blank")
-    await systemTest.findByTestID("blankText")
 
     try {
+      await systemTest.findByTestID("blankText")
       await callback(systemTest)
     } catch (error) {
       await systemTest.takeScreenshot()
@@ -185,8 +184,6 @@ export default class SystemTest {
 
     // Web socket server to communicate with browser
     await this.startWebSocketServer()
-
-    // await wait(360000)
 
     // Visit the root page and wait for Expo to be loaded and the app to appear
     await this.driverVisit("/?systemTest=true")
