@@ -24,6 +24,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "awaitery": "^1.0.1",
     "diggerize": "^1.0.9",
     "htmlfy": "^0.8.1",
     "mime": "^4.0.7",
