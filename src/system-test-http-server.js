@@ -10,7 +10,7 @@ export default class SystemTestHttpServer {
 
   onHttpServerRequest = async (request, response) => {
     const parsedUrl = url.parse(request.url)
-    let filePath = `${this.basePath}/dist${parsedUrl.pathname}`
+    let filePath = `${process.cwd()}/dist${parsedUrl.pathname}`
 
     if (filePath.endsWith("/")) {
       filePath += "index.html"
@@ -26,11 +26,11 @@ export default class SystemTestHttpServer {
     }
 
     if (!fileExists) {
-      filePath = `${this.basePath}/dist/index.html`
+      filePath = `${process.cwd()}/dist/index.html`
     }
 
     const fileContent = await fs.readFile(filePath)
-    const mimeType = mime.lookup(filePath)
+    const mimeType = mime.getType(filePath)
 
     response.statusCode = 200
     response.setHeader("Content-Type", mimeType)
