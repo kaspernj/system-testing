@@ -1,12 +1,13 @@
 import {Builder, By} from "selenium-webdriver"
-import chrome from "selenium-webdriver/chrome"
+import chrome from "selenium-webdriver/chrome.js"
 import {digg} from "diggerize"
 import fs from "node:fs/promises"
-import logging from "selenium-webdriver/lib/logging"
+import logging from "selenium-webdriver/lib/logging.js"
 import moment from "moment"
 import {prettify} from "htmlfy"
-import SystemTestCommunicator from "./system-test-communicator"
-import SystemTestHttpServer from "./system-test-http-server"
+import SystemTestCommunicator from "./system-test-communicator.js"
+import SystemTestHttpServer from "./system-test-http-server.js"
+import {wait} from "awaitery"
 import {WebSocketServer} from "ws"
 
 class ElementNotFoundError extends Error { }
@@ -37,7 +38,7 @@ export default class SystemTest {
   }
 
   constructor() {
-    this.communicator = new SystemTestCommunicator({onCommand: this.onCommand})
+    this.communicator = new SystemTestCommunicator({onCommand: this.onCommandReceived})
     this._responses = {}
     this._sendCount = 0
   }
@@ -185,10 +186,19 @@ export default class SystemTest {
     // Web socket server to communicate with browser
     await this.startWebSocketServer()
 
+    // await wait(360000)
+
     // Visit the root page and wait for Expo to be loaded and the app to appear
     await this.driverVisit("/?systemTest=true")
-    await this.find("body > #root")
-    await this.find("[data-component='flash-notifications-container']", {visible: null})
+
+    try {
+      await this.find("body > #root")
+      await this.find("[data-testid='systemTestingComponent']", {visible: null})
+    } catch (error) {
+      await systemTest.takeScreenshot()
+
+      throw error
+    }
 
     // Wait for client to connect
     await this.waitForClientWebSocket()
@@ -229,7 +239,11 @@ export default class SystemTest {
     this.wss.on("close", this.onWebSocketClose)
   }
 
-  onCommand = async ({data}) => {
+  onCommand(callback) {
+    this._onCommandCallback = callback
+  }
+
+  onCommandReceived = async ({data}) => {
     const type = data.type
     let result
 
@@ -248,10 +262,8 @@ export default class SystemTest {
       console.log("Browser log", ...data.value)
     } else if (type == "error" || data.type == "unhandledrejection") {
       this.handleError(data)
-    } else if (type == "query") {
-      await Configuration.current().getDatabasePool().withConnection(async (db) => {
-        result = await db.query(data.sql)
-      })
+    } else if (this._onCommandCallback) {
+      result = await this._onCommandCallback({data, type})
     } else {
       console.error(`onWebSocketClientMessage unknown data (type ${type})`, data)
     }
@@ -283,17 +295,15 @@ export default class SystemTest {
       return
     }
 
-    setTimeout(() => { // eslint-disable-line no-undef
-      const error = new Error(`Browser error: ${data.message}`)
+    const error = new Error(`Browser error: ${data.message}`)
 
-      if (data.trace) {
-        const errorTrace = error.trace
+    if (data.trace) {
+      const errorTrace = error.trace
 
-        error.trace = `${data.trace}${errorTrace}`
-      }
+      error.trace = `${data.trace}${errorTrace}`
+    }
 
-      throw error
-    }, 0)
+    console.error(error)
   }
 
   async stop() {
@@ -309,8 +319,7 @@ export default class SystemTest {
   }
 
   async takeScreenshot() {
-    const basePath = await fs.realpath(`${__dirname}/../..`) // eslint-disable-line no-undef
-    const path = `${basePath}/tmp/screenshots`
+    const path = `${process.cwd()}/tmp/screenshots`
 
     await fs.mkdir(path, {recursive: true})
 

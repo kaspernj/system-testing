@@ -124,12 +124,20 @@ export default class SystemTestBrowserHelper {
     if (data.type == "initialize") {
       this.events.emit("initialize")
 
+      if (this._onInitializeCallback) {
+        await this._onInitializeCallback()
+      }
+
       return {result: "initialized"}
     } else if (data.type == "visit") {
       this.events.emit("navigate", {path: data.path})
     } else {
       throw new Error(`Unknown command type for SystemTestBrowserHelper: ${data.type}`)
     }
+  }
+
+  onInitialize(callback) {
+    this._onInitializeCallback = callback
   }
 
   overrideConsoleLog() {
