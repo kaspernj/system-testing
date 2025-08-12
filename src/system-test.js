@@ -180,7 +180,7 @@ export default class SystemTest {
       .setCapability("goog:loggingPrefs", {browser: "ALL"})
       .build()
 
-    this.setTimeouts(4000)
+    await this.setTimeouts(10000)
 
     // Web socket server to communicate with browser
     await this.startWebSocketServer()
@@ -200,6 +200,7 @@ export default class SystemTest {
     // Wait for client to connect
     await this.waitForClientWebSocket()
 
+    await this.setTimeouts(4000)
     this._started = true
   }
 
