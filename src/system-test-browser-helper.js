@@ -44,7 +44,7 @@ export default class SystemTestBrowserHelper {
         errorClass: "UnhandledRejection",
         file: null,
         line: null,
-        message: event.reason.message || "Unhandled promise rejection",
+        message: event.reason.message || event.reason || "Unhandled promise rejection without a message",
         url: window.location.href
       })
     })

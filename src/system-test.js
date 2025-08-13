@@ -180,7 +180,7 @@ export default class SystemTest {
       .setCapability("goog:loggingPrefs", {browser: "ALL"})
       .build()
 
-    await this.setTimeouts(20000)
+    await this.setTimeouts(4000)
 
     // Web socket server to communicate with browser
     await this.startWebSocketServer()
@@ -200,7 +200,6 @@ export default class SystemTest {
     // Wait for client to connect
     await this.waitForClientWebSocket()
 
-    await this.setTimeouts(4000)
     this._started = true
   }
 
@@ -325,12 +324,16 @@ export default class SystemTest {
     const now = new Date()
     const screenshotPath = `${path}/${moment(now).format("YYYY-MM-DD-HH-MM-SS")}.png`
     const htmlPath = `${path}/${moment(now).format("YYYY-MM-DD-HH-MM-SS")}.html`
+    const logsPath = `${path}/${moment(now).format("YYYY-MM-DD-HH-MM-SS")}.logs.txt`
+    const logsText = await this.getBrowserLogs()
     const html = await this.getHTML()
     const htmlPretty = prettify(html)
 
-    await fs.writeFile(screenshotPath, imageContent, "base64")
     await fs.writeFile(htmlPath, htmlPretty)
+    await fs.writeFile(logsPath, logsText.join("\n"))
+    await fs.writeFile(screenshotPath, imageContent, "base64")
 
+    console.log("Logs:", logsPath)
     console.log("Screenshot:", screenshotPath)
     console.log("HTML:", htmlPath)
   }
