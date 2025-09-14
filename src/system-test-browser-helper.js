@@ -54,7 +54,9 @@ export default class SystemTestBrowserHelper {
     let backtrace
 
     if (data.error && data.error.stack) {
-      backtrace = data.error.stack
+      backtrace = data.error.stack.split("\n")
+      backtrace.shift()
+      backtrace = backtrace.join("\n")
     } else if (data.file) {
       backtrace = [`${data.file}:${data.line}`]
     }

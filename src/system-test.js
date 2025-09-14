@@ -294,10 +294,8 @@ export default class SystemTest {
 
     const error = new Error(`Browser error: ${data.message}`)
 
-    if (data.trace) {
-      const errorTrace = error.trace
-
-      error.trace = `${data.trace}${errorTrace}`
+    if (data.backtrace) {
+      error.stack = `${error.message}\n${data.backtrace}`
     }
 
     console.error(error)
