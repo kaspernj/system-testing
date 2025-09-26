@@ -71,7 +71,14 @@ export default class SystemTest {
   }
 
   async find(selector, args = {}) {
-    const elements = await this.all(selector, args)
+    let elements
+
+    try {
+      elements = await this.all(selector, args)
+    } catch (error) {
+      // Re-throw to recover stack trace
+      throw new Error(`${error.message} (selector: ${selector})`)
+    }
 
     if (elements.length > 1) {
       throw new Error(`More than 1 elements (${elements.length}) was found by CSS: ${selector}`)
@@ -84,7 +91,7 @@ export default class SystemTest {
     return elements[0]
   }
 
-  findByTestID = async (testID, args) => await this.find(`[data-testid='${testID}']`, args)
+  async findByTestID(testID, args) { return await this.find(`[data-testid='${testID}']`, args) }
 
   async findNoWait(selector) {
     await this.driverSetTimeouts(0)
@@ -146,13 +153,8 @@ export default class SystemTest {
     return notificationMessageTexts
   }
 
-  isStarted() {
-    return this._started
-  }
-
-  async getHTML() {
-    return await this.driver.getPageSource()
-  }
+  isStarted() { return this._started }
+  async getHTML() { return await this.driver.getPageSource() }
 
   async start() {
     if (process.env.SYSTEM_TEST_HOST == "expo-dev-server") {
