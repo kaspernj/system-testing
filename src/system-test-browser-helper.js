@@ -98,20 +98,32 @@ export default class SystemTestBrowserHelper {
     return this.originalConsoleLog(...args)
   }
 
-  consoleLogMessage(arg) {
+  consoleLogMessage(arg, scannedObjects = []) {
     if (Array.isArray(arg)) {
+      if (scannedObjects.includes(arg)) {
+        return "[recursive]"
+      } else {
+        scannedObjects.push(arg)
+      }
+
       const result = []
 
       for (const value of arg) {
-        result.push(this.consoleLogMessage(value))
+        result.push(this.consoleLogMessage(value, scannedObjects))
       }
 
       return result
     } else if (Object.prototype.toString.call(arg) === '[object Object]') {
+      if (scannedObjects.includes(arg)) {
+        return "[recursive]"
+      } else {
+        scannedObjects.push(arg)
+      }
+
       const result = {}
 
       for (const key in arg) {
-        result[key] = this.consoleLogMessage(arg[key])
+        result[key] = this.consoleLogMessage(arg[key], scannedObjects)
       }
 
       return result
