@@ -36,7 +36,7 @@ export default class SystemTest {
     }
   }
 
-  constructor({host = "localhost", port = 8081, ...restArgs}) {
+  constructor({host = "localhost", port = 8081, ...restArgs} = {}) {
     const restArgsKeys = Object.keys(restArgs)
 
     if (restArgsKeys.length > 0) {
