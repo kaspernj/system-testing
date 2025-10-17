@@ -12,9 +12,9 @@ import {WebSocketServer} from "ws"
 class ElementNotFoundError extends Error { }
 
 export default class SystemTest {
-  static current() {
+  static current(args) {
     if (!globalThis.systemTest) {
-      globalThis.systemTest = new SystemTest()
+      globalThis.systemTest = new SystemTest(args)
     }
 
     return globalThis.systemTest
@@ -36,8 +36,16 @@ export default class SystemTest {
     }
   }
 
-  constructor() {
+  constructor({host = "localhost", port = 8081, ...restArgs}) {
+    const restArgsKeys = Object.keys(restArgs)
+
+    if (restArgsKeys.length > 0) {
+      throw new Error(`Unknown arguments: ${restArgsKeys.join(", ")}`)
+    }
+
     this.communicator = new SystemTestCommunicator({onCommand: this.onCommandReceived})
+    this._host = host
+    this._port = port
     this._responses = {}
     this._sendCount = 0
   }
@@ -158,9 +166,9 @@ export default class SystemTest {
 
   async start() {
     if (process.env.SYSTEM_TEST_HOST == "expo-dev-server") {
-      this.currentUrl = "http://localhost:8081"
+      this.currentUrl = `http://${this._host}:${this._port}`
     } else if (process.env.SYSTEM_TEST_HOST == "dist") {
-      this.currentUrl = "http://localhost:1984"
+      this.currentUrl = `http://${this._host}:1984`
       this.systemTestHttpServer = new SystemTestHttpServer()
 
       await this.systemTestHttpServer.start()
