@@ -34,6 +34,16 @@ const getSystemTestBrowserHelper = () => {
   return shared.systemTestBrowserHelper
 }
 
+/**
+ * A hook that provides system test capabilities.
+ *
+ * @param {Object} options - Options for the hook.
+ * @param {Function} options.onInitialize - A callback function that is called when the system test browser helper is initialized.
+ *
+ * @returns {Object} An object containing:
+ *  - enabled: A boolean indicating if system test mode is enabled.
+ *  - systemTestBrowserHelper: An instance of SystemTestBrowserHelper if enabled, otherwise null.
+ */
 export default function useSystemTest({onInitialize, ...restArgs} = {}) {
   const router = useRouter()
   const enabled = useMemo(() => isSystemTestEnabled(), [])

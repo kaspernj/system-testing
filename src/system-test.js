@@ -7,11 +7,18 @@ import moment from "moment"
 import {prettify} from "htmlfy"
 import SystemTestCommunicator from "./system-test-communicator.js"
 import SystemTestHttpServer from "./system-test-http-server.js"
+import {waitFor} from "awaitery"
 import {WebSocketServer} from "ws"
 
 class ElementNotFoundError extends Error { }
 
 export default class SystemTest {
+  /**
+   * Gets the current system test instance
+   *
+   * @param {object} args
+   * @returns {SystemTest}
+   */
   static current(args) {
     if (!globalThis.systemTest) {
       globalThis.systemTest = new SystemTest(args)
@@ -20,6 +27,11 @@ export default class SystemTest {
     return globalThis.systemTest
   }
 
+  /**
+   * Runs a system test
+   *
+   * @param {function(SystemTest): Promise<void>} callback
+   */
   static async run(callback) {
     const systemTest = this.current()
 
@@ -36,6 +48,13 @@ export default class SystemTest {
     }
   }
 
+  /**
+   * Creates a new SystemTest instance
+   *
+   * @param {object} args
+   * @param {string} args.host
+   * @param {number} args.port
+   */
   constructor({host = "localhost", port = 8081, ...restArgs} = {}) {
     const restArgsKeys = Object.keys(restArgs)
 
@@ -50,6 +69,14 @@ export default class SystemTest {
     this._sendCount = 0
   }
 
+  /**
+   * Finds all elements by CSS selector
+   *
+   * @param {string} selector
+   * @param {object} args
+   *
+   * @returns {import("selenium-webdriver").WebElement[]}
+   */
   async all(selector, args = {}) {
     const {visible = true} = args
     const elements = await this.driver.findElements(By.css(selector))
@@ -71,13 +98,24 @@ export default class SystemTest {
     return activeElements
   }
 
-  // Clicks an element that has children which fills out the element and would otherwise have caused a ElementClickInterceptedError
+  /**
+   * Clicks an element that has children which fills out the element and would otherwise have caused a ElementClickInterceptedError
+   *
+   * @param {import("selenium-webdriver").WebElement} element
+   **/
   async click(element) {
     const actions = this.driver.actions({async: true})
 
     await actions.move({origin: element}).click().perform()
   }
 
+  /**
+   * Finds a single element by CSS selector
+   *
+   * @param {string} selector
+   * @param {object} args
+   * @returns {import("selenium-webdriver").WebElement}
+   */
   async find(selector, args = {}) {
     let elements
 
@@ -99,8 +137,21 @@ export default class SystemTest {
     return elements[0]
   }
 
+  /**
+   * Finds a single element by test ID
+   *
+   * @param {string} testID
+   * @param {object} args
+   * @returns {import("selenium-webdriver").WebElement}
+   */
   async findByTestID(testID, args) { return await this.find(`[data-testid='${testID}']`, args) }
 
+  /**
+   * Finds a single element by CSS selector without waiting
+   *
+   * @param {string} selector
+   * @returns {import("selenium-webdriver").WebElement}
+   */
   async findNoWait(selector) {
     await this.driverSetTimeouts(0)
 
@@ -111,6 +162,11 @@ export default class SystemTest {
     }
   }
 
+  /**
+   * Gets browser logs
+   *
+   * @returns {Promise<string[]>}
+   */
   async getBrowserLogs() {
     const entries = await this.driver.manage().logs().get(logging.Type.BROWSER)
     const browserLogs = []
@@ -131,6 +187,11 @@ export default class SystemTest {
     return browserLogs
   }
 
+  /**
+   * Expects no element to be found by CSS selector
+   *
+   * @param {string} selector
+   */
   async expectNoElement(selector) {
     let found = false
 
@@ -148,6 +209,11 @@ export default class SystemTest {
     }
   }
 
+  /**
+   * Gets notification messages
+   *
+   * @returns {Promise<string[]>}
+   */
   async notificationMessages() {
     const notificationMessageElements = await this.all("[data-class='notification-message']")
     const notificationMessageTexts = []
@@ -161,9 +227,48 @@ export default class SystemTest {
     return notificationMessageTexts
   }
 
+  /**
+   * Expects a notification message to appear and waits for it if necessary.
+   *
+   * @param {string} expectedNotificationMessage
+   */
+  async expectNotificationMessage(expectedNotificationMessage) {
+    const allDetectedNotificationMessages = []
+
+    await waitFor(async () => {
+      const notificationMessages = await this.notificationMessages()
+
+      for (const notificationMessage of notificationMessages) {
+        if (!allDetectedNotificationMessages.includes(notificationMessage)) {
+          allDetectedNotificationMessages.push(notificationMessage)
+        }
+
+        if (notificationMessage == expectedNotificationMessage) {
+          return
+        }
+      }
+
+      throw new Error(`Notification message ${expectedNotificationMessage} wasn't included in: ${allDetectedNotificationMessages.join(", ")}`)
+    })
+  }
+
+  /**
+   * Indicates whether the system test has been started
+   *
+   * @returns {boolean}
+   */
   isStarted() { return this._started }
+
+  /**
+   * Gets the HTML of the current page
+   *
+   * @returns {Promise<string>}
+   */
   async getHTML() { return await this.driver.getPageSource() }
 
+  /**
+   * Starts the system test
+   */
   async start() {
     if (process.env.SYSTEM_TEST_HOST == "expo-dev-server") {
       this.currentUrl = `http://${this._host}:${this._port}`
@@ -213,6 +318,9 @@ export default class SystemTest {
     this._started = true
   }
 
+  /**
+   * Restores previously set timeouts
+   */
   async restoreTimeouts() {
     if (!this._timeouts) {
       throw new Error("Timeouts haven't previously been set")
@@ -221,15 +329,30 @@ export default class SystemTest {
     await this.driverSetTimeouts(this._timeouts)
   }
 
+  /**
+   * Sets driver timeouts
+   *
+   * @param {number} newTimeout
+   */
   async driverSetTimeouts(newTimeout) {
     await this.driver.manage().setTimeouts({implicit: newTimeout})
   }
 
+  /**
+   * Sets timeouts and stores the previous timeouts
+   *
+   * @param {number} newTimeout
+   */
   async setTimeouts(newTimeout) {
     this._timeouts = newTimeout
     await this.restoreTimeouts()
   }
 
+  /**
+   * Waits for the client web socket to connect
+   *
+   * @returns {Promise<void>}
+   */
   waitForClientWebSocket() {
     return new Promise((resolve) => {
       if (this.ws) {
@@ -240,6 +363,9 @@ export default class SystemTest {
     })
   }
 
+  /**
+   * Starts the web socket server
+   */
   startWebSocketServer() {
     this.wss = new WebSocketServer({port: 1985})
     this.wss.on("connection", this.onWebSocketConnection)
@@ -311,18 +437,29 @@ export default class SystemTest {
     console.error(error)
   }
 
+  /**
+   * Stops the system test
+   */
   async stop() {
     this.systemTestHttpServer?.close()
     this.wss?.close()
     await this.driver.quit()
   }
 
+  /**
+   * Visits a path in the browser
+   *
+   * @param {string} path
+   */
   async driverVisit(path) {
     const url = `${this.currentUrl}${path}`
 
     await this.driver.get(url)
   }
 
+  /**
+   * Takes a screenshot, saves HTML and browser logs
+   */
   async takeScreenshot() {
     const path = `${process.cwd()}/tmp/screenshots`
 
@@ -346,6 +483,11 @@ export default class SystemTest {
     console.log("HTML:", htmlPath)
   }
 
+  /**
+   * Visits a path in the browser
+   *
+   * @param {string} path
+   */
   async visit(path) {
     await this.communicator.sendCommand({type: "visit", path})
   }
