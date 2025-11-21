@@ -188,6 +188,49 @@ export default class SystemTest {
   }
 
   /**
+   * Interacts with an element by calling a method on it with the given arguments.
+   * Retrying on ElementNotInteractableError.
+   *
+   * @param {import("selenium-webdriver").WebElement|string} elementOrIdentifier - The element or a CSS selector to find the element.
+   * @param {string} methodName - The method name to call on the element.
+   * @param {...any} args - Arguments to pass to the method.
+   *
+   * @returns {Promise<any>}
+   */
+  async interact(elementOrIdentifier, methodName, ...args) {
+    let element
+    let tries = 0
+
+    while (true) {
+      tries++
+
+      if (typeof elementOrIdentifier == "string") {
+        element = await this.find(elementOrIdentifier)
+      } else {
+        element = elementOrIdentifier
+      }
+
+      if (!element[methodName]) {
+        // throw new Error(`${element.constructor.name} has no method named: ${methodName}`)
+      }
+
+      try {
+        return await element[methodName](...args)
+      } catch (error) {
+        if (error.constructor.name === "ElementNotInteractableError") {
+          // Retry finding the element and interacting with it
+          if (tries >= 3) {
+            throw new Error(`${element.constructor.name} ${methodName} failed after ${tries} tries: ${error.message}`)
+          }
+        } else {
+          // Re-throw with un-corrupted stack trace
+          throw new Error(`${element.constructor.name} ${methodName} failed: ${error.message}`)
+        }
+      }
+    }
+  }
+
+  /**
    * Expects no element to be found by CSS selector
    *
    * @param {string} selector
