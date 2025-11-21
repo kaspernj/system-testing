@@ -7,7 +7,7 @@ import moment from "moment"
 import {prettify} from "htmlfy"
 import SystemTestCommunicator from "./system-test-communicator.js"
 import SystemTestHttpServer from "./system-test-http-server.js"
-import {waitFor} from "awaitery"
+import {wait, waitFor} from "awaitery"
 import {WebSocketServer} from "ws"
 
 class ElementNotFoundError extends Error { }
@@ -104,6 +104,10 @@ export default class SystemTest {
    * @param {import("selenium-webdriver").WebElement} element
    **/
   async click(element) {
+    if (typeof element == "string") {
+      element = await this.find(element)
+    }
+
     const actions = this.driver.actions({async: true})
 
     await actions.move({origin: element}).click().perform()
@@ -187,6 +191,10 @@ export default class SystemTest {
     return browserLogs
   }
 
+  async getCurrentUrl() {
+    return await this.driver.getCurrentUrl()
+  }
+
   /**
    * Interacts with an element by calling a method on it with the given arguments.
    * Retrying on ElementNotInteractableError.
@@ -221,6 +229,8 @@ export default class SystemTest {
           // Retry finding the element and interacting with it
           if (tries >= 3) {
             throw new Error(`${element.constructor.name} ${methodName} failed after ${tries} tries - ${error.constructor.name}: ${error.message}`)
+          } else {
+            await wait(100)
           }
         } else {
           // Re-throw with un-corrupted stack trace
@@ -521,6 +531,7 @@ export default class SystemTest {
     await fs.writeFile(logsPath, logsText.join("\n"))
     await fs.writeFile(screenshotPath, imageContent, "base64")
 
+    console.log("Current URL:", await this.getCurrentUrl())
     console.log("Logs:", logsPath)
     console.log("Screenshot:", screenshotPath)
     console.log("HTML:", htmlPath)
