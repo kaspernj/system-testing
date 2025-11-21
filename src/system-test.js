@@ -220,11 +220,11 @@ export default class SystemTest {
         if (error.constructor.name === "ElementNotInteractableError") {
           // Retry finding the element and interacting with it
           if (tries >= 3) {
-            throw new Error(`${element.constructor.name} ${methodName} failed after ${tries} tries: ${error.message}`)
+            throw new Error(`${element.constructor.name} ${methodName} failed after ${tries} tries - ${error.constructor.name}: ${error.message}`)
           }
         } else {
           // Re-throw with un-corrupted stack trace
-          throw new Error(`${element.constructor.name} ${methodName} failed: ${error.message}`)
+          throw new Error(`${element.constructor.name} ${methodName} failed - ${error.constructor.name}: ${error.message}`)
         }
       }
     }
@@ -338,7 +338,7 @@ export default class SystemTest {
       .setCapability("goog:loggingPrefs", {browser: "ALL"})
       .build()
 
-    await this.setTimeouts(4000)
+    await this.setTimeouts(5000)
 
     // Web socket server to communicate with browser
     await this.startWebSocketServer()
