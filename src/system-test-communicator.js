@@ -63,6 +63,12 @@ export default class SystemTestCommunicator {
     }
   }
 
+  /**
+   * Sends a command and returns a promise that resolves with the response.
+   *
+   * @param {Object} data - The command data to send.
+   * @returns {Promise} A promise that resolves with the response data.
+   */
   sendCommand(data) {
     return new Promise((resolve, error) => {
       const id = this._sendQueueCount

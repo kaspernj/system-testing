@@ -5,6 +5,8 @@ import fs from "node:fs/promises"
 import logging from "selenium-webdriver/lib/logging.js"
 import moment from "moment"
 import {prettify} from "htmlfy"
+import Server from "scoundrel-remote-eval/src/server/index.js"
+import ServerWebSocket from "scoundrel-remote-eval/src/server/connections/web-socket/index.js"
 import SystemTestCommunicator from "./system-test-communicator.js"
 import SystemTestHttpServer from "./system-test-http-server.js"
 import {wait, waitFor} from "awaitery"
@@ -62,11 +64,24 @@ export default class SystemTest {
       throw new Error(`Unknown arguments: ${restArgsKeys.join(", ")}`)
     }
 
-    this.communicator = new SystemTestCommunicator({onCommand: this.onCommandReceived})
     this._host = host
     this._port = port
     this._responses = {}
     this._sendCount = 0
+    this.startScoundrel()
+    this.communicator = new SystemTestCommunicator({onCommand: this.onCommandReceived})
+  }
+
+  /** Starts Scoundrel server which the browser connects to for remote evaluation in the browser */
+  startScoundrel() {
+    this.wss = new WebSocketServer({port: 8090})
+    this.serverWebSocket = new ServerWebSocket(this.wss)
+    this.server = new Server(this.serverWebSocket)
+  }
+
+  stopScoundrel() {
+    this.server?.close()
+    this.wss?.close()
   }
 
   /**
@@ -494,6 +509,7 @@ export default class SystemTest {
    * Stops the system test
    */
   async stop() {
+    this.stopScoundrel()
     this.systemTestHttpServer?.close()
     this.wss?.close()
     await this.driver.quit()
