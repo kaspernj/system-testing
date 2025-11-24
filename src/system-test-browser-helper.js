@@ -2,7 +2,6 @@ import Client from "scoundrel-remote-eval/src/client/index.js"
 import ClientWebSocket from "scoundrel-remote-eval/src/client/connections/web-socket/index.js"
 import {digg} from "diggerize"
 import EventEmitter from "events"
-import {WebSocket} from "ws"
 
 import SystemTestCommunicator from "./system-test-communicator.js"
 
@@ -34,6 +33,27 @@ export default class SystemTestBrowserHelper {
     await this.scoundrelClientWebSocket.waitForOpened()
 
     this.scoundrelClient = new Client(this.scoundrelClientWebSocket)
+    this.events.emit("scoundrelStarted")
+  }
+
+  waitForScoundrelStarted() {
+    return new Promise((resolve) => {
+      if (this.scoundrelClient) {
+        resolve()
+      } else {
+        this.events.once("scoundrelStarted", () => {
+          resolve()
+        })
+      }
+    })
+  }
+
+  getScoundrel() {
+    if (!this.scoundrelClient) {
+      throw new Error("Scoundrel client is not started yet")
+    }
+
+    return this.scoundrelClient
   }
 
   connectOnError() {
