@@ -49,12 +49,31 @@ export default function useSystemTest({onInitialize, ...restArgs} = {}) {
   const enabled = useMemo(() => isSystemTestEnabled(), [])
   const systemTestBrowserHelper = enabled ? getSystemTestBrowserHelper() : null
   const result = useMemo(() => ({enabled, systemTestBrowserHelper}), [enabled, systemTestBrowserHelper])
+  const instanceShared = useMemo(() => ({}), [])
 
-  const onSystemTestBrowserHelperNavigate = useCallback(({path}) => {
-    if (enabled) {
-      router.navigate(path)
+  instanceShared.enabled = enabled
+  instanceShared.router = router
+
+  // Resets navigation when instructed by the system test browser helper
+  const onSystemTestBrowserHelperDismissTo = useCallback(({path}) => {
+    if (instanceShared.enabled) {
+      try {
+        instanceShared.router.dismissTo(path)
+      } catch (error) {
+        console.error(`Failed to dismiss to path "${path}": ${error.message}`)
+      }
     }
-  }, [enabled, router])
+  }, [])
+
+  useEventEmitter(shared.systemTestBrowserHelper?.getEvents(), "dismissTo", onSystemTestBrowserHelperDismissTo)
+
+
+  // Navigates when instructed by the system test browser helper and keeping history of screens
+  const onSystemTestBrowserHelperNavigate = useCallback(({path}) => {
+    if (instanceShared.enabled) {
+      instanceShared.router.navigate(path)
+    }
+  }, [])
 
   useEventEmitter(shared.systemTestBrowserHelper?.getEvents(), "navigate", onSystemTestBrowserHelperNavigate)
 

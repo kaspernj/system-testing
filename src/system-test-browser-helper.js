@@ -179,6 +179,8 @@ export default class SystemTestBrowserHelper {
       return {result: "initialized"}
     } else if (data.type == "visit") {
       this.events.emit("navigate", {path: data.path})
+    } else if (data.type == "dismissTo") {
+      this.events.emit("dismissTo", {path: data.path})
     } else {
       throw new Error(`Unknown command type for SystemTestBrowserHelper: ${data.type}`)
     }
