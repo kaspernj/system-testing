@@ -15,6 +15,8 @@ import {WebSocketServer} from "ws"
 class ElementNotFoundError extends Error { }
 
 export default class SystemTest {
+  static rootPath = "/blank?systemTest=true"
+
   /**
    * Gets the current system test instance
    *
@@ -38,7 +40,7 @@ export default class SystemTest {
     const systemTest = this.current()
 
     await systemTest.communicator.sendCommand({type: "initialize"})
-    await systemTest.visit("/blank")
+    await systemTest.dismissTo(SystemTest.rootPath)
 
     try {
       await systemTest.findByTestID("blankText", {useBaseSelector: false})
@@ -402,7 +404,7 @@ export default class SystemTest {
     await this.startWebSocketServer()
 
     // Visit the root page and wait for Expo to be loaded and the app to appear
-    await this.driverVisit("/?systemTest=true")
+    await this.driverVisit(SystemTest.rootPath)
 
     try {
       await this.find("body > #root", {useBaseSelector: false})
@@ -613,5 +615,14 @@ export default class SystemTest {
    */
   async visit(path) {
     await this.communicator.sendCommand({type: "visit", path})
+  }
+
+  /**
+   * Dismisses to a path in the browser
+   *
+   * @param {string} path
+   */
+  async dismissTo(path) {
+    await this.communicator.sendCommand({type: "dismissTo", path})
   }
 }
