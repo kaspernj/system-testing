@@ -302,7 +302,7 @@ export default class SystemTest {
       await this.findNoWait(selector)
       found = true
     } catch (error) {
-      if (!error.message.startsWith("Element couldn't be found by CSS:")) {
+      if (!error.message.startsWith("Element couldn't be found after ")) {
         throw error
       }
     }
