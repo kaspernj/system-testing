@@ -41,7 +41,7 @@ export default class SystemTest {
     await systemTest.visit("/blank")
 
     try {
-      await systemTest.findByTestID("blankText")
+      await systemTest.findByTestID("blankText", {useBaseSelector: false})
       await callback(systemTest)
     } catch (error) {
       await systemTest.takeScreenshot()
@@ -72,6 +72,30 @@ export default class SystemTest {
     this.communicator = new SystemTestCommunicator({onCommand: this.onCommandReceived})
   }
 
+  /**
+   * Gets the base selector for scoping element searches
+   *
+   * @returns {string}
+   */
+  getBaseSelector() { return this._baseSelector }
+
+  /**
+   * Sets the base selector for scoping element searches
+   *
+   * @param {string} baseSelector
+   */
+  setBaseSelector(baseSelector) { this._baseSelector = baseSelector }
+
+  /**
+   * Gets a selector scoped to the base selector
+   *
+   * @param {string} selector
+   * @returns {string}
+   */
+  getSelector(selector) {
+    return this.getBaseSelector() ? `${this.getBaseSelector()} ${selector}` : selector
+  }
+
   /** Starts Scoundrel server which the browser connects to for remote evaluation in the browser */
   startScoundrel() {
     this.wss = new WebSocketServer({port: 8090})
@@ -93,8 +117,15 @@ export default class SystemTest {
    * @returns {import("selenium-webdriver").WebElement[]}
    */
   async all(selector, args = {}) {
-    const {visible = true} = args
-    const elements = await this.driver.findElements(By.css(selector))
+    const {visible = true, useBaseSelector = true, ...restArgs} = args
+    const restArgsKeys = Object.keys(restArgs)
+
+    if (restArgsKeys.length > 0) {
+      throw new Error(`Unknown arguments: ${restArgsKeys.join(", ")}`)
+    }
+
+    const actualSelector = useBaseSelector ? this.getSelector(selector) : selector
+    const elements = await this.driver.findElements(By.css(actualSelector))
     const activeElements = []
 
     for (const element of elements) {
@@ -142,15 +173,15 @@ export default class SystemTest {
       elements = await this.all(selector, args)
     } catch (error) {
       // Re-throw to recover stack trace
-      throw new Error(`${error.message} (selector: ${selector})`)
+      throw new Error(`${error.message} (selector: ${this.getSelector(selector)})`)
     }
 
     if (elements.length > 1) {
-      throw new Error(`More than 1 elements (${elements.length}) was found by CSS: ${selector}`)
+      throw new Error(`More than 1 elements (${elements.length}) was found by CSS: ${this.getSelector(selector)}`)
     }
 
     if (!elements[0]) {
-      throw new ElementNotFoundError(`Element couldn't be found by CSS: ${selector}`)
+      throw new ElementNotFoundError(`Element couldn't be found after ${(this.getTimeouts() / 1000).toFixed(2)}s by CSS: ${this.getSelector(selector)}`)
     }
 
     return elements[0]
@@ -171,11 +202,11 @@ export default class SystemTest {
    * @param {string} selector
    * @returns {import("selenium-webdriver").WebElement}
    */
-  async findNoWait(selector) {
+  async findNoWait(selector, args) {
     await this.driverSetTimeouts(0)
 
     try {
-      return await this.find(selector)
+      return await this.find(selector, args)
     } finally {
       await this.restoreTimeouts()
     }
@@ -209,6 +240,8 @@ export default class SystemTest {
   async getCurrentUrl() {
     return await this.driver.getCurrentUrl()
   }
+
+  getTimeouts() { return this._timeouts }
 
   /**
    * Interacts with an element by calling a method on it with the given arguments.
@@ -283,7 +316,7 @@ export default class SystemTest {
    * @returns {Promise<string[]>}
    */
   async notificationMessages() {
-    const notificationMessageElements = await this.all("[data-class='notification-message']")
+    const notificationMessageElements = await this.all("[data-class='notification-message']", {useBaseSelector: false})
     const notificationMessageTexts = []
 
     for (const notificationMessageElement of notificationMessageElements) {
@@ -372,8 +405,8 @@ export default class SystemTest {
     await this.driverVisit("/?systemTest=true")
 
     try {
-      await this.find("body > #root")
-      await this.find("[data-testid='systemTestingComponent']", {visible: null})
+      await this.find("body > #root", {useBaseSelector: false})
+      await this.find("[data-testid='systemTestingComponent']", {visible: null, useBaseSelector: false})
     } catch (error) {
       await systemTest.takeScreenshot()
 
@@ -384,17 +417,18 @@ export default class SystemTest {
     await this.waitForClientWebSocket()
 
     this._started = true
+    systemTest.setBaseSelector("[data-testid='systemTestingComponent'][data-focussed='true']")
   }
 
   /**
    * Restores previously set timeouts
    */
   async restoreTimeouts() {
-    if (!this._timeouts) {
+    if (!this.getTimeouts()) {
       throw new Error("Timeouts haven't previously been set")
     }
 
-    await this.driverSetTimeouts(this._timeouts)
+    await this.driverSetTimeouts(this.getTimeouts())
   }
 
   /**
@@ -440,10 +474,19 @@ export default class SystemTest {
     this.wss.on("close", this.onWebSocketClose)
   }
 
+  /**
+   * Sets the on command callback
+   */
   onCommand(callback) {
     this._onCommandCallback = callback
   }
 
+  /**
+   * Handles a command received from the browser
+   *
+   * @param {Object} data
+   * @returns {Promise<any>}
+   */
   onCommandReceived = async ({data}) => {
     const type = data.type
     let result
@@ -472,6 +515,11 @@ export default class SystemTest {
     return result
   }
 
+  /**
+   * Handles a new web socket connection
+   *
+   * @param {WebSocket} ws
+   */
   onWebSocketConnection = async (ws) => {
     this.ws = ws
     this.communicator.ws = ws
@@ -490,6 +538,11 @@ export default class SystemTest {
     this.communicator.ws = null
   }
 
+  /**
+   * Handles an error reported from the browser
+   *
+   * @param {Object} data
+   */
   handleError(data) {
     if (data.message.includes("Minified React error #419")) {
       // Ignore this error message
