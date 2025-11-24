@@ -1,3 +1,5 @@
+import Client from "scoundrel-remote-eval/src/client/index.js"
+import ClientWebSocket from "scoundrel-remote-eval/src/client/connections/web-socket/index.js"
 import {digg} from "diggerize"
 import EventEmitter from "events"
 
@@ -20,6 +22,38 @@ export default class SystemTestBrowserHelper {
     this.events = new EventEmitter()
 
     shared.systemTestBrowserHelper = this
+
+    this.startScoundrel()
+  }
+
+  async startScoundrel() {
+    this.scoundrelWs = new WebSocket("http://localhost:8090")
+    this.scoundrelClientWebSocket = new ClientWebSocket(this.scoundrelWs)
+
+    await this.scoundrelClientWebSocket.waitForOpened()
+
+    this.scoundrelClient = new Client(this.scoundrelClientWebSocket)
+    this.events.emit("scoundrelStarted")
+  }
+
+  waitForScoundrelStarted() {
+    return new Promise((resolve) => {
+      if (this.scoundrelClient) {
+        resolve()
+      } else {
+        this.events.once("scoundrelStarted", () => {
+          resolve()
+        })
+      }
+    })
+  }
+
+  getScoundrel() {
+    if (!this.scoundrelClient) {
+      throw new Error("Scoundrel client is not started yet")
+    }
+
+    return this.scoundrelClient
   }
 
   connectOnError() {
@@ -83,8 +117,8 @@ export default class SystemTestBrowserHelper {
     this.overrideConsoleLog()
   }
 
-  getEnabled = () => this._enabled
-  getEvents = () => this.events
+  getEnabled() { return this._enabled }
+  getEvents() { return this.events }
 
   fakeConsoleError = (...args) => {
     this.communicator.sendCommand({type: "console.error", value: this.consoleLogMessage(args)})
