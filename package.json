@@ -1,6 +1,6 @@
 {
   "name": "system-testing",
-  "version": "1.0.22",
+  "version": "1.0.23",
   "description": "System testing with Selenium and browsers.",
   "keywords": [
     "system",
