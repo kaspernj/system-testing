@@ -151,14 +151,31 @@ export default class SystemTest {
    *
    * @param {import("selenium-webdriver").WebElement} element
    **/
-  async click(element) {
-    if (typeof element == "string") {
-      element = await this.find(element)
+  async click(elementOrIdentifier) {
+    let tries = 0
+
+    while (true) {
+      tries++
+
+      try {
+        const element = await this._findElement(elementOrIdentifier)
+        const actions = this.driver.actions({async: true})
+
+        await actions.move({origin: element}).click().perform()
+        break
+      } catch (error) {
+        if (error.constructor.name === "ElementNotInteractableError") {
+          if (tries >= 3) {
+            throw new Error(`Element ${element.constructor.name} click failed after ${tries} tries - ${error.constructor.name}: ${error.message}`)
+          } else {
+            await wait(50)
+          }
+        } else {
+          // Re-throw with un-corrupted stack trace
+          throw new Error(`Element ${element.constructor.name} click failed - ${error.constructor.name}: ${error.message}`)
+        }
+      }
     }
-
-    const actions = this.driver.actions({async: true})
-
-    await actions.move({origin: element}).click().perform()
   }
 
   /**
@@ -197,6 +214,18 @@ export default class SystemTest {
    * @returns {import("selenium-webdriver").WebElement}
    */
   async findByTestID(testID, args) { return await this.find(`[data-testid='${testID}']`, args) }
+
+  async _findElement(elementOrIdentifier) {
+    let element
+
+    if (typeof elementOrIdentifier == "string") {
+      element = await this.find(elementOrIdentifier)
+    } else {
+      element = elementOrIdentifier
+    }
+
+    return element
+  }
 
   /**
    * Finds a single element by CSS selector without waiting
@@ -256,20 +285,17 @@ export default class SystemTest {
    * @returns {Promise<any>}
    */
   async interact(elementOrIdentifier, methodName, ...args) {
-    let element
     let tries = 0
 
     while (true) {
       tries++
 
-      if (typeof elementOrIdentifier == "string") {
-        element = await this.find(elementOrIdentifier)
-      } else {
-        element = elementOrIdentifier
-      }
+      const element = await this._findElement(elementOrIdentifier)
 
       if (!element[methodName]) {
-        // throw new Error(`${element.constructor.name} has no method named: ${methodName}`)
+        throw new Error(`${element.constructor.name} hasn't an attribute named: ${methodName}`)
+      } else if (typeof element[methodName] != "function") {
+        throw new Error(`${element.constructor.name}#${methodName} is not a function`)
       }
 
       try {
@@ -278,9 +304,17 @@ export default class SystemTest {
         if (error.constructor.name === "ElementNotInteractableError") {
           // Retry finding the element and interacting with it
           if (tries >= 3) {
-            throw new Error(`${element.constructor.name} ${methodName} failed after ${tries} tries - ${error.constructor.name}: ${error.message}`)
+            let elementDescription
+
+            if (typeof elementOrIdentifier == "string") {
+              elementDescription = `CSS selector ${elementOrIdentifier}`
+            } else {
+              elementDescription = `${element.constructor.name}`
+            }
+
+            throw new Error(`${elementDescription} ${methodName} failed after ${tries} tries - ${error.constructor.name}: ${error.message}`)
           } else {
-            await wait(100)
+            await wait(50)
           }
         } else {
           // Re-throw with un-corrupted stack trace
