@@ -1,4 +1,4 @@
-import {Builder, By} from "selenium-webdriver"
+import {Builder, By, until} from "selenium-webdriver"
 import chrome from "selenium-webdriver/chrome.js"
 import {digg} from "diggerize"
 import fs from "node:fs/promises"
@@ -19,7 +19,6 @@ export default class SystemTest {
 
   /**
    * Gets the current system test instance
-   *
    * @param {object} args
    * @returns {SystemTest}
    */
@@ -33,8 +32,8 @@ export default class SystemTest {
 
   /**
    * Runs a system test
-   *
    * @param {function(SystemTest): Promise<void>} callback
+   * @returns {Promise<void>}
    */
   static async run(callback) {
     const systemTest = this.current()
@@ -54,7 +53,6 @@ export default class SystemTest {
 
   /**
    * Creates a new SystemTest instance
-   *
    * @param {object} args
    * @param {string} args.host
    * @param {number} args.port
@@ -76,21 +74,18 @@ export default class SystemTest {
 
   /**
    * Gets the base selector for scoping element searches
-   *
    * @returns {string}
    */
   getBaseSelector() { return this._baseSelector }
 
   /**
    * Sets the base selector for scoping element searches
-   *
    * @param {string} baseSelector
    */
   setBaseSelector(baseSelector) { this._baseSelector = baseSelector }
 
   /**
    * Gets a selector scoped to the base selector
-   *
    * @param {string} selector
    * @returns {string}
    */
@@ -112,10 +107,8 @@ export default class SystemTest {
 
   /**
    * Finds all elements by CSS selector
-   *
    * @param {string} selector
    * @param {object} args
-   *
    * @returns {import("selenium-webdriver").WebElement[]}
    */
   async all(selector, args = {}) {
@@ -148,9 +141,9 @@ export default class SystemTest {
 
   /**
    * Clicks an element that has children which fills out the element and would otherwise have caused a ElementClickInterceptedError
-   *
-   * @param {import("selenium-webdriver").WebElement} element
-   **/
+   * @param {string|import("selenium-webdriver").WebElement} elementOrIdentifier
+   * @returns {Promise<void>}
+   */
   async click(elementOrIdentifier) {
     let tries = 0
 
@@ -166,13 +159,13 @@ export default class SystemTest {
       } catch (error) {
         if (error.constructor.name === "ElementNotInteractableError") {
           if (tries >= 3) {
-            throw new Error(`Element ${element.constructor.name} click failed after ${tries} tries - ${error.constructor.name}: ${error.message}`)
+            throw new Error(`Element ${elementOrIdentifier.constructor.name} click failed after ${tries} tries - ${error.constructor.name}: ${error.message}`)
           } else {
             await wait(50)
           }
         } else {
           // Re-throw with un-corrupted stack trace
-          throw new Error(`Element ${element.constructor.name} click failed - ${error.constructor.name}: ${error.message}`)
+          throw new Error(`Element ${elementOrIdentifier.constructor.name} click failed - ${error.constructor.name}: ${error.message}`)
         }
       }
     }
@@ -180,7 +173,6 @@ export default class SystemTest {
 
   /**
    * Finds a single element by CSS selector
-   *
    * @param {string} selector
    * @param {object} args
    * @returns {import("selenium-webdriver").WebElement}
@@ -208,13 +200,16 @@ export default class SystemTest {
 
   /**
    * Finds a single element by test ID
-   *
    * @param {string} testID
    * @param {object} args
-   * @returns {import("selenium-webdriver").WebElement}
+   * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
   async findByTestID(testID, args) { return await this.find(`[data-testid='${testID}']`, args) }
 
+  /**
+   * @param {string|import("selenium-webdriver").WebElement} elementOrIdentifier
+   * @returns {Promise<import("selenium-webdriver").WebElement>}
+   */
   async _findElement(elementOrIdentifier) {
     let element
 
@@ -229,9 +224,9 @@ export default class SystemTest {
 
   /**
    * Finds a single element by CSS selector without waiting
-   *
    * @param {string} selector
-   * @returns {import("selenium-webdriver").WebElement}
+   * @param {object} args
+   * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
   async findNoWait(selector, args) {
     await this.driverSetTimeouts(0)
@@ -245,7 +240,6 @@ export default class SystemTest {
 
   /**
    * Gets browser logs
-   *
    * @returns {Promise<string[]>}
    */
   async getBrowserLogs() {
@@ -268,20 +262,24 @@ export default class SystemTest {
     return browserLogs
   }
 
+  /**
+   * @returns {Promise<string>}
+   */
   async getCurrentUrl() {
     return await this.driver.getCurrentUrl()
   }
 
+  /**
+   * @returns {number}
+   */
   getTimeouts() { return this._timeouts }
 
   /**
    * Interacts with an element by calling a method on it with the given arguments.
    * Retrying on ElementNotInteractableError.
-   *
    * @param {import("selenium-webdriver").WebElement|string} elementOrIdentifier - The element or a CSS selector to find the element.
    * @param {string} methodName - The method name to call on the element.
    * @param {...any} args - Arguments to pass to the method.
-   *
    * @returns {Promise<any>}
    */
   async interact(elementOrIdentifier, methodName, ...args) {
@@ -326,8 +324,8 @@ export default class SystemTest {
 
   /**
    * Expects no element to be found by CSS selector
-   *
    * @param {string} selector
+   * @returns {Promise<void>}
    */
   async expectNoElement(selector) {
     let found = false
@@ -347,8 +345,40 @@ export default class SystemTest {
   }
 
   /**
+   * @param {string} selector
+   * @param {object} args
+   * @returns {Promise<void>}
+   */
+  async waitForNoSelector(selector, args) {
+    const timeStart = new Date().getTime()
+    const timeout = this.getTimeouts()
+    const {useBaseSelector, ...restArgs} = args
+
+    if (Object.keys(restArgs).length > 0) {
+      throw new Error(`Unexpected args: ${Object.keys(restArgs).join(", ")}`)
+    }
+
+    while (true) {
+      try {
+        const actualSelector = useBaseSelector ? this.getSelector(selector) : selector
+
+        await this.driver.wait(until.elementIsNotVisible(By.css(actualSelector)), 0)
+
+        const timeElapsed = new Date().getTime() - timeStart
+
+        if (timeElapsed > timeout) {
+          throw new Error(`Element still found after ${timeout}ms: ${selector}`)
+        }
+      } catch (error) {
+        if (error.message.startsWith("Element couldn't be found after ")) {
+          break
+        }
+      }
+    }
+  }
+
+  /**
    * Gets notification messages
-   *
    * @returns {Promise<string[]>}
    */
   async notificationMessages() {
@@ -366,45 +396,64 @@ export default class SystemTest {
 
   /**
    * Expects a notification message to appear and waits for it if necessary.
-   *
    * @param {string} expectedNotificationMessage
    */
   async expectNotificationMessage(expectedNotificationMessage) {
     const allDetectedNotificationMessages = []
+    let foundNotificationMessageElement
 
     await waitFor(async () => {
-      const notificationMessages = await this.notificationMessages()
+      const notificationMessageElements = await this.all("[data-class='notification-message']", {useBaseSelector: false})
 
-      for (const notificationMessage of notificationMessages) {
+      for (const notificationMessageElement of notificationMessageElements) {
+        const notificationMessage = await notificationMessageElement.getText()
+
         if (!allDetectedNotificationMessages.includes(notificationMessage)) {
           allDetectedNotificationMessages.push(notificationMessage)
         }
 
         if (notificationMessage == expectedNotificationMessage) {
+          foundNotificationMessageElement = notificationMessageElement
           return
         }
       }
 
       throw new Error(`Notification message ${expectedNotificationMessage} wasn't included in: ${allDetectedNotificationMessages.join(", ")}`)
     })
+
+    if (foundNotificationMessageElement) {
+      await this.interact(foundNotificationMessageElement, "click") // Dismiss the notification message
+    }
+  }
+
+  /**
+   * @returns {Promise<void>}
+   */
+  async dismissNotificationMessages() {
+    const notificationMessageElements = await this.all("[data-class='notification-message']", {useBaseSelector: false})
+
+    for (const notificationMessageElement of notificationMessageElements) {
+      await this.interact(notificationMessageElement, "click")
+    }
+
+    await this.waitForNoSelector("[data-class='notification-message']", {useBaseSelector: false})
   }
 
   /**
    * Indicates whether the system test has been started
-   *
    * @returns {boolean}
    */
   isStarted() { return this._started }
 
   /**
    * Gets the HTML of the current page
-   *
    * @returns {Promise<string>}
    */
   async getHTML() { return await this.driver.getPageSource() }
 
   /**
    * Starts the system test
+   * @returns {Promise<void>}
    */
   async start() {
     if (process.env.SYSTEM_TEST_HOST == "expo-dev-server") {
@@ -444,8 +493,7 @@ export default class SystemTest {
       await this.find("body > #root", {useBaseSelector: false})
       await this.find("[data-testid='systemTestingComponent']", {visible: null, useBaseSelector: false})
     } catch (error) {
-      await systemTest.takeScreenshot()
-
+      await this.takeScreenshot()
       throw error
     }
 
@@ -453,11 +501,12 @@ export default class SystemTest {
     await this.waitForClientWebSocket()
 
     this._started = true
-    systemTest.setBaseSelector("[data-testid='systemTestingComponent'][data-focussed='true']")
+    this.setBaseSelector("[data-testid='systemTestingComponent'][data-focussed='true']")
   }
 
   /**
    * Restores previously set timeouts
+   * @returns {Promise<void>}
    */
   async restoreTimeouts() {
     if (!this.getTimeouts()) {
@@ -469,8 +518,8 @@ export default class SystemTest {
 
   /**
    * Sets driver timeouts
-   *
    * @param {number} newTimeout
+   * @returns {Promise<void>}
    */
   async driverSetTimeouts(newTimeout) {
     await this.driver.manage().setTimeouts({implicit: newTimeout})
@@ -478,8 +527,8 @@ export default class SystemTest {
 
   /**
    * Sets timeouts and stores the previous timeouts
-   *
    * @param {number} newTimeout
+   * @returns {Promise<void>}
    */
   async setTimeouts(newTimeout) {
     this._timeouts = newTimeout
@@ -488,7 +537,6 @@ export default class SystemTest {
 
   /**
    * Waits for the client web socket to connect
-   *
    * @returns {Promise<void>}
    */
   waitForClientWebSocket() {
@@ -503,6 +551,7 @@ export default class SystemTest {
 
   /**
    * Starts the web socket server
+   * @returns {void}
    */
   startWebSocketServer() {
     this.wss = new WebSocketServer({port: 1985})
@@ -512,6 +561,8 @@ export default class SystemTest {
 
   /**
    * Sets the on command callback
+   * @param {function(object) : void} callback
+   * @returns {void}
    */
   onCommand(callback) {
     this._onCommandCallback = callback
@@ -519,8 +570,8 @@ export default class SystemTest {
 
   /**
    * Handles a command received from the browser
-   *
-   * @param {Object} data
+   * @param {object} data
+   * @param {object} data.data
    * @returns {Promise<any>}
    */
   onCommandReceived = async ({data}) => {
@@ -553,8 +604,8 @@ export default class SystemTest {
 
   /**
    * Handles a new web socket connection
-   *
    * @param {WebSocket} ws
+   * @returns {void}
    */
   onWebSocketConnection = async (ws) => {
     this.ws = ws
@@ -569,6 +620,9 @@ export default class SystemTest {
     }
   }
 
+  /**
+   * @returns {void}
+   */
   onWebSocketClose = () => {
     this.ws = null
     this.communicator.ws = null
@@ -576,8 +630,8 @@ export default class SystemTest {
 
   /**
    * Handles an error reported from the browser
-   *
-   * @param {Object} data
+   * @param {object} data
+   * @returns {void}
    */
   handleError(data) {
     if (data.message.includes("Minified React error #419")) {
@@ -596,6 +650,7 @@ export default class SystemTest {
 
   /**
    * Stops the system test
+   * @returns {Promise<void>}
    */
   async stop() {
     this.stopScoundrel()
@@ -606,8 +661,8 @@ export default class SystemTest {
 
   /**
    * Visits a path in the browser
-   *
    * @param {string} path
+   * @returns {Promise<void>}
    */
   async driverVisit(path) {
     const url = `${this.currentUrl}${path}`
@@ -617,6 +672,7 @@ export default class SystemTest {
 
   /**
    * Takes a screenshot, saves HTML and browser logs
+   * @returns {Promise<void>}
    */
   async takeScreenshot() {
     const path = `${process.cwd()}/tmp/screenshots`
@@ -644,8 +700,8 @@ export default class SystemTest {
 
   /**
    * Visits a path in the browser
-   *
    * @param {string} path
+   * @returns {Promise<void>}
    */
   async visit(path) {
     await this.communicator.sendCommand({type: "visit", path})
@@ -653,8 +709,8 @@ export default class SystemTest {
 
   /**
    * Dismisses to a path in the browser
-   *
    * @param {string} path
+   * @returns {Promise<void>}
    */
   async dismissTo(path) {
     await this.communicator.sendCommand({type: "dismissTo", path})

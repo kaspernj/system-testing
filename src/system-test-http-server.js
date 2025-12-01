@@ -21,7 +21,7 @@ export default class SystemTestHttpServer {
     try {
       await fs.stat(filePath)
       fileExists = true
-    } catch (_error) {
+    } catch (_error) { // eslint-disable-line no-unused-vars
       fileExists = false
     }
 
@@ -38,8 +38,7 @@ export default class SystemTestHttpServer {
   }
 
   async start() {
-    this.basePath = await fs.realpath(`${__dirname}/../..`) // eslint-disable-line no-undef
-
+    this.basePath = await fs.realpath(`${__dirname}/../..`)
     await this.startHttpServer()
   }
 
