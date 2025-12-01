@@ -101,8 +101,7 @@ export default class SystemTestBrowserHelper {
   }
 
   connectWebSocket() {
-    this.ws = new WebSocket("ws://localhost:1985") // eslint-disable-line no-undef
-
+    this.ws = new WebSocket("ws://localhost:1985")
     this.communicator.ws = this.ws
     this.ws.addEventListener("error", digg(this, "communicator", "onError"))
     this.ws.addEventListener("open", digg(this, "communicator", "onOpen"))

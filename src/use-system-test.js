@@ -36,11 +36,9 @@ const getSystemTestBrowserHelper = () => {
 
 /**
  * A hook that provides system test capabilities.
- *
- * @param {Object} options - Options for the hook.
- * @param {Function} options.onInitialize - A callback function that is called when the system test browser helper is initialized.
- *
- * @returns {Object} An object containing:
+ * @param {object} options - Options for the hook.
+ * @param {function() : void} options.onInitialize - A callback function that is called when the system test browser helper is initialized.
+ * @returns {object} An object containing:
  *  - enabled: A boolean indicating if system test mode is enabled.
  *  - systemTestBrowserHelper: An instance of SystemTestBrowserHelper if enabled, otherwise null.
  */
