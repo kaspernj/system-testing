@@ -397,6 +397,7 @@ export default class SystemTest {
   /**
    * Expects a notification message to appear and waits for it if necessary.
    * @param {string} expectedNotificationMessage
+   * @returns {Promise<void>}
    */
   async expectNotificationMessage(expectedNotificationMessage) {
     const allDetectedNotificationMessages = []
