@@ -93,13 +93,19 @@ export default class SystemTest {
     return this.getBaseSelector() ? `${this.getBaseSelector()} ${selector}` : selector
   }
 
-  /** Starts Scoundrel server which the browser connects to for remote evaluation in the browser */
+  /**
+   * Starts Scoundrel server which the browser connects to for remote evaluation in the browser
+   * @returns {void}
+   */
   startScoundrel() {
     this.wss = new WebSocketServer({port: 8090})
     this.serverWebSocket = new ServerWebSocket(this.wss)
     this.server = new Server(this.serverWebSocket)
   }
 
+  /**
+   * @returns {void}
+   */
   stopScoundrel() {
     this.server?.close()
     this.wss?.close()

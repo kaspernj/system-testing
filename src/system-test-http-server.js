@@ -4,6 +4,7 @@ import mime from "mime"
 import url from "url"
 
 export default class SystemTestHttpServer {
+  /** @returns {void} */
   close() {
     this.httpServer.close()
   }
@@ -37,11 +38,13 @@ export default class SystemTestHttpServer {
     response.end(fileContent)
   }
 
+  /** @returns {Promise<void>} */
   async start() {
     this.basePath = await fs.realpath(`${__dirname}/../..`)
     await this.startHttpServer()
   }
 
+  /** @returns {Promise<void>} */
   startHttpServer() {
     return new Promise((resolve) => {
       this.httpServer = http.createServer(this.onHttpServerRequest)
