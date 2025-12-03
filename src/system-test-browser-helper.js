@@ -100,6 +100,9 @@ export default class SystemTestBrowserHelper {
     this.communicator.sendCommand(data)
   }
 
+  /**
+   * @returns {void}
+   */
   connectWebSocket() {
     this.ws = new WebSocket("ws://localhost:1985")
     this.communicator.ws = this.ws
@@ -108,6 +111,9 @@ export default class SystemTestBrowserHelper {
     this.ws.addEventListener("message", (event) => this.communicator.onMessage(event.data))
   }
 
+  /**
+   * @returns {void}
+   */
   enableOnBrowser() {
     this._enabled = true
     this.connectWebSocket()
@@ -116,7 +122,14 @@ export default class SystemTestBrowserHelper {
     this.overrideConsoleLog()
   }
 
+  /**
+   * @returns {boolean}
+   */
   getEnabled() { return this._enabled }
+
+  /**
+   * @returns {EventEmitter}
+   */
   getEvents() { return this.events }
 
   fakeConsoleError = (...args) => {
@@ -185,10 +198,17 @@ export default class SystemTestBrowserHelper {
     }
   }
 
+  /**
+   * @param {function() : void} callback
+   * @returns {void}
+   */
   onInitialize(callback) {
     this._onInitializeCallback = callback
   }
 
+  /**
+   * @returns {void}
+   */
   overrideConsoleLog() {
     if (this.originalConsoleError || this.originalConsoleLog) {
       throw new Error("Console methods has already been overridden!")
@@ -201,6 +221,10 @@ export default class SystemTestBrowserHelper {
     console.log = this.fakeConsoleLog
   }
 
+  /**
+   * @param {string} sql
+   * @returns {Promise<Array<Record<string, any>>>}
+   */
   async sendQuery(sql) {
     return await this.communicator.sendCommand({type: "query", sql})
   }
