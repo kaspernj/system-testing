@@ -1,3 +1,5 @@
+// @ts-check
+
 import fs from "node:fs/promises"
 import http from "node:http"
 import mime from "mime"
@@ -6,10 +8,21 @@ import url from "url"
 export default class SystemTestHttpServer {
   /** @returns {void} */
   close() {
-    this.httpServer.close()
+    this.httpServer?.close()
   }
 
+  /**
+   * @param {http.IncomingMessage} request
+   * @param {http.ServerResponse} response
+   * @returns {Promise<void>}
+   */
   onHttpServerRequest = async (request, response) => {
+    if (!request.url) {
+      response.statusCode = 400
+      response.end("Bad Request")
+      return
+    }
+
     const parsedUrl = url.parse(request.url)
     let filePath = `${process.cwd()}/dist${parsedUrl.pathname}`
 
@@ -34,7 +47,11 @@ export default class SystemTestHttpServer {
     const mimeType = mime.getType(filePath)
 
     response.statusCode = 200
-    response.setHeader("Content-Type", mimeType)
+
+    if (mimeType) {
+      response.setHeader("Content-Type", mimeType)
+    }
+
     response.end(fileContent)
   }
 
