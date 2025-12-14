@@ -620,7 +620,7 @@ export default class SystemTest {
 
   /**
    * Sets the on command callback
-   * @param {function(object) : void} callback
+   * @param {function({type: string, data: Record<string, any>}): Promise<void>} callback
    * @returns {void}
    */
   onCommand(callback) {
