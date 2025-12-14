@@ -1,9 +1,23 @@
+// @ts-check
+
 export default class SystemTestCommunicator {
+  /** @type {WebSocket | null} */
+  ws = null
+
+  /**
+   * @param {object} args
+   * @param {(args: Record<string, any>) => Promise<{result: string} | void>} args.onCommand
+   * @param {object} [args.parent]
+   */
   constructor({onCommand, parent}) {
     this.onCommand = onCommand
     this.parent = parent
     this._sendQueueCount = 0
+
+    /** @type {Record<string, any>} */
     this._sendQueue = []
+
+    /** @type {Record<string, {resolve: (data: any) => void, reject: (data: any) => void}>} */
     this._responses = {}
   }
 
@@ -11,15 +25,22 @@ export default class SystemTestCommunicator {
     while (this._sendQueue.length !== 0) {
       const data = this._sendQueue.shift()
 
+      if (!this.ws || this.ws.readyState !== 1) {
+        throw new Error("WebSocket is not open")
+      }
+
       this.ws.send(JSON.stringify(data))
     }
   }
 
+  /** @param {Error} error */
   onError = (error) => {
     console.error("onWebSocketClientError", error)
   }
 
+  /** @param {string} rawData */
   onMessage = async (rawData) => {
+    /** @type {{data: any, id: number, type: string, isTrusted?: boolean}} */
     const data = JSON.parse(rawData)
 
     if (data.isTrusted) {
@@ -30,7 +51,11 @@ export default class SystemTestCommunicator {
 
         this.respond(data.id, {result})
       } catch (error) {
-        this.respond(data.id, {error: error.message})
+        if (error instanceof Error) {
+          this.respond(data.id, {error: error.message})
+        } else {
+          this.respond(data.id, {error: error})
+        }
       }
     } else if (data.type == "response") {
       const response = this._responses[data.id]
@@ -42,7 +67,7 @@ export default class SystemTestCommunicator {
       delete this._responses[data.id]
 
       if (data.data.error) {
-        response.error(data.data.error)
+        response.reject(data.data.error)
       } else {
         response.resolve(data.data.result)
       }
@@ -55,6 +80,10 @@ export default class SystemTestCommunicator {
     this.flushSendQueue()
   }
 
+  /**
+   * @param {object} data
+   * @returns {void}
+   */
   send(data) {
     this._sendQueue.push(data)
 
@@ -69,15 +98,20 @@ export default class SystemTestCommunicator {
    * @returns {Promise<void>} A promise that resolves with the response data.
    */
   sendCommand(data) {
-    return new Promise((resolve, error) => {
+    return new Promise((resolve, reject) => {
       const id = this._sendQueueCount
 
       this._sendQueueCount += 1
-      this._responses[id] = {resolve, error}
+      this._responses[id] = {resolve, reject}
       this.send({type: "command", id, data})
     })
   }
 
+  /**
+   * @param {number} id
+   * @param {object} data
+   * @returns {void}
+   */
   respond(id, data) {
     this.send({type: "response", id, data})
   }

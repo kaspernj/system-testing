@@ -1,3 +1,5 @@
+// @ts-check
+
 import Client from "scoundrel-remote-eval/src/client/index.js"
 import ClientWebSocket from "scoundrel-remote-eval/src/client/connections/web-socket/index.js"
 import {digg} from "diggerize"
@@ -5,7 +7,10 @@ import EventEmitter from "events"
 
 import SystemTestCommunicator from "./system-test-communicator.js"
 
-const shared = {}
+/** @type {{systemTestBrowserHelper: SystemTestBrowserHelper | null}} */
+const shared = {
+  systemTestBrowserHelper: null
+}
 
 export default class SystemTestBrowserHelper {
   static current() {
@@ -17,6 +22,7 @@ export default class SystemTestBrowserHelper {
   }
 
   constructor() {
+    // @ts-expect-error
     this.communicator = new SystemTestCommunicator({parent: this, onCommand: this.onCommand})
     this._enabled = false
     this.events = new EventEmitter()
@@ -39,10 +45,10 @@ export default class SystemTestBrowserHelper {
   waitForScoundrelStarted() {
     return new Promise((resolve) => {
       if (this.scoundrelClient) {
-        resolve()
+        resolve(undefined)
       } else {
         this.events.once("scoundrelStarted", () => {
-          resolve()
+          resolve(undefined)
         })
       }
     })
@@ -76,14 +82,24 @@ export default class SystemTestBrowserHelper {
         type: "unhandledrejection",
         error: event.reason,
         errorClass: "UnhandledRejection",
-        file: null,
-        line: null,
         message: event.reason.message || event.reason || "Unhandled promise rejection without a message",
         url: window.location.href
       })
     })
   }
 
+  /**
+   * @param {object} data
+   * @param {string} [data.backtrace]
+   * @param {Error} [data.error]
+   * @param {string} [data.errorClass]
+   * @param {string} [data.file]
+   * @param {number} [data.line]
+   * @param {string} [data.message]
+   * @param {string} [data.type]
+   * @param {string} [data.url]
+   * @returns {void}
+   */
   handleError(data) {
     let backtrace
 
@@ -92,7 +108,7 @@ export default class SystemTestBrowserHelper {
       backtrace.shift()
       backtrace = backtrace.join("\n")
     } else if (data.file) {
-      backtrace = [`${data.file}:${data.line}`]
+      backtrace = `${data.file}:${data.line}`
     }
 
     data.backtrace = backtrace
@@ -132,18 +148,35 @@ export default class SystemTestBrowserHelper {
    */
   getEvents() { return this.events }
 
+  /**
+   * @param {any[]} args
+   * @returns {void}
+   */
   fakeConsoleError = (...args) => {
     this.communicator.sendCommand({type: "console.error", value: this.consoleLogMessage(args)})
 
-    return this.originalConsoleError(...args)
+    if (this.originalConsoleError) {
+      return this.originalConsoleError(...args)
+    }
   }
 
+  /**
+   * @param {any[]} args
+   * @returns {void}
+   */
   fakeConsoleLog = (...args) => {
     this.communicator.sendCommand({type: "console.log", value: this.consoleLogMessage(args)})
 
-    return this.originalConsoleLog(...args)
+    if (this.originalConsoleLog) {
+      return this.originalConsoleLog(...args)
+    }
   }
 
+  /**
+   * @param {any} arg
+   * @param {any[]} [scannedObjects]
+   * @returns {any}
+   */
   consoleLogMessage(arg, scannedObjects = []) {
     if (Array.isArray(arg)) {
       if (scannedObjects.includes(arg)) {
@@ -166,6 +199,7 @@ export default class SystemTestBrowserHelper {
         scannedObjects.push(arg)
       }
 
+      /** @type {Record<string, any>} */
       const result = {}
 
       for (const key in arg) {
@@ -180,6 +214,10 @@ export default class SystemTestBrowserHelper {
     }
   }
 
+  /**
+   * @param {{data: {path: string, type: string}}} args
+   * @returns {Promise<{result: string} | void>}
+   */
   onCommand = async ({data}) => {
     if (data.type == "initialize") {
       this.events.emit("initialize")
@@ -226,6 +264,7 @@ export default class SystemTestBrowserHelper {
    * @returns {Promise<Array<Record<string, any>>>}
    */
   async sendQuery(sql) {
+    // @ts-expect-error
     return await this.communicator.sendCommand({type: "query", sql})
   }
 }
