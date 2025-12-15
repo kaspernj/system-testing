@@ -90,7 +90,6 @@ export default class SystemTestCommunicator {
 
     if (this.ws.readyState == 1) {
       this.flushSendQueue()
-    } else {
     }
   }
 

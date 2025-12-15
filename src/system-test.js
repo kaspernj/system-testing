@@ -16,11 +16,6 @@ import {WebSocketServer} from "ws"
 
 class ElementNotFoundError extends Error { }
 
-/** @type {{systemTest: SystemTest | null}} */
-const shared = {
-  systemTest: null
-}
-
 export default class SystemTest {
   static rootPath = "/blank?systemTest=true"
 
@@ -427,9 +422,11 @@ export default class SystemTest {
       throw new Error(`Unexpected args: ${Object.keys(restArgs).join(", ")}`)
     }
 
+    const actualSelector = useBaseSelector ? this.getSelector(selector) : selector
+
     await this.getDriver().wait(
       async () => {
-        const elements = await this.getDriver().findElements(By.css(selector))
+        const elements = await this.getDriver().findElements(By.css(actualSelector))
 
         // Not found at all
         if (elements.length === 0) {
