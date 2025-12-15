@@ -22,7 +22,6 @@ export default class SystemTestBrowserHelper {
   }
 
   constructor() {
-    // @ts-expect-error
     this.communicator = new SystemTestCommunicator({parent: this, onCommand: this.onCommand})
     this._enabled = false
     this.events = new EventEmitter()

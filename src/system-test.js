@@ -90,8 +90,6 @@ export default class SystemTest {
     this._responses = {}
     this._sendCount = 0
     this.startScoundrel()
-
-    // @ts-expect-error
     this.communicator = new SystemTestCommunicator({onCommand: this.onCommandReceived})
   }
 
@@ -332,8 +330,6 @@ export default class SystemTest {
       tries++
 
       const element = await this._findElement(elementOrIdentifier)
-
-      // @ts-expect-error
       const candidate = element[methodName]
 
       if (!candidate) {
@@ -415,7 +411,6 @@ export default class SystemTest {
       try {
         const actualSelector = useBaseSelector ? this.getSelector(selector) : selector
 
-        // @ts-expect-error
         await this.driver.wait(until.elementIsNotVisible(By.css(actualSelector)), 0)
 
         const timeElapsed = new Date().getTime() - timeStart
@@ -458,7 +453,6 @@ export default class SystemTest {
     const allDetectedNotificationMessages = []
     let foundNotificationMessageElement
 
-    // @ts-expect-error
     await waitFor(async () => {
       const notificationMessageElements = await this.all("[data-class='notification-message']", {useBaseSelector: false})
 
@@ -536,7 +530,6 @@ export default class SystemTest {
     this.driver = new Builder()
       .forBrowser("chrome")
       .setChromeOptions(options)
-      // @ts-expect-error
       .setCapability("goog:loggingPrefs", {browser: "ALL"})
       .build()
 
