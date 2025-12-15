@@ -1,6 +1,14 @@
 // @ts-check
 
 export default class SystemTestCommunicator {
+  /** @type {Record<string, {resolve: (data: any) => void, reject: (data: any) => void}>} */
+  _responses = {}
+
+  /** @type {Record<string, any>} */
+  _sendQueue = []
+
+  _sendQueueCount = 0
+
   /** @type {WebSocket | null} */
   ws = null
 
@@ -12,13 +20,6 @@ export default class SystemTestCommunicator {
   constructor({onCommand, parent}) {
     this.onCommand = onCommand
     this.parent = parent
-    this._sendQueueCount = 0
-
-    /** @type {Record<string, any>} */
-    this._sendQueue = []
-
-    /** @type {Record<string, {resolve: (data: any) => void, reject: (data: any) => void}>} */
-    this._responses = {}
   }
 
   flushSendQueue() {
@@ -81,20 +82,21 @@ export default class SystemTestCommunicator {
   }
 
   /**
-   * @param {object} data
+   * @param {Record<string, any>} data
    * @returns {void}
    */
   send(data) {
     this._sendQueue.push(data)
 
-    if (this.ws?.readyState == 1) {
+    if (this.ws.readyState == 1) {
       this.flushSendQueue()
+    } else {
     }
   }
 
   /**
    * Sends a command and returns a promise that resolves with the response.
-   * @param {object} data - The command data to send.
+   * @param {Record<string, any>} data - The command data to send.
    * @returns {Promise<void>} A promise that resolves with the response data.
    */
   sendCommand(data) {
@@ -103,13 +105,14 @@ export default class SystemTestCommunicator {
 
       this._sendQueueCount += 1
       this._responses[id] = {resolve, reject}
+
       this.send({type: "command", id, data})
     })
   }
 
   /**
    * @param {number} id
-   * @param {object} data
+   * @param {Record<string, any>} data
    * @returns {void}
    */
   respond(id, data) {

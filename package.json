@@ -26,6 +26,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@types/selenium-webdriver": "^4.35.4",
     "awaitery": "^1.0.2",
     "diggerize": "^1.0.9",
     "htmlfy": "^1.0.0",

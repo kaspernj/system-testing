@@ -8,6 +8,7 @@
     "module": "nodenext",
 
     "lib": ["dom", "ES2020"],
+    "sourceMap": true,
     "types": ["node"],
     "skipLibCheck": true
   }

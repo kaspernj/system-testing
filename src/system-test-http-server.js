@@ -8,7 +8,11 @@ import url from "url"
 export default class SystemTestHttpServer {
   /** @returns {void} */
   close() {
-    this.httpServer?.close()
+    if (!this.httpServer) {
+      throw new Error("HTTP server is not initialized")
+    }
+
+    this.httpServer.close()
   }
 
   /**
@@ -18,6 +22,8 @@ export default class SystemTestHttpServer {
    */
   onHttpServerRequest = async (request, response) => {
     if (!request.url) {
+      console.log("No URL! Answering bad request!")
+
       response.statusCode = 400
       response.end("Bad Request")
       return
