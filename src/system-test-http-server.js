@@ -8,7 +8,11 @@ import url from "url"
 export default class SystemTestHttpServer {
   /** @returns {void} */
   close() {
-    this.httpServer?.close()
+    if (!this.httpServer) {
+      throw new Error("HTTP server is not initialized")
+    }
+
+    this.httpServer.close()
   }
 
   /**
