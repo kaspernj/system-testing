@@ -26,6 +26,7 @@ export default class SystemTest {
   driver = undefined
 
   _started = false
+  _driverTimeouts = 5000
   _timeouts = 5000
 
   /**
@@ -151,25 +152,37 @@ export default class SystemTest {
    * Finds all elements by CSS selector
    * @param {string} selector
    * @param {object} args
+   * @param {number} [args.timeout]
    * @param {boolean} [args.visible]
    * @param {boolean} [args.useBaseSelector]
    * @returns {Promise<import("selenium-webdriver").WebElement[]>}
    */
   async all(selector, args = {}) {
-    const {visible = true, useBaseSelector = true, ...restArgs} = args
+    const {visible = true, timeout, useBaseSelector = true, ...restArgs} = args
     const restArgsKeys = Object.keys(restArgs)
+    let actualTimeout
+
+    if (timeout === undefined) {
+      actualTimeout = this._driverTimeouts
+    } else {
+      actualTimeout = timeout
+    }
 
     if (restArgsKeys.length > 0) throw new Error(`Unknown arguments: ${restArgsKeys.join(", ")}`)
 
     const actualSelector = useBaseSelector ? this.getSelector(selector) : selector
-
+    const getElements = async () => await this.getDriver().findElements(By.css(actualSelector))
     let elements = []
 
-    await this.getDriver().wait(async () => {
-      elements = await this.getDriver().findElements(By.css(actualSelector))
+    if (actualTimeout == 0) {
+      elements = await getElements()
+    } else {
+      await this.getDriver().wait(async () => {
+        elements = await getElements()
 
-      return elements.length > 0
-    }, this.getTimeouts())
+        return elements.length > 0
+      }, actualTimeout)
+    }
 
     const activeElements = []
 
@@ -232,13 +245,17 @@ export default class SystemTest {
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
   async find(selector, args = {}) {
-    let elements
+    let elements = []
 
     try {
       elements = await this.all(selector, args)
     } catch (error) {
       // Re-throw to recover stack trace
       if (error instanceof Error) {
+        if (error.message.startsWith("Wait timed out after")) {
+          elements = []
+        }
+
         throw new Error(`${error.message} (selector: ${this.getSelector(selector)})`)
       } else {
         throw new Error(`${error} (selector: ${this.getSelector(selector)})`)
@@ -430,11 +447,12 @@ export default class SystemTest {
 
         // Not found at all
         if (elements.length === 0) {
-          return true;
+          return true
         }
 
         // Found but not visible
         const isDisplayed = await elements[0].isDisplayed()
+
         return !isDisplayed
       },
       this.getTimeouts()
@@ -589,6 +607,7 @@ export default class SystemTest {
    * @returns {Promise<void>}
    */
   async driverSetTimeouts(newTimeout) {
+    this._driverTimeouts = newTimeout
     await this.getDriver().manage().setTimeouts({implicit: newTimeout})
   }
 
