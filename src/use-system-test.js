@@ -1,5 +1,5 @@
 import qs from "qs"
-import SystemTestBrowserHelper from "./system-test-browser-helper"
+import SystemTestBrowserHelper from "./system-test-browser-helper.js"
 import {useCallback, useMemo} from "react"
 import useEventEmitter from "@kaspernj/api-maker/build/use-event-emitter.js"
 import {useRouter} from "expo-router"
@@ -46,7 +46,7 @@ function getSystemTestBrowserHelper() {
  * @param {function() : void} options.onInitialize - A callback function that is called when the system test browser helper is initialized.
  * @returns {{enabled: boolean, systemTestBrowserHelper: SystemTestBrowserHelper}}
  */
-export default function useSystemTest({onInitialize, ...restArgs} = {}) {
+export default function useSystemTest({onInitialize, ...restArgs} = {onInitialize: undefined}) {
   const router = useRouter()
   const enabled = useMemo(() => isSystemTestEnabled(), [])
   const systemTestBrowserHelper = enabled ? getSystemTestBrowserHelper() : null
