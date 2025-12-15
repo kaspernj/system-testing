@@ -22,8 +22,6 @@ export default class SystemTestHttpServer {
    */
   onHttpServerRequest = async (request, response) => {
     if (!request.url) {
-      console.log("No URL! Answering bad request!")
-
       response.statusCode = 400
       response.end("Bad Request")
       return
