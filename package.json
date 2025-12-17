@@ -1,6 +1,6 @@
 {
   "name": "system-testing",
-  "version": "1.0.34",
+  "version": "1.0.35",
   "description": "System testing with Selenium and browsers.",
   "files": ["dist/**"],
   "keywords": [
