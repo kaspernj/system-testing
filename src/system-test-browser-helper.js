@@ -33,6 +33,8 @@ export default class SystemTestBrowserHelper {
 
   async startScoundrel() {
     this.scoundrelWs = new WebSocket("http://localhost:8090")
+
+    // @ts-expect-error
     this.scoundrelClientWebSocket = new ClientWebSocket(this.scoundrelWs)
 
     await this.scoundrelClientWebSocket.waitForOpened()
