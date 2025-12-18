@@ -2,7 +2,7 @@
   "name": "system-testing",
   "version": "1.0.35",
   "description": "System testing with Selenium and browsers.",
-  "files": ["dist/**"],
+  "files": ["build/**"],
   "keywords": [
     "system",
     "testing",
@@ -20,14 +20,14 @@
   "license": "ISC",
   "author": "kasper@diestoeckels.de",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "build/index.js",
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "build": "rm -rf build && tsc",
     "lint": "eslint",
     "prepublishOnly": "npm run build",
     "test": "echo \"Error: no test specified\" && exit 1",
     "typecheck": "tsc --noEmit",
-    "watch": "tsc -p tsconfig.json -w"
+    "watch": "tsc -w"
   },
   "dependencies": {
     "awaitery": "^1.0.2",

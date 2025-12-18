@@ -44,6 +44,7 @@ export default class SystemTest {
     return globalThis.systemTest
   }
 
+  /** @returns {SystemTestCommunicator} */
   getCommunicator() {
     if (!this.communicator) {
       throw new Error("Communicator hasn't been initialized yet")
@@ -103,9 +104,7 @@ export default class SystemTest {
    */
   getBaseSelector() { return this._baseSelector }
 
-  /**
-   * @returns {import("selenium-webdriver").WebDriver}
-   */
+  /** @returns {import("selenium-webdriver").WebDriver} */
   getDriver() {
     if (!this) throw new Error("No this?")
     if (!this.driver) throw new Error("Driver hasn't been initialized yet")
@@ -151,7 +150,7 @@ export default class SystemTest {
   /**
    * Finds all elements by CSS selector
    * @param {string} selector
-   * @param {object} args
+   * @param {object} [args]
    * @param {number} [args.timeout]
    * @param {boolean} [args.visible]
    * @param {boolean} [args.useBaseSelector]
@@ -241,7 +240,7 @@ export default class SystemTest {
   /**
    * Finds a single element by CSS selector
    * @param {string} selector
-   * @param {object} args
+   * @param {object} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
   async find(selector, args = {}) {
@@ -276,10 +275,11 @@ export default class SystemTest {
   /**
    * Finds a single element by test ID
    * @param {string} testID
-   * @param {object} args
+   * @param {object} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
   async findByTestID(testID, args) { return await this.find(`[data-testid='${testID}']`, args) }
+
 
   /**
    * @param {string|import("selenium-webdriver").WebElement} elementOrIdentifier
@@ -337,24 +337,20 @@ export default class SystemTest {
     return browserLogs
   }
 
-  /**
-   * @returns {Promise<string>}
-   */
+  /** @returns {Promise<string>} */
   async getCurrentUrl() {
     return await this.getDriver().getCurrentUrl()
   }
 
-  /**
-   * @returns {number}
-   */
+  /** @returns {number} */
   getTimeouts() { return this._timeouts }
 
   /**
    * Interacts with an element by calling a method on it with the given arguments.
    * Retrying on ElementNotInteractableError.
-   * @param {import("selenium-webdriver").WebElement|string} elementOrIdentifier - The element or a CSS selector to find the element.
-   * @param {string} methodName - The method name to call on the element.
-   * @param {...any} args - Arguments to pass to the method.
+   * @param {import("selenium-webdriver").WebElement|string} elementOrIdentifier The element or a CSS selector to find the element.
+   * @param {string} methodName The method name to call on the element.
+   * @param {...any} args Arguments to pass to the method.
    * @returns {Promise<any>}
    */
   async interact(elementOrIdentifier, methodName, ...args) {
@@ -428,7 +424,7 @@ export default class SystemTest {
 
   /**
    * @param {string} selector
-   * @param {object} args
+   * @param {object} [args]
    * @param {boolean} [args.useBaseSelector]
    * @returns {Promise<void>}
    */
@@ -510,9 +506,7 @@ export default class SystemTest {
     }
   }
 
-  /**
-   * @returns {Promise<void>}
-   */
+  /** @returns {Promise<void>} */
   async dismissNotificationMessages() {
     const notificationMessageElements = await this.all("[data-class='notification-message']", {useBaseSelector: false})
 
@@ -709,9 +703,7 @@ export default class SystemTest {
     }
   }
 
-  /**
-   * @returns {void}
-   */
+  /** @returns {void} */
   onWebSocketClose = () => {
     this.ws = null
     this.getCommunicator().ws = null
