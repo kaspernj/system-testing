@@ -2,7 +2,9 @@
   "name": "system-testing",
   "version": "1.0.36",
   "description": "System testing with Selenium and browsers.",
-  "files": ["build/**"],
+  "files": [
+    "build/**"
+  ],
   "keywords": [
     "system",
     "testing",
@@ -22,7 +24,8 @@
   "type": "module",
   "main": "build/index.js",
   "scripts": {
-    "build": "rm -rf build && tsc",
+    "build": "rm -rf build && npm run compile",
+    "compile": "tsc",
     "lint": "eslint",
     "prepublishOnly": "npm run build",
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -32,6 +35,7 @@
   "dependencies": {
     "awaitery": "^1.0.2",
     "diggerize": "^1.0.9",
+    "eventemitter3": "^5.0.1",
     "htmlfy": "^1.0.0",
     "mime": "^4.0.7",
     "moment": "^2.30.1",
