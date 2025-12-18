@@ -3,7 +3,7 @@
 import Client from "scoundrel-remote-eval/build/client/index.js"
 import ClientWebSocket from "scoundrel-remote-eval/build/client/connections/web-socket/index.js"
 import {digg} from "diggerize"
-import EventEmitter from "events"
+import {EventEmitter} from "eventemitter3"
 
 import SystemTestCommunicator from "./system-test-communicator.js"
 
