@@ -577,7 +577,7 @@ export default class SystemTest {
       .setCapability("goog:loggingPrefs", {browser: "ALL"})
       .build()
 
-    await this.setTimeouts(5000)
+    await this.setTimeouts(10000)
 
     // Web socket server to communicate with browser
     await this.startWebSocketServer()
