@@ -1,6 +1,6 @@
 // @ts-check
 
-import {Builder, By} from "selenium-webdriver"
+import {Builder, By, error as SeleniumError} from "selenium-webdriver"
 import chrome from "selenium-webdriver/chrome.js"
 import {digg} from "diggerize"
 import fs from "node:fs/promises"
@@ -15,6 +15,7 @@ import {wait, waitFor} from "awaitery"
 import {WebSocketServer} from "ws"
 
 class ElementNotFoundError extends Error { }
+const {WebDriverError} = SeleniumError
 
 export default class SystemTest {
   static rootPath = "/blank?systemTest=true"
@@ -176,11 +177,13 @@ export default class SystemTest {
     if (actualTimeout == 0) {
       elements = await getElements()
     } else {
-      await this.getDriver().wait(async () => {
-        elements = await getElements()
+      this._withRethrownErrors(async () => {
+        await this.getDriver().wait(async () => {
+          elements = await getElements()
 
-        return elements.length > 0
-      }, actualTimeout)
+          return elements.length > 0
+        }, actualTimeout)
+      })
     }
 
     const activeElements = []
@@ -437,22 +440,36 @@ export default class SystemTest {
 
     const actualSelector = useBaseSelector ? this.getSelector(selector) : selector
 
-    await this.getDriver().wait(
-      async () => {
-        const elements = await this.getDriver().findElements(By.css(actualSelector))
+    this._withRethrownErrors(async () => {
+      await this.getDriver().wait(
+        async () => {
+          const elements = await this.getDriver().findElements(By.css(actualSelector))
 
-        // Not found at all
-        if (elements.length === 0) {
-          return true
-        }
+          // Not found at all
+          if (elements.length === 0) {
+            return true
+          }
 
-        // Found but not visible
-        const isDisplayed = await elements[0].isDisplayed()
+          // Found but not visible
+          const isDisplayed = await elements[0].isDisplayed()
 
-        return !isDisplayed
-      },
-      this.getTimeouts()
-    )
+          return !isDisplayed
+        },
+        this.getTimeouts()
+      )
+    })
+  }
+
+  async _withRethrownErrors(callback) {
+    try {
+      return await callback()
+    } catch (error) {
+      if (error instanceof WebDriverError) {
+        throw new Error(`Selenium ${error.constructor.name}: ${error.message}`)
+      } else {
+        throw error
+      }
+    }
   }
 
   /**
