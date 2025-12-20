@@ -177,7 +177,7 @@ export default class SystemTest {
     if (actualTimeout == 0) {
       elements = await getElements()
     } else {
-      this._withRethrownErrors(async () => {
+      await this._withRethrownErrors(async () => {
         await this.getDriver().wait(async () => {
           elements = await getElements()
 
@@ -440,7 +440,7 @@ export default class SystemTest {
 
     const actualSelector = useBaseSelector ? this.getSelector(selector) : selector
 
-    this._withRethrownErrors(async () => {
+    await this._withRethrownErrors(async () => {
       await this.getDriver().wait(
         async () => {
           const elements = await this.getDriver().findElements(By.css(actualSelector))
