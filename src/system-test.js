@@ -502,7 +502,7 @@ export default class SystemTest {
     let foundNotificationMessageElement
 
     await waitFor(async () => {
-      const notificationMessageElements = await this.all("[data-class='notification-message']", {useBaseSelector: false})
+      const notificationMessageElements = await this.all("[data-testid='notification-message']", {useBaseSelector: false})
 
       for (const notificationMessageElement of notificationMessageElements) {
         const notificationMessage = await notificationMessageElement.getText()
