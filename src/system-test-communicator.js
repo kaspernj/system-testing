@@ -88,7 +88,7 @@ export default class SystemTestCommunicator {
   send(data) {
     this._sendQueue.push(data)
 
-    if (this.ws.readyState == 1) {
+    if (this.ws?.readyState == 1) {
       this.flushSendQueue()
     }
   }
