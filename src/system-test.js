@@ -174,16 +174,18 @@ export default class SystemTest {
     const getElements = async () => await this.getDriver().findElements(By.css(actualSelector))
     let elements = []
 
-    if (actualTimeout == 0) {
-      elements = await getElements()
-    } else {
-      await this._withRethrownErrors(async () => {
+    try {
+      if (actualTimeout == 0) {
+        elements = await getElements()
+      } else {
         await this.getDriver().wait(async () => {
           elements = await getElements()
 
           return elements.length > 0
         }, actualTimeout)
-      })
+      }
+    } catch (error) {
+      throw new Error(`Could get elements with selector: ${actualSelector}: ${error instanceof Error ? error.message : error}`)
     }
 
     const activeElements = []
