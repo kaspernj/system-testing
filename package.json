@@ -2,9 +2,9 @@
   "name": "system-testing",
   "version": "1.0.42",
   "description": "System testing with Selenium and browsers.",
-  "files": [
-    "build/**"
-  ],
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "files": ["build/**"],
   "keywords": [
     "system",
     "testing",
@@ -22,7 +22,6 @@
   "license": "ISC",
   "author": "kasper@diestoeckels.de",
   "type": "module",
-  "main": "build/index.js",
   "scripts": {
     "build": "rm -rf build && npm run compile",
     "compile": "tsc",

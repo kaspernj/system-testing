@@ -1,5 +1,7 @@
 before_script:
   - npm install
+  - cd spec/dummy && npm install && npm run export:web
 script:
   - npm run lint
   - npm run typecheck
+  - cd spec/dummy && npm run test:system

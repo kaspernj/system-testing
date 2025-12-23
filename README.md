@@ -61,3 +61,7 @@ describe("Sign in page", () => {
   })
 })
 ```
+
+## Dummy Expo app
+
+A ready-to-run Expo Router dummy app that uses `system-testing` lives in `spec/dummy`. Build the web bundle with `npm run export:web` and execute the sample system test with `npm run test:system` from that folder.

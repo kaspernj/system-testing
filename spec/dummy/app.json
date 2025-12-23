@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "System Testing Dummy",
+    "slug": "system-testing-dummy",
+    "scheme": "system-testing-dummy",
+    "version": "1.0.0",
+    "entryPoint": "./index.js",
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    }
+  }
+}
