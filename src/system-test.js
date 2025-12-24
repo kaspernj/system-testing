@@ -611,7 +611,8 @@ export default class SystemTest {
     }
 
     // Wait for client to connect
-    this.debugLog("Waiting for client WebSocket connection")
+    this.debugLog("Waiting for client WebSocket connection (opening)")
+    this.debugLog(`WS state: ${this.ws?.readyState ?? "none"}`)
     await this.waitForClientWebSocket()
     this.debugLog("Client WebSocket connected")
 
@@ -656,11 +657,12 @@ export default class SystemTest {
    * @returns {Promise<void>}
    */
   waitForClientWebSocket() {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       if (this.ws) {
         resolve()
       }
 
+      this.waitForClientWebSocketPromiseReject = reject
       this.waitForClientWebSocketPromiseResolve = resolve
     })
   }
@@ -673,6 +675,13 @@ export default class SystemTest {
     this.wss = new WebSocketServer({port: 1985})
     this.wss.on("connection", this.onWebSocketConnection)
     this.wss.on("close", this.onWebSocketClose)
+    this.wss.on("error", (error) => {
+      if (this.waitForClientWebSocketPromiseReject) {
+        this.waitForClientWebSocketPromiseReject(error instanceof Error ? error : new Error(String(error)))
+        delete this.waitForClientWebSocketPromiseReject
+        delete this.waitForClientWebSocketPromiseResolve
+      }
+    })
   }
 
   /**
@@ -736,6 +745,7 @@ export default class SystemTest {
     if (this.waitForClientWebSocketPromiseResolve) {
       this.waitForClientWebSocketPromiseResolve()
       delete this.waitForClientWebSocketPromiseResolve
+      delete this.waitForClientWebSocketPromiseReject
     }
   }
 
@@ -743,6 +753,12 @@ export default class SystemTest {
   onWebSocketClose = () => {
     this.ws = null
     this.getCommunicator().ws = null
+
+    if (this.waitForClientWebSocketPromiseReject) {
+      this.waitForClientWebSocketPromiseReject(new Error("Client websocket closed before connecting"))
+      delete this.waitForClientWebSocketPromiseReject
+      delete this.waitForClientWebSocketPromiseResolve
+    }
   }
 
   /**
