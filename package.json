@@ -26,6 +26,7 @@
   "type": "module",
   "scripts": {
     "all-checks": "npm run typecheck && npm run lint && npm run prepare:dummy && npm run export:web && npm run test",
+    "prepare": "npm run build",
     "prepare:dummy": "npm run build && rm -rf spec/dummy/node_modules/system-testing && mkdir -p spec/dummy/node_modules/system-testing && cp -r build package.json spec/dummy/node_modules/system-testing/",
     "build": "rm -rf build && npm run compile",
     "compile": "tsc",

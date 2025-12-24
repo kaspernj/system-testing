@@ -1,5 +1,5 @@
 before_script:
   - npm install
-  - cd spec/dummy && npm install && npx expo export -p web
+  - cd spec/dummy && npm install
 script:
   - npm run all-checks
