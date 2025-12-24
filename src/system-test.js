@@ -612,7 +612,7 @@ export default class SystemTest {
 
     // Wait for client to connect
     this.debugLog("Waiting for client WebSocket connection")
-    await this.waitForClientWebSocket({timeout: 15000})
+    await this.waitForClientWebSocket()
     this.debugLog("Client WebSocket connected")
 
     this._started = true
@@ -653,32 +653,15 @@ export default class SystemTest {
 
   /**
    * Waits for the client web socket to connect
-   * @param {object} [args]
-   * @param {number} [args.timeout] - timeout in ms before failing
    * @returns {Promise<void>}
    */
-  waitForClientWebSocket(args = {}) {
-    const {timeout, ...restArgs} = args
-    const restArgsKeys = Object.keys(restArgs)
-
-    if (restArgsKeys.length > 0) throw new Error(`Unknown arguments: ${restArgsKeys.join(", ")}`)
-
-    return new Promise((resolve, reject) => {
-      let timeoutId
-
-      if (this.ws) resolve()
-
-      if (typeof timeout === "number") {
-        timeoutId = setTimeout(() => {
-          this.waitForClientWebSocketPromiseResolve = undefined
-          reject(new Error(`Timed out waiting for client websocket after ${timeout}ms`))
-        }, timeout)
-      }
-
-      this.waitForClientWebSocketPromiseResolve = () => {
-        if (timeoutId) clearTimeout(timeoutId)
+  waitForClientWebSocket() {
+    return new Promise((resolve) => {
+      if (this.ws) {
         resolve()
       }
+
+      this.waitForClientWebSocketPromiseResolve = resolve
     })
   }
 
