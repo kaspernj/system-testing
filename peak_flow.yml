@@ -4,4 +4,4 @@ before_script:
 script:
   - npm run lint
   - npm run typecheck
-  - cd spec/dummy && npm run test
+  - npm run test
