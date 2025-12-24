@@ -39,7 +39,7 @@ export default class SystemTestBrowserHelper {
 
     await this.scoundrelClientWebSocket.waitForOpened()
 
-    this.scoundrelClient = new Client(this.scoundrelClientWebSocket)
+    this.scoundrelClient = new Client(this.scoundrelClientWebSocket, {enableServerControl: true})
     this.events.emit("scoundrelStarted")
   }
 

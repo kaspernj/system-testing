@@ -57,6 +57,44 @@ export default class SystemTest {
   }
 
   /**
+   * Extracts an error message if possible from the payload sent from the browser.
+   * @param {{message?: string, value?: any[]} | Error} data
+   * @returns {string | undefined}
+   */
+  extractErrorMessage(data) {
+    if (data instanceof Error) return data.message
+    if (typeof data === "object" && typeof data.message === "string") return data.message
+    if (typeof data === "string") return data
+
+    const firstValue = Array.isArray(data?.value) ? data.value[0] : undefined
+
+    if (firstValue instanceof Error && typeof firstValue.message === "string") return firstValue.message
+    if (typeof firstValue === "string") return firstValue
+
+    return undefined
+  }
+
+  /**
+   * Whether a browser error should be ignored based on built-in rules and an optional error filter.
+   * @param {{message?: string, value?: any[]}} data
+   * @returns {boolean}
+   */
+  shouldIgnoreError(data) {
+    const message = this.extractErrorMessage(data)
+
+    if (typeof message === "string") {
+      if (message.includes("Minified React error #418")) return true
+      if (message.includes("Minified React error #419")) return true
+    }
+
+    if (this._errorFilter && this._errorFilter(data) === false) {
+      return true
+    }
+
+    return false
+  }
+
+  /**
    * Runs a system test
    * @param {function(SystemTest): Promise<void>} callback
    * @returns {Promise<void>}
@@ -715,16 +753,7 @@ export default class SystemTest {
     let result
 
     if (type == "console.error") {
-      const errorMessage = data.value[0]
-      let showMessage = true
-
-      if (errorMessage.includes("Minified React error #419")) {
-        showMessage = false
-      }
-
-      if (this._errorFilter && this._errorFilter(data) === false) {
-        showMessage = false
-      }
+      const showMessage = !this.shouldIgnoreError(data)
 
       if (showMessage) {
         console.error("Browser error", ...data.value)
@@ -785,10 +814,7 @@ export default class SystemTest {
    * @returns {void}
    */
   handleError(data) {
-    if (data.message.includes("Minified React error #419")) {
-      // Ignore this error message
-      return
-    }
+    if (this.shouldIgnoreError(data)) return
 
     const error = new Error(`Browser error: ${data.message}`)
 
