@@ -32,12 +32,10 @@ export default class SystemTest {
 
   /**
    * Gets the current system test instance
-   * @param {object} [args]
-   * @param {string} [args.host]
-   * @param {number} [args.port]
+   * @param {{host?: string, port?: number, debug?: boolean}} [args]
    * @returns {SystemTest}
    */
-  static current(args) {
+  static current(args = {}) {
     if (!globalThis.systemTest) {
       globalThis.systemTest = new SystemTest(args)
     }
@@ -77,11 +75,9 @@ export default class SystemTest {
 
   /**
    * Creates a new SystemTest instance
-   * @param {object} [args]
-   * @param {string} [args.host]
-   * @param {number} [args.port]
+   * @param {{host?: string, port?: number, debug?: boolean}} [args]
    */
-  constructor({host = "localhost", port = 8081, ...restArgs} = {host: "localhost", port: 8081}) {
+  constructor({host = "localhost", port = 8081, debug = false, ...restArgs} = {host: "localhost", port: 8081, debug: false}) {
     const restArgsKeys = Object.keys(restArgs)
 
     if (restArgsKeys.length > 0) {
@@ -90,6 +86,7 @@ export default class SystemTest {
 
     this._host = host
     this._port = port
+    this._debug = debug
 
     /** @type {Record<number, object>} */
     this._responses = {}
@@ -126,6 +123,17 @@ export default class SystemTest {
    */
   getSelector(selector) {
     return this.getBaseSelector() ? `${this.getBaseSelector()} ${selector}` : selector
+  }
+
+  /**
+   * Logs messages when debugging is enabled
+   * @param {string} message
+   * @returns {void}
+   */
+  debugLog(message) {
+    if (this._debug) {
+      console.log(`[SystemTest debug] ${message}`)
+    }
   }
 
   /**
@@ -557,9 +565,11 @@ export default class SystemTest {
       this.currentUrl = `http://${this._host}:${this._port}`
     } else if (process.env.SYSTEM_TEST_HOST == "dist") {
       this.currentUrl = `http://${this._host}:1984`
+      this.debugLog("Starting HTTP server for dist")
       this.systemTestHttpServer = new SystemTestHttpServer()
 
       await this.systemTestHttpServer.start()
+      this.debugLog("HTTP server started")
     } else {
       throw new Error("Please set SYSTEM_TEST_HOST to 'expo-dev-server' or 'dist'")
     }
@@ -578,25 +588,32 @@ export default class SystemTest {
       // @ts-expect-error
       .setCapability("goog:loggingPrefs", {browser: "ALL"})
       .build()
+    this.debugLog("WebDriver built")
 
     await this.setTimeouts(10000)
+    this.debugLog("Timeouts set on driver")
 
     // Web socket server to communicate with browser
     await this.startWebSocketServer()
+    this.debugLog("WebSocket server started")
 
     // Visit the root page and wait for Expo to be loaded and the app to appear
     await this.driverVisit(SystemTest.rootPath)
+    this.debugLog(`Visited root path ${SystemTest.rootPath}`)
 
     try {
       await this.find("body > #root", {useBaseSelector: false})
       await this.find("[data-testid='systemTestingComponent']", {visible: null, useBaseSelector: false})
+      this.debugLog("Found root and systemTestingComponent")
     } catch (error) {
       await this.takeScreenshot()
       throw error
     }
 
     // Wait for client to connect
-    await this.waitForClientWebSocket()
+    this.debugLog("Waiting for client WebSocket connection")
+    await this.waitForClientWebSocket({timeout: 15000})
+    this.debugLog("Client WebSocket connected")
 
     this._started = true
     this.setBaseSelector("[data-testid='systemTestingComponent'][data-focussed='true']")
@@ -636,15 +653,32 @@ export default class SystemTest {
 
   /**
    * Waits for the client web socket to connect
+   * @param {object} [args]
+   * @param {number} [args.timeout] - timeout in ms before failing
    * @returns {Promise<void>}
    */
-  waitForClientWebSocket() {
-    return new Promise((resolve) => {
-      if (this.ws) {
-        resolve()
+  waitForClientWebSocket(args = {}) {
+    const {timeout, ...restArgs} = args
+    const restArgsKeys = Object.keys(restArgs)
+
+    if (restArgsKeys.length > 0) throw new Error(`Unknown arguments: ${restArgsKeys.join(", ")}`)
+
+    return new Promise((resolve, reject) => {
+      let timeoutId
+
+      if (this.ws) resolve()
+
+      if (typeof timeout === "number") {
+        timeoutId = setTimeout(() => {
+          this.waitForClientWebSocketPromiseResolve = undefined
+          reject(new Error(`Timed out waiting for client websocket after ${timeout}ms`))
+        }, timeout)
       }
 
-      this.waitForClientWebSocketPromiseResolve = resolve
+      this.waitForClientWebSocketPromiseResolve = () => {
+        if (timeoutId) clearTimeout(timeoutId)
+        resolve()
+      }
     })
   }
 

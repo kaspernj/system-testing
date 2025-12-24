@@ -15,7 +15,7 @@ describe("System test", () => {
     try {
       await dummyHttpServerEnvironment.start()
       console.log("[system-test] beforeAll: creating SystemTest")
-      systemTest = SystemTest.current()
+      systemTest = SystemTest.current({debug: true})
       console.log("[system-test] beforeAll: starting SystemTest")
       await systemTest.start()
       console.log("[system-test] beforeAll: SystemTest started")
