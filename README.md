@@ -11,10 +11,10 @@ npm install --save-dev system-testing
 ## Usage
 
 ```js
-import retry from "awaitery/src/retry.js"
+import retry from "awaitery/build/retry.js"
 import SystemTest from "system-testing/src/system-test.js"
-import wait from "awaitery/src/wait.js"
-import waitFor from "awaitery/src/wait-for.js"
+import wait from "awaitery/build/wait.js"
+import waitFor from "awaitery/build/wait-for.js"
 
 import createUser from "@/src/testing/create-user.js"
 import initialize from "@/src/initialize"

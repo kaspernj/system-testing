@@ -1,5 +1,7 @@
 // @ts-check
 
+import wait from "awaitery/build/wait.js"
+
 import SystemTest from "../src/system-test.js"
 import DummyHttpServerEnvironment from "./support/dummy-http-server.js"
 
@@ -14,6 +16,8 @@ describe("System test", () => {
     console.log("[system-test] beforeAll: starting dummy HTTP env")
     try {
       await dummyHttpServerEnvironment.start()
+      await wait(1000)
+
       console.log("[system-test] beforeAll: creating SystemTest")
       systemTest = SystemTest.current({debug: true})
       console.log("[system-test] beforeAll: starting SystemTest")
