@@ -9,6 +9,20 @@ import {fileURLToPath} from "node:url"
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default class SystemTestHttpServer {
+  /**
+   * @param {{host?: string, port?: number, debug?: boolean}} [args]
+   */
+  constructor({host = "localhost", port = 1984, debug = false} = {}) {
+    this._host = host
+    this._port = port
+    this._debug = debug
+  }
+
+  /** @param {string} message */
+  debugLog(message) {
+    if (this._debug) console.log(`[SystemTestHttpServer] ${message}`)
+  }
+
   /** @returns {void} */
   close() {
     if (!this.httpServer) {
@@ -66,16 +80,20 @@ export default class SystemTestHttpServer {
   /** @returns {Promise<void>} */
   async start() {
     this.basePath = await fs.realpath(path.resolve(__dirname, "../.."))
+    this.debugLog(`Starting HTTP server on ${this._host}:${this._port}`)
     await this.startHttpServer()
+    this.debugLog(`HTTP server started on ${this._host}:${this._port}`)
   }
 
   /** @returns {Promise<void>} */
   startHttpServer() {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       this.httpServer = http.createServer(this.onHttpServerRequest)
-      this.httpServer.listen(1984, "localhost", () => {
-        resolve()
+      this.httpServer.on("error", (error) => {
+        this.debugLog(`HTTP server error: ${error instanceof Error ? error.message : String(error)}`)
+        reject(error)
       })
+      this.httpServer.listen(this._port, this._host, () => resolve())
     })
   }
 }

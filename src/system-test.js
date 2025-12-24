@@ -29,10 +29,14 @@ export default class SystemTest {
   _started = false
   _driverTimeouts = 5000
   _timeouts = 5000
+  _httpHost = "localhost"
+  _httpPort = 1984
+  /** @type {(error: any) => boolean | undefined} */
+  _errorFilter = undefined
 
   /**
    * Gets the current system test instance
-   * @param {{host?: string, port?: number, debug?: boolean}} [args]
+   * @param {{host?: string, port?: number, httpHost?: string, httpPort?: number, debug?: boolean, errorFilter?: (error: any) => boolean}} [args]
    * @returns {SystemTest}
    */
   static current(args = {}) {
@@ -75,9 +79,9 @@ export default class SystemTest {
 
   /**
    * Creates a new SystemTest instance
-   * @param {{host?: string, port?: number, debug?: boolean}} [args]
+   * @param {{host?: string, port?: number, httpHost?: string, httpPort?: number, debug?: boolean, errorFilter?: (message: string) => boolean}} [args]
    */
-  constructor({host = "localhost", port = 8081, debug = false, ...restArgs} = {host: "localhost", port: 8081, debug: false}) {
+  constructor({host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, debug = false, errorFilter, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
     const restArgsKeys = Object.keys(restArgs)
 
     if (restArgsKeys.length > 0) {
@@ -86,7 +90,10 @@ export default class SystemTest {
 
     this._host = host
     this._port = port
+    this._httpHost = httpHost
+    this._httpPort = httpPort
     this._debug = debug
+    this._errorFilter = errorFilter
 
     /** @type {Record<number, object>} */
     this._responses = {}
@@ -193,7 +200,7 @@ export default class SystemTest {
         }, actualTimeout)
       }
     } catch (error) {
-      throw new Error(`Could get elements with selector: ${actualSelector}: ${error instanceof Error ? error.message : error}`)
+      throw new Error(`Couldn't get elements with selector: ${actualSelector}: ${error instanceof Error ? error.message : error}`)
     }
 
     const activeElements = []
@@ -564,10 +571,12 @@ export default class SystemTest {
     if (process.env.SYSTEM_TEST_HOST == "expo-dev-server") {
       this.currentUrl = `http://${this._host}:${this._port}`
     } else if (process.env.SYSTEM_TEST_HOST == "dist") {
-      this.currentUrl = `http://${this._host}:1984`
-      this.debugLog("Starting HTTP server for dist")
-      this.systemTestHttpServer = new SystemTestHttpServer()
+      this.currentUrl = `http://${this._httpHost}:${this._httpPort}`
 
+      this.debugLog(`Spawning HTTP server for dist on ${this._httpHost}:${this._httpPort}`)
+      this.systemTestHttpServer = new SystemTestHttpServer({host: this._httpHost, port: this._httpPort, debug: this._debug})
+
+      this.debugLog("Starting HTTP server")
       await this.systemTestHttpServer.start()
       this.debugLog("HTTP server started")
     } else {
@@ -600,6 +609,9 @@ export default class SystemTest {
     // Visit the root page and wait for Expo to be loaded and the app to appear
     await this.driverVisit(SystemTest.rootPath)
     this.debugLog(`Visited root path ${SystemTest.rootPath}`)
+
+    //console.log("WAITING")
+    //await wait(180000)
 
     try {
       await this.find("body > #root", {useBaseSelector: false})
@@ -707,6 +719,10 @@ export default class SystemTest {
       let showMessage = true
 
       if (errorMessage.includes("Minified React error #419")) {
+        showMessage = false
+      }
+
+      if (this._errorFilter && this._errorFilter(data) === false) {
         showMessage = false
       }
 

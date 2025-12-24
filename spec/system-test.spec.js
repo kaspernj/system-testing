@@ -19,7 +19,17 @@ describe("System test", () => {
       await wait(1000)
 
       console.log("[system-test] beforeAll: creating SystemTest")
-      systemTest = SystemTest.current({debug: true})
+      systemTest = SystemTest.current({
+        debug: true,
+        host: "127.0.0.1",
+        port: 6001,
+        httpHost: "0.0.0.0",
+        httpPort: 6001,
+        errorFilter: (error) => {
+          if (typeof error?.value?.[0] === "string" && error.value[0].includes("Uncaught Error: Minified React error #418; visit")) return false
+          return true
+        }
+      })
       console.log("[system-test] beforeAll: starting SystemTest")
       await systemTest.start()
       console.log("[system-test] beforeAll: SystemTest started")

@@ -47,7 +47,16 @@ function getSystemTestBrowserHelper() {
  * @returns {{enabled: boolean, systemTestBrowserHelper: SystemTestBrowserHelper}}
  */
 export default function useSystemTest({onInitialize, ...restArgs} = {onInitialize: undefined}) {
-  const router = useRouter()
+  if (!useMemo) throw new Error("[useSystemTest] React.useMemo is not available")
+  if (!useCallback) throw new Error("[useSystemTest] React.useCallback is not available")
+
+  let router = null
+
+  try {
+    router = useRouter()
+  } catch (error) {
+    console.error("[useSystemTest] useRouter unavailable:", error)
+  }
   const enabled = useMemo(() => isSystemTestEnabled(), [])
   const systemTestBrowserHelper = enabled ? getSystemTestBrowserHelper() : null
   const result = useMemo(() => ({enabled, systemTestBrowserHelper}), [enabled, systemTestBrowserHelper])
@@ -60,7 +69,7 @@ export default function useSystemTest({onInitialize, ...restArgs} = {onInitializ
   const onSystemTestBrowserHelperDismissTo = useCallback(({path}) => {
     if (instanceShared.enabled) {
       try {
-        instanceShared.router.dismissTo(path)
+        instanceShared.router?.dismissTo(path)
       } catch (error) {
         console.error(`Failed to dismiss to path "${path}": ${error.message}`)
       }
@@ -73,7 +82,7 @@ export default function useSystemTest({onInitialize, ...restArgs} = {onInitializ
   // Navigates when instructed by the system test browser helper and keeping history of screens
   const onSystemTestBrowserHelperNavigate = useCallback(({path}) => {
     if (instanceShared.enabled) {
-      instanceShared.router.navigate(path)
+      instanceShared.router?.navigate(path)
     }
   }, [])
 
