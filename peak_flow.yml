@@ -2,6 +2,4 @@ before_script:
   - npm install
   - cd spec/dummy && npm install && npx expo export -p web
 script:
-  - npm run lint
-  - npm run typecheck
-  - npm run test
+  - npm run all-checks
