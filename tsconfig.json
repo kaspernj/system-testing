@@ -12,7 +12,7 @@
     "skipLibCheck": true,
     "sourceMap": false,
     "target": "ES2020",
-    "types": ["node"]
+    "types": ["jasmine", "node"]
   },
   "include": ["src/**/*"]
 }

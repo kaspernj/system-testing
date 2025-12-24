@@ -29,15 +29,17 @@ export default class SystemTest {
   _started = false
   _driverTimeouts = 5000
   _timeouts = 5000
+  _httpHost = "localhost"
+  _httpPort = 1984
+  /** @type {(error: any) => boolean | undefined} */
+  _errorFilter = undefined
 
   /**
    * Gets the current system test instance
-   * @param {object} [args]
-   * @param {string} [args.host]
-   * @param {number} [args.port]
+   * @param {{host?: string, port?: number, httpHost?: string, httpPort?: number, debug?: boolean, errorFilter?: (error: any) => boolean}} [args]
    * @returns {SystemTest}
    */
-  static current(args) {
+  static current(args = {}) {
     if (!globalThis.systemTest) {
       globalThis.systemTest = new SystemTest(args)
     }
@@ -52,6 +54,44 @@ export default class SystemTest {
     }
 
     return this.communicator
+  }
+
+  /**
+   * Extracts an error message if possible from the payload sent from the browser.
+   * @param {{message?: string, value?: any[]} | Error} data
+   * @returns {string | undefined}
+   */
+  extractErrorMessage(data) {
+    if (data instanceof Error) return data.message
+    if (typeof data === "object" && typeof data.message === "string") return data.message
+    if (typeof data === "string") return data
+
+    const firstValue = Array.isArray(data?.value) ? data.value[0] : undefined
+
+    if (firstValue instanceof Error && typeof firstValue.message === "string") return firstValue.message
+    if (typeof firstValue === "string") return firstValue
+
+    return undefined
+  }
+
+  /**
+   * Whether a browser error should be ignored based on built-in rules and an optional error filter.
+   * @param {{message?: string, value?: any[]}} data
+   * @returns {boolean}
+   */
+  shouldIgnoreError(data) {
+    const message = this.extractErrorMessage(data)
+
+    if (typeof message === "string") {
+      if (message.includes("Minified React error #418")) return true
+      if (message.includes("Minified React error #419")) return true
+    }
+
+    if (this._errorFilter && this._errorFilter(data) === false) {
+      return true
+    }
+
+    return false
   }
 
   /**
@@ -77,11 +117,9 @@ export default class SystemTest {
 
   /**
    * Creates a new SystemTest instance
-   * @param {object} [args]
-   * @param {string} [args.host]
-   * @param {number} [args.port]
+   * @param {{host?: string, port?: number, httpHost?: string, httpPort?: number, debug?: boolean, errorFilter?: (message: string) => boolean}} [args]
    */
-  constructor({host = "localhost", port = 8081, ...restArgs} = {host: "localhost", port: 8081}) {
+  constructor({host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, debug = false, errorFilter, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
     const restArgsKeys = Object.keys(restArgs)
 
     if (restArgsKeys.length > 0) {
@@ -90,6 +128,10 @@ export default class SystemTest {
 
     this._host = host
     this._port = port
+    this._httpHost = httpHost
+    this._httpPort = httpPort
+    this._debug = debug
+    this._errorFilter = errorFilter
 
     /** @type {Record<number, object>} */
     this._responses = {}
@@ -126,6 +168,17 @@ export default class SystemTest {
    */
   getSelector(selector) {
     return this.getBaseSelector() ? `${this.getBaseSelector()} ${selector}` : selector
+  }
+
+  /**
+   * Logs messages when debugging is enabled
+   * @param {string} message
+   * @returns {void}
+   */
+  debugLog(message) {
+    if (this._debug) {
+      console.log(`[SystemTest debug] ${message}`)
+    }
   }
 
   /**
@@ -185,7 +238,7 @@ export default class SystemTest {
         }, actualTimeout)
       }
     } catch (error) {
-      throw new Error(`Could get elements with selector: ${actualSelector}: ${error instanceof Error ? error.message : error}`)
+      throw new Error(`Couldn't get elements with selector: ${actualSelector}: ${error instanceof Error ? error.message : error}`)
     }
 
     const activeElements = []
@@ -556,10 +609,14 @@ export default class SystemTest {
     if (process.env.SYSTEM_TEST_HOST == "expo-dev-server") {
       this.currentUrl = `http://${this._host}:${this._port}`
     } else if (process.env.SYSTEM_TEST_HOST == "dist") {
-      this.currentUrl = `http://${this._host}:1984`
-      this.systemTestHttpServer = new SystemTestHttpServer()
+      this.currentUrl = `http://${this._httpHost}:${this._httpPort}`
 
+      this.debugLog(`Spawning HTTP server for dist on ${this._httpHost}:${this._httpPort}`)
+      this.systemTestHttpServer = new SystemTestHttpServer({host: this._httpHost, port: this._httpPort, debug: this._debug})
+
+      this.debugLog("Starting HTTP server")
       await this.systemTestHttpServer.start()
+      this.debugLog("HTTP server started")
     } else {
       throw new Error("Please set SYSTEM_TEST_HOST to 'expo-dev-server' or 'dist'")
     }
@@ -578,25 +635,36 @@ export default class SystemTest {
       // @ts-expect-error
       .setCapability("goog:loggingPrefs", {browser: "ALL"})
       .build()
+    this.debugLog("WebDriver built")
 
     await this.setTimeouts(10000)
+    this.debugLog("Timeouts set on driver")
 
     // Web socket server to communicate with browser
     await this.startWebSocketServer()
+    this.debugLog("WebSocket server started")
 
     // Visit the root page and wait for Expo to be loaded and the app to appear
     await this.driverVisit(SystemTest.rootPath)
+    this.debugLog(`Visited root path ${SystemTest.rootPath}`)
+
+    //console.log("WAITING")
+    //await wait(180000)
 
     try {
       await this.find("body > #root", {useBaseSelector: false})
       await this.find("[data-testid='systemTestingComponent']", {visible: null, useBaseSelector: false})
+      this.debugLog("Found root and systemTestingComponent")
     } catch (error) {
       await this.takeScreenshot()
       throw error
     }
 
     // Wait for client to connect
+    this.debugLog("Waiting for client WebSocket connection (opening)")
+    this.debugLog(`WS state: ${this.ws?.readyState ?? "none"}`)
     await this.waitForClientWebSocket()
+    this.debugLog("Client WebSocket connected")
 
     this._started = true
     this.setBaseSelector("[data-testid='systemTestingComponent'][data-focussed='true']")
@@ -639,11 +707,12 @@ export default class SystemTest {
    * @returns {Promise<void>}
    */
   waitForClientWebSocket() {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       if (this.ws) {
         resolve()
       }
 
+      this.waitForClientWebSocketPromiseReject = reject
       this.waitForClientWebSocketPromiseResolve = resolve
     })
   }
@@ -656,6 +725,13 @@ export default class SystemTest {
     this.wss = new WebSocketServer({port: 1985})
     this.wss.on("connection", this.onWebSocketConnection)
     this.wss.on("close", this.onWebSocketClose)
+    this.wss.on("error", (error) => {
+      if (this.waitForClientWebSocketPromiseReject) {
+        this.waitForClientWebSocketPromiseReject(error instanceof Error ? error : new Error(String(error)))
+        delete this.waitForClientWebSocketPromiseReject
+        delete this.waitForClientWebSocketPromiseResolve
+      }
+    })
   }
 
   /**
@@ -677,12 +753,7 @@ export default class SystemTest {
     let result
 
     if (type == "console.error") {
-      const errorMessage = data.value[0]
-      let showMessage = true
-
-      if (errorMessage.includes("Minified React error #419")) {
-        showMessage = false
-      }
+      const showMessage = !this.shouldIgnoreError(data)
 
       if (showMessage) {
         console.error("Browser error", ...data.value)
@@ -719,6 +790,7 @@ export default class SystemTest {
     if (this.waitForClientWebSocketPromiseResolve) {
       this.waitForClientWebSocketPromiseResolve()
       delete this.waitForClientWebSocketPromiseResolve
+      delete this.waitForClientWebSocketPromiseReject
     }
   }
 
@@ -726,6 +798,12 @@ export default class SystemTest {
   onWebSocketClose = () => {
     this.ws = null
     this.getCommunicator().ws = null
+
+    if (this.waitForClientWebSocketPromiseReject) {
+      this.waitForClientWebSocketPromiseReject(new Error("Client websocket closed before connecting"))
+      delete this.waitForClientWebSocketPromiseReject
+      delete this.waitForClientWebSocketPromiseResolve
+    }
   }
 
   /**
@@ -736,10 +814,7 @@ export default class SystemTest {
    * @returns {void}
    */
   handleError(data) {
-    if (data.message.includes("Minified React error #419")) {
-      // Ignore this error message
-      return
-    }
+    if (this.shouldIgnoreError(data)) return
 
     const error = new Error(`Browser error: ${data.message}`)
 

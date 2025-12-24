@@ -2,6 +2,8 @@
   "name": "system-testing",
   "version": "1.0.42",
   "description": "System testing with Selenium and browsers.",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
   "files": [
     "build/**"
   ],
@@ -22,38 +24,43 @@
   "license": "ISC",
   "author": "kasper@diestoeckels.de",
   "type": "module",
-  "main": "build/index.js",
   "scripts": {
+    "all-checks": "npm run typecheck && npm run lint && npm run prepare:dummy && npm run export:web && npm run test",
+    "prepare": "npm run build",
+    "prepare:dummy": "npm run build && rm -rf spec/dummy/node_modules/system-testing && mkdir -p spec/dummy/node_modules/system-testing && cp -r build package.json spec/dummy/node_modules/system-testing/",
     "build": "rm -rf build && npm run compile",
     "compile": "tsc",
+    "export:web": "npm run build && cd spec/dummy && expo export -p web --output-dir dist",
     "lint": "eslint --max-warnings 0",
     "prepublishOnly": "npm run build",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jasmine",
     "typecheck": "tsc --noEmit",
     "watch": "tsc -w"
   },
   "dependencies": {
-    "awaitery": "^1.0.2",
+    "awaitery": "^1.0.6",
     "diggerize": "^1.0.9",
     "eventemitter3": "^5.0.1",
     "htmlfy": "^1.0.0",
     "mime": "^4.0.7",
     "moment": "^2.30.1",
-    "scoundrel-remote-eval": ">= 1.0.9",
+    "scoundrel-remote-eval": ">= 1.0.10",
     "ws": "^8.18.3"
   },
   "peerDependencies": {
-    "@kaspernj/api-maker": "*",
+    "@kaspernj/api-maker": ">= 1.0.2062",
     "expo-router": "*",
     "selenium-webdriver": ">= 4.34.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@types/jasmine": "^5.1.13",
     "@types/node": "^25.0.2",
     "@types/selenium-webdriver": "^4.35.4",
     "eslint": "^9.39.1",
     "eslint-plugin-jsdoc": "^61.4.1",
     "globals": "^16.5.0",
+    "jasmine": "^5.13.0",
     "typescript": "^5.9.3"
   }
 }
