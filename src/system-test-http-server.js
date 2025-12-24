@@ -2,8 +2,11 @@
 
 import fs from "node:fs/promises"
 import http from "node:http"
+import path from "node:path"
 import mime from "mime"
-import url from "url"
+import {fileURLToPath} from "node:url"
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default class SystemTestHttpServer {
   /** @returns {void} */
@@ -27,8 +30,9 @@ export default class SystemTestHttpServer {
       return
     }
 
-    const parsedUrl = url.parse(request.url)
-    let filePath = `${process.cwd()}/dist${parsedUrl.pathname}`
+    const baseUrl = `http://${request.headers.host || "localhost:1984"}`
+    const {pathname} = new URL(request.url, baseUrl)
+    let filePath = `${process.cwd()}/dist${pathname}`
 
     if (filePath.endsWith("/")) {
       filePath += "index.html"
@@ -61,7 +65,7 @@ export default class SystemTestHttpServer {
 
   /** @returns {Promise<void>} */
   async start() {
-    this.basePath = await fs.realpath(`${__dirname}/../..`)
+    this.basePath = await fs.realpath(path.resolve(__dirname, "../.."))
     await this.startHttpServer()
   }
 
