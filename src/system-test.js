@@ -202,6 +202,42 @@ export default class SystemTest {
   }
 
   /**
+   * Waits for the Scoundrel client (browser) to connect and returns it.
+   * @param {number} [timeoutMs]
+   * @returns {Promise<import("scoundrel-remote-eval/build/client/index.js").default>}
+   */
+  async getScoundrelClient(timeoutMs = 10000) {
+    if (!this.server) {
+      throw new Error("Scoundrel server is not started")
+    }
+
+    const existingClients = this.server.getClients?.()
+
+    if (existingClients && existingClients.length > 0) {
+      return existingClients[0]
+    }
+
+    if (!this.server.events?.on) {
+      throw new Error("Scoundrel server events are unavailable")
+    }
+
+    return await new Promise((resolve, reject) => {
+      const onNewClient = (client) => {
+        clearTimeout(timeout)
+        this.server?.events.off("newClient", onNewClient)
+        resolve(client)
+      }
+
+      const timeout = setTimeout(() => {
+        this.server?.events.off("newClient", onNewClient)
+        reject(new Error("Timed out waiting for Scoundrel client"))
+      }, timeoutMs)
+
+      this.server.events.on("newClient", onNewClient)
+    })
+  }
+
+  /**
    * Finds all elements by CSS selector
    * @param {string} selector
    * @param {object} [args]

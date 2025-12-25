@@ -99,6 +99,7 @@ Notes:
 - `onInitialize` runs once when the helper is ready; use it to reset globals/session.
 - If you need scoundrel remote evaluation, wait for `systemTestBrowserHelper` and register your classes there, as shown in the commented snippet above.
 - Add a root wrapper with `testID="systemTestingComponent"` (and optionally `data-focussed="true"`) around your app so the runner has a stable element to detect and scope selectors against.
+- From your tests, use `await systemTest.getScoundrelClient()` to obtain the browser Scoundrel client for remote evaluation.
 
 ## Dummy Expo app
 
