@@ -2,11 +2,7 @@
 
 import fs from "node:fs/promises"
 import http from "node:http"
-import path from "node:path"
 import mime from "mime"
-import {fileURLToPath} from "node:url"
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default class SystemTestHttpServer {
   /**
@@ -79,7 +75,6 @@ export default class SystemTestHttpServer {
 
   /** @returns {Promise<void>} */
   async start() {
-    this.basePath = await fs.realpath(path.resolve(__dirname, "../.."))
     this.debugLog(`Starting HTTP server on ${this._host}:${this._port}`)
     await this.startHttpServer()
     this.debugLog(`HTTP server started on ${this._host}:${this._port}`)

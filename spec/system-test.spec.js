@@ -10,33 +10,6 @@ const debugLog = (...args) => { if (debug) console.log(...args) }
 const dummyHttpServerEnvironment = new DummyHttpServerEnvironment()
 jasmine.DEFAULT_TIMEOUT_INTERVAL = 60000
 
-/**
- * Waits for the Scoundrel client (browser) to be connected and returns it.
- * @param {SystemTest} systemTest
- * @param {number} [timeoutMs]
- * @returns {Promise<import("scoundrel-remote-eval/build/client/index.js").default>}
- */
-const waitForScoundrelClient = async (systemTest, timeoutMs = 10000) => {
-  const existing = systemTest.server?.getClients?.()
-
-  if (existing && existing.length > 0) return existing[0]
-
-  return await new Promise((resolve, reject) => {
-    const onNewClient = (client) => {
-      clearTimeout(timeout)
-      systemTest.server?.events.off("newClient", onNewClient)
-      resolve(client)
-    }
-
-    const timeout = setTimeout(() => {
-      systemTest.server?.events.off("newClient", onNewClient)
-      reject(new Error("Timed out waiting for Scoundrel client"))
-    }, timeoutMs)
-
-    systemTest.server?.events.on("newClient", onNewClient)
-  })
-}
-
 describe("System test", () => {
   /** @type {SystemTest | undefined} */
   let systemTest
@@ -89,7 +62,7 @@ describe("System test", () => {
 
   it("evaluates browser JavaScript via Scoundrel", async () => {
     await SystemTest.run(async (runningSystemTest) => {
-      const scoundrelClient = await waitForScoundrelClient(runningSystemTest)
+      const scoundrelClient = await runningSystemTest.getScoundrelClient()
       const evalReference = await scoundrelClient.evalWithReference("({ sum: 2 + 3, href: window.location.href })")
       const sum = await evalReference.readAttribute("sum")
       const href = await evalReference.readAttribute("href")
