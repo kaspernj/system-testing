@@ -33,14 +33,14 @@ describe("System test", () => {
     await systemTest.findByTestID("welcomeText", {useBaseSelector: false})
 
     const scoundrelClient = await systemTest.getScoundrelClient()
-    await scoundrelClient.eval("(() => { const marker = document.createElement('div'); marker.id = 'reinit-marker'; document.body.appendChild(marker); })()")
-    await systemTest.find("#reinit-marker", {useBaseSelector: false, timeout: 0})
+    await scoundrelClient.eval("(() => { document.body.setAttribute('data-reinit-marker', 'true'); })()")
+    await systemTest.find("body[data-reinit-marker='true']", {useBaseSelector: false})
 
     await systemTest.reinitialize()
 
     expect(systemTest.isStarted()).toBeTrue()
 
-    await systemTest.expectNoElement("#reinit-marker", {useBaseSelector: false})
+    await systemTest.expectNoElement("body[data-reinit-marker='true']", {useBaseSelector: false})
     await systemTest.findByTestID("blankText", {useBaseSelector: false})
     await systemTest.visit("/")
     await systemTest.findByTestID("welcomeText", {useBaseSelector: false})
