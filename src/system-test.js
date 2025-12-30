@@ -20,9 +20,9 @@ const {WebDriverError} = SeleniumError
 export default class SystemTest {
   /**
    * @typedef {object} FindArgs
-   * @property {number} [timeout]
-   * @property {boolean} [visible]
-   * @property {boolean} [useBaseSelector]
+   * @property {number} [timeout] Override timeout for lookup.
+   * @property {boolean} [visible] Whether to require elements to be visible.
+   * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
    */
   static rootPath = "/blank?systemTest=true"
 
