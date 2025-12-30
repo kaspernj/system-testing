@@ -19,13 +19,13 @@ const {WebDriverError} = SeleniumError
 
 /**
  * @typedef {object} SystemTestArgs
- * @property {string} [host]
- * @property {number} [port]
- * @property {string} [httpHost]
- * @property {number} [httpPort]
- * @property {boolean} [debug]
- * @property {(error: any) => boolean} [errorFilter]
- * @property {Record<string, any>} [urlArgs]
+ * @property {string} [host] Hostname for the app server.
+ * @property {number} [port] Port for the app server.
+ * @property {string} [httpHost] Hostname for the static HTTP server.
+ * @property {number} [httpPort] Port for the static HTTP server.
+ * @property {boolean} [debug] Enable debug logging.
+ * @property {(error: any) => boolean} [errorFilter] Filter for browser errors (return false to ignore).
+ * @property {Record<string, any>} [urlArgs] Query params appended to the root path.
  */
 
 export default class SystemTest {
