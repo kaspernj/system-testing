@@ -387,6 +387,7 @@ export default class SystemTest {
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
   async find(selector, args = {}) {
+    const startTime = Date.now()
     let elements = []
 
     try {
@@ -409,7 +410,8 @@ export default class SystemTest {
     }
 
     if (!elements[0]) {
-      throw new ElementNotFoundError(`Element couldn't be found after ${(this.getTimeouts() / 1000).toFixed(2)}s by CSS: ${this.getSelector(selector)}`)
+      const elapsedSeconds = (Date.now() - startTime) / 1000
+      throw new ElementNotFoundError(`Element couldn't be found after ${elapsedSeconds.toFixed(2)}s by CSS: ${this.getSelector(selector)}`)
     }
 
     return elements[0]
