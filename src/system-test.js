@@ -18,6 +18,12 @@ class ElementNotFoundError extends Error { }
 const {WebDriverError} = SeleniumError
 
 export default class SystemTest {
+  /**
+   * @typedef {object} FindArgs
+   * @property {number} [timeout] Override timeout for lookup.
+   * @property {boolean} [visible] Whether to require elements to be visible.
+   * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
+   */
   static rootPath = "/blank?systemTest=true"
 
   /** @type {SystemTestCommunicator | undefined} */
@@ -334,7 +340,7 @@ export default class SystemTest {
   /**
    * Finds a single element by CSS selector
    * @param {string} selector
-   * @param {object} [args]
+   * @param {FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
   async find(selector, args = {}) {
@@ -394,10 +400,10 @@ export default class SystemTest {
   /**
    * Finds a single element by CSS selector without waiting
    * @param {string} selector
-   * @param {object} [args]
+   * @param {FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
-  async findNoWait(selector, args) {
+  async findNoWait(selector, args = {}) {
     await this.driverSetTimeouts(0)
 
     try {
@@ -441,7 +447,7 @@ export default class SystemTest {
 
   /**
    * Interacts with an element by calling a method on it with the given arguments.
-   * Retrying on ElementNotInteractableError.
+   * Retrying on ElementNotInteractableError or StaleElementReferenceError.
    * @param {import("selenium-webdriver").WebElement|string} elementOrIdentifier The element or a CSS selector to find the element.
    * @param {string} methodName The method name to call on the element.
    * @param {...any} args Arguments to pass to the method.
@@ -466,7 +472,7 @@ export default class SystemTest {
         return await element[methodName](...args)
       } catch (error) {
         if (error instanceof Error) {
-          if (error.constructor.name === "ElementNotInteractableError") {
+          if (error.constructor.name === "ElementNotInteractableError" || error.constructor.name === "StaleElementReferenceError") {
             // Retry finding the element and interacting with it
             if (tries >= 3) {
               let elementDescription
@@ -495,13 +501,14 @@ export default class SystemTest {
   /**
    * Expects no element to be found by CSS selector
    * @param {string} selector
+   * @param {FindArgs} [args]
    * @returns {Promise<void>}
    */
-  async expectNoElement(selector) {
+  async expectNoElement(selector, args = {}) {
     let found = false
 
     try {
-      await this.findNoWait(selector)
+      await this.findNoWait(selector, args)
       found = true
     } catch (error) {
       if (error instanceof Error && error.message.startsWith("Element couldn't be found after ")) {
@@ -855,7 +862,7 @@ export default class SystemTest {
     const error = new Error(`Browser error: ${data.message}`)
 
     if (data.backtrace) {
-      error.stack = `${error.message}\n${data.backtrace}`
+      error.stack = `${error.message}\n${data.backtrace}\n\n${error.stack}`
     }
 
     console.error(error)
