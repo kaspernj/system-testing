@@ -451,7 +451,7 @@ export default class SystemTest {
 
   /**
    * Interacts with an element by calling a method on it with the given arguments.
-   * Retrying on ElementNotInteractableError or StaleElementReferenceError.
+   * Retrying on ElementNotInteractableError, ElementClickInterceptedError, or StaleElementReferenceError.
    * @param {import("selenium-webdriver").WebElement|string} elementOrIdentifier The element or a CSS selector to find the element.
    * @param {string} methodName The method name to call on the element.
    * @param {...any} args Arguments to pass to the method.
@@ -476,7 +476,11 @@ export default class SystemTest {
         return await element[methodName](...args)
       } catch (error) {
         if (error instanceof Error) {
-          if (error.constructor.name === "ElementNotInteractableError" || error.constructor.name === "StaleElementReferenceError") {
+          if (
+            error.constructor.name === "ElementNotInteractableError" ||
+            error.constructor.name === "ElementClickInterceptedError" ||
+            error.constructor.name === "StaleElementReferenceError"
+          ) {
             // Retry finding the element and interacting with it
             if (tries >= 3) {
               let elementDescription
@@ -700,7 +704,7 @@ export default class SystemTest {
 
     try {
       await this.find("body > #root", {useBaseSelector: false})
-      await this.find("[data-testid='systemTestingComponent']", {visible: null, useBaseSelector: false})
+      await this.findByTestID("systemTestingComponent", {visible: null, useBaseSelector: false, timeout: 30000})
       this.debugLog("Found root and systemTestingComponent")
     } catch (error) {
       await this.takeScreenshot()
