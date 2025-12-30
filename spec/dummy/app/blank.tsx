@@ -7,7 +7,7 @@ export default function BlankScreen() {
     <ThemedView
       style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}
     >
-      <ThemedText dataSet={{ testid: 'blankText' }} type="title">
+      <ThemedText testID="blankText" type="title">
         System testing blank page
       </ThemedText>
     </ThemedView>
