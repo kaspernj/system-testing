@@ -18,8 +18,9 @@ export function SystemTestFocusedView({
     <View
       {...rest}
       style={[{ flex: 1 }, style]}
+      testID="systemTestingComponent"
       // @ts-ignore dataSet is supported at runtime for React Native Web
-      dataSet={{ testid: 'systemTestingComponent', focussed: isFocussed ? 'true' : 'false' }}
+      dataSet={{ focussed: isFocussed ? 'true' : 'false' }}
     >
       {children}
     </View>
