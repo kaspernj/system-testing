@@ -704,7 +704,7 @@ export default class SystemTest {
 
     try {
       await this.find("body > #root", {useBaseSelector: false})
-      await this.findByTestID("systemTestingComponent", {visible: null, useBaseSelector: false, timeout: 30000})
+      await this.find("[data-testid='systemTestingComponent']", {visible: null, useBaseSelector: false, timeout: 30000})
       this.debugLog("Found root and systemTestingComponent")
     } catch (error) {
       await this.takeScreenshot()
