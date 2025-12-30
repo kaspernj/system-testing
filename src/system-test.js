@@ -17,6 +17,17 @@ import {WebSocketServer} from "ws"
 class ElementNotFoundError extends Error { }
 const {WebDriverError} = SeleniumError
 
+/**
+ * @typedef {object} SystemTestArgs
+ * @property {string} [host] Hostname for the app server.
+ * @property {number} [port] Port for the app server.
+ * @property {string} [httpHost] Hostname for the static HTTP server.
+ * @property {number} [httpPort] Port for the static HTTP server.
+ * @property {boolean} [debug] Enable debug logging.
+ * @property {(error: any) => boolean} [errorFilter] Filter for browser errors (return false to ignore).
+ * @property {Record<string, any>} [urlArgs] Query params appended to the root path.
+ */
+
 export default class SystemTest {
   /**
    * @typedef {object} FindArgs
@@ -46,7 +57,7 @@ export default class SystemTest {
 
   /**
    * Gets the current system test instance
-   * @param {{host?: string, port?: number, httpHost?: string, httpPort?: number, debug?: boolean, errorFilter?: (error: any) => boolean}} [args]
+   * @param {SystemTestArgs} [args]
    * @returns {SystemTest}
    */
   static current(args = {}) {
@@ -106,19 +117,45 @@ export default class SystemTest {
 
   /**
    * Runs a system test
+   * @overload
    * @param {function(SystemTest): Promise<void>} callback
    * @returns {Promise<void>}
    */
-  static async run(callback) {
-    const systemTest = this.current()
+  /**
+   * Runs a system test
+   * @overload
+   * @param {SystemTestArgs} args
+   * @param {function(SystemTest): Promise<void>} callback
+   * @returns {Promise<void>}
+   */
+  /**
+   * Runs a system test
+   * @param {SystemTestArgs | function(SystemTest): Promise<void>} [args]
+   * @param {function(SystemTest): Promise<void>} [callback]
+   * @returns {Promise<void>}
+   */
+  static async run(args, callback) {
+    const resolvedCallback = typeof args === "function" ? args : callback
+    const systemTest = this.current(typeof args === "function" ? {} : args)
 
+    if (!resolvedCallback) {
+      throw new Error("SystemTest.run requires a callback")
+    }
+
+    systemTest.debugLog("Run started")
     await systemTest.getCommunicator().sendCommand({type: "initialize"})
-    await systemTest.dismissTo(SystemTest.rootPath)
+    systemTest.debugLog("Sent initialize command")
+    const rootPath = systemTest.getRootPath()
+    await systemTest.dismissTo(rootPath)
+    systemTest.debugLog(`Dismissed to root path ${rootPath}`)
 
     try {
       await systemTest.findByTestID("blankText", {useBaseSelector: false})
-      await callback(systemTest)
+      systemTest.debugLog("Found blankText")
+      await resolvedCallback(systemTest)
+      systemTest.debugLog("Run callback completed")
     } catch (error) {
+      systemTest.debugLog("Run error caught, taking screenshot")
       await systemTest.takeScreenshot()
 
       throw error
@@ -127,9 +164,9 @@ export default class SystemTest {
 
   /**
    * Creates a new SystemTest instance
-   * @param {{host?: string, port?: number, httpHost?: string, httpPort?: number, debug?: boolean, errorFilter?: (message: string) => boolean}} [args]
+   * @param {SystemTestArgs} [args]
    */
-  constructor({host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, debug = false, errorFilter, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
+  constructor({host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, debug = false, errorFilter, urlArgs, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
     const restArgsKeys = Object.keys(restArgs)
 
     if (restArgsKeys.length > 0) {
@@ -142,6 +179,8 @@ export default class SystemTest {
     this._httpPort = httpPort
     this._debug = debug
     this._errorFilter = errorFilter
+    this._urlArgs = urlArgs
+    this._rootPath = this.buildRootPath()
 
     /** @type {Record<number, object>} */
     this._responses = {}
@@ -657,8 +696,10 @@ export default class SystemTest {
    * @returns {Promise<void>}
    */
   async start() {
+    this.debugLog("Start called")
     if (process.env.SYSTEM_TEST_HOST == "expo-dev-server") {
       this.currentUrl = `http://${this._host}:${this._port}`
+      this.debugLog(`Using expo-dev-server at ${this.currentUrl}`)
     } else if (process.env.SYSTEM_TEST_HOST == "dist") {
       this.currentUrl = `http://${this._httpHost}:${this._httpPort}`
 
@@ -679,6 +720,7 @@ export default class SystemTest {
     options.addArguments("--headless=new")
     options.addArguments("--no-sandbox")
     options.addArguments("--window-size=1920,1080")
+    this.debugLog("Chrome options configured")
 
     this.driver = new Builder()
       .forBrowser("chrome")
@@ -692,12 +734,15 @@ export default class SystemTest {
     this.debugLog("Timeouts set on driver")
 
     // Web socket server to communicate with browser
+    this.debugLog("Starting WebSocket server")
     await this.startWebSocketServer()
     this.debugLog("WebSocket server started")
 
     // Visit the root page and wait for Expo to be loaded and the app to appear
-    await this.driverVisit(SystemTest.rootPath)
-    this.debugLog(`Visited root path ${SystemTest.rootPath}`)
+    this.debugLog("Visiting root path")
+    const rootPath = this.getRootPath()
+    await this.driverVisit(rootPath)
+    this.debugLog(`Visited root path ${rootPath}`)
 
     //console.log("WAITING")
     //await wait(180000)
@@ -719,6 +764,43 @@ export default class SystemTest {
 
     this._started = true
     this.setBaseSelector("[data-testid='systemTestingComponent'][data-focussed='true']")
+    this.debugLog("Start completed")
+  }
+
+  /**
+   * @returns {string}
+   */
+  getRootPath() {
+    return this._rootPath ?? SystemTest.rootPath
+  }
+
+  /**
+   * @returns {string}
+   */
+  buildRootPath() {
+    if (!this._urlArgs) return SystemTest.rootPath
+
+    const url = new URL(SystemTest.rootPath, "http://localhost")
+    const appendParam = (key, value) => {
+      if (value === undefined || value === null) return
+      url.searchParams.append(key, String(value))
+    }
+
+    if (this._urlArgs instanceof URLSearchParams) {
+      for (const [key, value] of this._urlArgs) {
+        appendParam(key, value)
+      }
+    } else {
+      for (const [key, value] of Object.entries(this._urlArgs)) {
+        appendParam(key, value)
+      }
+    }
+
+    const rootPath =  `${url.pathname}${url.search}${url.hash}`
+
+    this.debugLog(`buildRootPath rootPath: ${rootPath}`)
+
+    return rootPath
   }
 
   /**
