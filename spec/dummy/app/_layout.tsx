@@ -1,10 +1,10 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View } from 'react-native';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { SystemTestFocusedView } from '@/components/system-test-focused-view';
 import useSystemTest from 'system-testing/build/use-system-test.js';
 
 export const unstable_settings = {
@@ -17,13 +17,12 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      {/* @ts-ignore dataSet is supported at runtime for React Native Web */}
-      <View style={{ flex: 1 }} testID="systemTestingComponent" dataSet={{ focussed: 'true' }}>
+      <SystemTestFocusedView focussed>
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
-      </View>
+      </SystemTestFocusedView>
       <StatusBar style="auto" />
     </ThemeProvider>
   );

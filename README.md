@@ -101,6 +101,27 @@ Notes:
 - Add a root wrapper with `testID="systemTestingComponent"` (and optionally `data-focussed="true"`) around your app so the runner has a stable element to detect and scope selectors against.
 - From your tests, use `await systemTest.getScoundrelClient()` to obtain the browser Scoundrel client for remote evaluation.
 
+### Base selector and focused container
+
+System tests scope selectors to the active screen by default. The app marks the active layout container with `data-focussed="true"` on the element with `data-testid="systemTestingComponent"`. In the dummy app, the root layout wraps the navigator and sets `data-focussed="true"` once so the base selector stays stable across screens.
+
+`SystemTest.find` and `SystemTest.findByTestID` use a base selector that targets the focused container:
+
+```css
+[data-testid='systemTestingComponent'][data-focussed='true']
+```
+
+This prevents tests from matching elements on inactive or background screens.
+
+When to bypass base selector:
+Some UI (modals, overlays, portals) can render outside the focused container. For those cases, use `useBaseSelector: false` so the selector is not scoped:
+
+```js
+await systemTest.findByTestID("scannerModeExitPinInput", {useBaseSelector: false})
+```
+
+Use `useBaseSelector: false` only for modal or overlay content. Keep the default scoping for regular screens to avoid false matches.
+
 ## Dummy Expo app
 
 A ready-to-run Expo Router dummy app that uses `system-testing` lives in `spec/dummy`. Build the web bundle with `npm run export:web` and execute the sample system test with `npm run test:system` from that folder.

@@ -10,7 +10,7 @@ describe("System test", () => {
   it("shows the welcome text on the front page", async () => {
     await SystemTest.run(async (runningSystemTest) => {
       await runningSystemTest.visit("/")
-      await runningSystemTest.findByTestID("welcomeText", {useBaseSelector: false})
+      await runningSystemTest.findByTestID("welcomeText")
     })
   })
 
@@ -30,19 +30,21 @@ describe("System test", () => {
     const systemTest = systemTestHelper.getSystemTest()
 
     await systemTest.visit("/")
-    await systemTest.findByTestID("welcomeText", {useBaseSelector: false})
+    await systemTest.findByTestID("welcomeText")
 
-    const scoundrelClient = await systemTest.getScoundrelClient()
-    await scoundrelClient.eval("(() => { document.body.setAttribute('data-reinit-marker', 'true'); })()")
-    await systemTest.find("body[data-reinit-marker='true']", {useBaseSelector: false})
+    await systemTest.getDriver().executeScript("const marker = document.querySelector(\"[data-testid='welcomeText']\"); if (!marker) { throw new Error('welcomeText missing'); } marker.id = 'reinit-marker';")
+    const markerSelector = `${systemTest.getBaseSelector()} #reinit-marker`
+    const markerFound = await systemTest.getDriver().executeScript("return Boolean(document.querySelector(arguments[0]));", markerSelector)
+    expect(markerFound).toBeTrue()
 
     await systemTest.reinitialize()
 
     expect(systemTest.isStarted()).toBeTrue()
 
-    await systemTest.expectNoElement("body[data-reinit-marker='true']", {useBaseSelector: false})
-    await systemTest.findByTestID("blankText", {useBaseSelector: false})
+    const markerGone = await systemTest.getDriver().executeScript("return !document.querySelector(arguments[0]);", markerSelector)
+    expect(markerGone).toBeTrue()
+    await systemTest.findByTestID("blankText")
     await systemTest.visit("/")
-    await systemTest.findByTestID("welcomeText", {useBaseSelector: false})
+    await systemTest.findByTestID("welcomeText")
   })
 })
