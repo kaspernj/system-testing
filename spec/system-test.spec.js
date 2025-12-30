@@ -25,4 +25,24 @@ describe("System test", () => {
       expect(href).toContain("systemTest=true")
     })
   })
+
+  it("reinitializes and can keep running", async () => {
+    const systemTest = systemTestHelper.getSystemTest()
+
+    await systemTest.visit("/")
+    await systemTest.findByTestID("welcomeText", {useBaseSelector: false})
+
+    const scoundrelClient = await systemTest.getScoundrelClient()
+    await scoundrelClient.eval("(() => { const marker = document.createElement('div'); marker.id = 'reinit-marker'; document.body.appendChild(marker); })()")
+    await systemTest.find("#reinit-marker", {useBaseSelector: false, timeout: 0})
+
+    await systemTest.reinitialize()
+
+    expect(systemTest.isStarted()).toBeTrue()
+
+    await systemTest.expectNoElement("#reinit-marker", {useBaseSelector: false})
+    await systemTest.findByTestID("blankText", {useBaseSelector: false})
+    await systemTest.visit("/")
+    await systemTest.findByTestID("welcomeText", {useBaseSelector: false})
+  })
 })

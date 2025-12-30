@@ -880,6 +880,30 @@ export default class SystemTest {
   }
 
   /**
+   * Fully tears down and restarts the system test instance.
+   * @returns {Promise<void>}
+   */
+  async reinitialize() {
+    await this.stop()
+
+    this._started = false
+    this._baseSelector = undefined
+    this.currentUrl = undefined
+    this.driver = undefined
+    this.ws = null
+    this.wss = undefined
+    this.server = undefined
+    this.serverWebSocket = undefined
+    this.systemTestHttpServer = undefined
+    this.waitForClientWebSocketPromiseReject = undefined
+    this.waitForClientWebSocketPromiseResolve = undefined
+    this.communicator = new SystemTestCommunicator({onCommand: this.onCommandReceived})
+
+    this.startScoundrel()
+    await this.start()
+  }
+
+  /**
    * Visits a path in the browser
    * @param {string} path
    * @returns {Promise<void>}
