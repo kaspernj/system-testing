@@ -122,6 +122,16 @@ await systemTest.findByTestID("scannerModeExitPinInput", {useBaseSelector: false
 
 Use `useBaseSelector: false` only for modal or overlay content. Keep the default scoping for regular screens to avoid false matches.
 
+### Reinitialize a system test
+
+Some test failures can leave the app in a broken state (for example a crashed React tree or a stuck WebSocket session). In those cases, fully restart the SystemTest instance to restore a clean browser/app state before continuing.
+
+```js
+await systemTest.reinitialize()
+```
+
+This tears down the browser, servers, and sockets, then starts them again so subsequent steps run against a fresh app instance.
+
 ## Dummy Expo app
 
 A ready-to-run Expo Router dummy app that uses `system-testing` lives in `spec/dummy`. Build the web bundle with `npm run export:web` and execute the sample system test with `npm run test:system` from that folder.

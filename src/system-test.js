@@ -879,6 +879,10 @@ export default class SystemTest {
   async stop() {
     await this.stopScoundrel()
     await this.systemTestHttpServer?.close()
+    if (this.ws) {
+      this.ws.close()
+      this.ws = null
+    }
     await this.closeWebSocketServer(this.clientWss)
     await this.driver?.quit()
   }
@@ -974,6 +978,13 @@ export default class SystemTest {
 
     await new Promise((resolve, reject) => {
       let settled = false
+      const terminateClient = (client) => {
+        try {
+          client.terminate()
+        } catch {
+          // Ignore termination errors
+        }
+      }
       const settle = (callback, arg) => {
         if (settled) return
         settled = true
@@ -982,6 +993,9 @@ export default class SystemTest {
 
       wss.once("close", () => settle(resolve))
       wss.once("error", (error) => settle(reject, error))
+      if (wss.clients && wss.clients.size > 0) {
+        wss.clients.forEach(terminateClient)
+      }
       wss.close((error) => {
         if (error) settle(reject, error)
         else settle(resolve)
