@@ -39,6 +39,10 @@ export default class SystemTest {
   _httpPort = 1984
   /** @type {(error: any) => boolean | undefined} */
   _errorFilter = undefined
+  /** @type {WebSocketServer | undefined} */
+  scoundrelWss = undefined
+  /** @type {WebSocketServer | undefined} */
+  clientWss = undefined
 
   /**
    * Gets the current system test instance
@@ -192,19 +196,19 @@ export default class SystemTest {
    * @returns {void}
    */
   startScoundrel() {
-    if (this.wss) throw new Error("Scoundrel server already started")
+    if (this.scoundrelWss) throw new Error("Scoundrel server already started")
 
-    this.wss = new WebSocketServer({port: 8090})
-    this.serverWebSocket = new ServerWebSocket(this.wss)
+    this.scoundrelWss = new WebSocketServer({port: 8090})
+    this.serverWebSocket = new ServerWebSocket(this.scoundrelWss)
     this.server = new Server(this.serverWebSocket)
   }
 
   /**
-   * @returns {void}
+   * @returns {Promise<void>}
    */
-  stopScoundrel() {
-    this.server?.close()
-    this.wss?.close()
+  async stopScoundrel() {
+    await Promise.resolve(this.server?.close?.())
+    await this.closeWebSocketServer(this.scoundrelWss)
   }
 
   /**
@@ -765,10 +769,10 @@ export default class SystemTest {
    * @returns {void}
    */
   startWebSocketServer() {
-    this.wss = new WebSocketServer({port: 1985})
-    this.wss.on("connection", this.onWebSocketConnection)
-    this.wss.on("close", this.onWebSocketClose)
-    this.wss.on("error", (error) => {
+    this.clientWss = new WebSocketServer({port: 1985})
+    this.clientWss.on("connection", this.onWebSocketConnection)
+    this.clientWss.on("close", this.onWebSocketClose)
+    this.clientWss.on("error", (error) => {
       if (this.waitForClientWebSocketPromiseReject) {
         this.waitForClientWebSocketPromiseReject(error instanceof Error ? error : new Error(String(error)))
         delete this.waitForClientWebSocketPromiseReject
@@ -873,10 +877,39 @@ export default class SystemTest {
    * @returns {Promise<void>}
    */
   async stop() {
-    this.stopScoundrel()
-    this.systemTestHttpServer?.close()
-    this.wss?.close()
+    await this.stopScoundrel()
+    await this.systemTestHttpServer?.close()
+    if (this.ws) {
+      this.ws.close()
+      this.ws = null
+    }
+    await this.closeWebSocketServer(this.clientWss)
     await this.driver?.quit()
+  }
+
+  /**
+   * Fully tears down and restarts the system test instance.
+   * @returns {Promise<void>}
+   */
+  async reinitialize() {
+    await this.stop()
+
+    this._started = false
+    this._baseSelector = undefined
+    this.currentUrl = undefined
+    this.driver = undefined
+    this.ws = null
+    this.clientWss = undefined
+    this.scoundrelWss = undefined
+    this.server = undefined
+    this.serverWebSocket = undefined
+    this.systemTestHttpServer = undefined
+    this.waitForClientWebSocketPromiseReject = undefined
+    this.waitForClientWebSocketPromiseResolve = undefined
+    this.communicator = new SystemTestCommunicator({onCommand: this.onCommandReceived})
+
+    this.startScoundrel()
+    await this.start()
   }
 
   /**
@@ -934,5 +967,39 @@ export default class SystemTest {
    */
   async dismissTo(path) {
     await this.getCommunicator().sendCommand({type: "dismissTo", path})
+  }
+
+  /**
+   * @param {WebSocketServer | undefined} wss
+   * @returns {Promise<void>}
+   */
+  async closeWebSocketServer(wss) {
+    if (!wss) return
+
+    await new Promise((resolve, reject) => {
+      let settled = false
+      const terminateClient = (client) => {
+        try {
+          client.terminate()
+        } catch {
+          // Ignore termination errors
+        }
+      }
+      const settle = (callback, arg) => {
+        if (settled) return
+        settled = true
+        callback(arg)
+      }
+
+      wss.once("close", () => settle(resolve))
+      wss.once("error", (error) => settle(reject, error))
+      if (wss.clients && wss.clients.size > 0) {
+        wss.clients.forEach(terminateClient)
+      }
+      wss.close((error) => {
+        if (error) settle(reject, error)
+        else settle(resolve)
+      })
+    })
   }
 }

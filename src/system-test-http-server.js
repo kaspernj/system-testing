@@ -19,13 +19,18 @@ export default class SystemTestHttpServer {
     if (this._debug) console.log(`[SystemTestHttpServer] ${message}`)
   }
 
-  /** @returns {void} */
-  close() {
+  /** @returns {Promise<void>} */
+  async close() {
     if (!this.httpServer) {
       throw new Error("HTTP server is not initialized")
     }
 
-    this.httpServer.close()
+    await new Promise((resolve, reject) => {
+      this.httpServer.close((error) => {
+        if (error) reject(error)
+        else resolve()
+      })
+    })
   }
 
   /**
