@@ -18,8 +18,9 @@ describe("System test", () => {
     await SystemTest.run(async (runningSystemTest) => {
       const scoundrelClient = await runningSystemTest.getScoundrelClient()
       const evalProxy = await scoundrelClient.eval("({ sum: 2 + 3, href: window.location.href })")
-      const sum = await (await evalProxy.sum).__serialize()
-      const href = await (await evalProxy.href).__serialize()
+      const evalResult = await evalProxy.__serialize()
+      const sum = evalResult.sum
+      const href = evalResult.href
 
       expect(sum).toEqual(5)
       expect(href).toContain("systemTest=true")
