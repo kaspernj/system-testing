@@ -12,6 +12,7 @@ import ServerWebSocket from "scoundrel-remote-eval/build/server/connections/web-
 import SystemTestCommunicator from "./system-test-communicator.js"
 import SystemTestHttpServer from "./system-test-http-server.js"
 import {wait, waitFor} from "awaitery"
+import timeout from "awaitery/src/timeout.js"
 import {WebSocketServer} from "ws"
 
 class ElementNotFoundError extends Error { }
@@ -761,6 +762,7 @@ export default class SystemTest {
     // Wait for client to connect
     this.debugLog("Waiting for client WebSocket connection (opening)")
     this.debugLog(`WS state: ${this.ws?.readyState ?? "none"}`)
+    this.debugLog("waitForClientWebSocket")
     await this.waitForClientWebSocket()
     this.debugLog("Client WebSocket connected")
 
@@ -841,15 +843,22 @@ export default class SystemTest {
    * Waits for the client web socket to connect
    * @returns {Promise<void>}
    */
-  waitForClientWebSocket() {
-    return new Promise((resolve, reject) => {
-      if (this.ws) {
-        resolve()
-      }
+  async waitForClientWebSocket() {
+    try {
+      await timeout({timeout: 30000}, () => new Promise((resolve, reject) => {
+        if (this.ws) {
+          resolve()
+          return
+        }
 
-      this.waitForClientWebSocketPromiseReject = reject
-      this.waitForClientWebSocketPromiseResolve = resolve
-    })
+        this.waitForClientWebSocketPromiseReject = reject
+        this.waitForClientWebSocketPromiseResolve = resolve
+      }))
+    } catch (error) {
+      delete this.waitForClientWebSocketPromiseReject
+      delete this.waitForClientWebSocketPromiseResolve
+      throw error
+    }
   }
 
   /**
