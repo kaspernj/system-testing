@@ -17,9 +17,10 @@ describe("System test", () => {
   it("evaluates browser JavaScript via Scoundrel", async () => {
     await SystemTest.run(async (runningSystemTest) => {
       const scoundrelClient = await runningSystemTest.getScoundrelClient()
-      const evalReference = await scoundrelClient.evalWithReference("({ sum: 2 + 3, href: window.location.href })")
-      const sum = await evalReference.readAttribute("sum")
-      const href = await evalReference.readAttribute("href")
+      const evalProxy = await scoundrelClient.eval("({ sum: 2 + 3, href: window.location.href })")
+      const evalResult = await evalProxy.__serialize()
+      const sum = evalResult.sum
+      const href = evalResult.href
 
       expect(sum).toEqual(5)
       expect(href).toContain("systemTest=true")
