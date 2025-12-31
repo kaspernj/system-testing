@@ -1,6 +1,6 @@
 {
   "name": "system-testing",
-  "version": "1.0.52",
+  "version": "1.0.53",
   "description": "System testing with Selenium and browsers.",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -38,13 +38,13 @@
     "watch": "tsc -w"
   },
   "dependencies": {
-    "awaitery": "^1.0.6",
+    "awaitery": "^1.0.10",
     "diggerize": "^1.0.9",
     "eventemitter3": "^5.0.1",
     "htmlfy": "^1.0.0",
     "mime": "^4.0.7",
     "moment": "^2.30.1",
-    "scoundrel-remote-eval": "^1.0.21",
+    "scoundrel-remote-eval": "^1.0.22",
     "ws": "^8.18.3"
   },
   "peerDependencies": {
