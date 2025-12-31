@@ -12,7 +12,7 @@ import ServerWebSocket from "scoundrel-remote-eval/build/server/connections/web-
 import SystemTestCommunicator from "./system-test-communicator.js"
 import SystemTestHttpServer from "./system-test-http-server.js"
 import {wait, waitFor} from "awaitery"
-import timeout from "awaitery/src/timeout.js"
+import timeout from "awaitery/build/timeout.js"
 import {WebSocketServer} from "ws"
 
 class ElementNotFoundError extends Error { }
