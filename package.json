@@ -44,7 +44,7 @@
     "htmlfy": "^1.0.0",
     "mime": "^4.0.7",
     "moment": "^2.30.1",
-    "scoundrel-remote-eval": "1.0.20",
+    "scoundrel-remote-eval": "^1.0.21",
     "ws": "^8.18.3"
   },
   "peerDependencies": {
