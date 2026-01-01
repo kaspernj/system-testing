@@ -1,6 +1,6 @@
 {
   "name": "system-testing",
-  "version": "1.0.53",
+  "version": "1.0.54",
   "description": "System testing with Selenium and browsers.",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -49,7 +49,6 @@
   },
   "peerDependencies": {
     "@kaspernj/api-maker": ">= 1.0.2062",
-    "expo-router": "*",
     "selenium-webdriver": ">= 4.34.0"
   },
   "devDependencies": {
