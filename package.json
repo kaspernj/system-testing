@@ -44,11 +44,11 @@
     "htmlfy": "^1.0.0",
     "mime": "^4.0.7",
     "moment": "^2.30.1",
-    "scoundrel-remote-eval": "^1.0.22",
+    "scoundrel-remote-eval": "^1.0.25",
     "ws": "^8.18.3"
   },
   "peerDependencies": {
-    "@kaspernj/api-maker": ">= 1.0.2062",
+    "@kaspernj/api-maker": ">= 1.0.2079",
     "expo-router": ">= 1.0.0",
     "selenium-webdriver": ">= 4.34.0"
   },
