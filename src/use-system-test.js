@@ -60,7 +60,7 @@ export default function useSystemTest({onInitialize, ...restArgs} = {onInitializ
   const enabled = useMemo(() => isSystemTestEnabled(), [])
   const systemTestBrowserHelper = enabled ? getSystemTestBrowserHelper() : null
   const result = useMemo(() => ({enabled, systemTestBrowserHelper}), [enabled, systemTestBrowserHelper])
-  const instanceShared = useMemo(() => ({}), [])
+  const instanceShared = useMemo(() => ({enabled: false, router: null}), [])
 
   instanceShared.enabled = enabled
   instanceShared.router = router

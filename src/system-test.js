@@ -247,8 +247,10 @@ export default class SystemTest {
    * @returns {Promise<void>}
    */
   async stopScoundrel() {
-    await Promise.resolve(this.server?.close?.())
-    await this.closeWebSocketServer(this.scoundrelWss)
+    if (this.server?.close) {
+      await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while waiting for Scoundrel to stop"}, async () => await this.server.close())
+    }
+    await this.closeWebSocketServer(this.scoundrelWss, "Scoundrel WebSocket server")
   }
 
   /**
@@ -271,20 +273,25 @@ export default class SystemTest {
       throw new Error("Scoundrel server events are unavailable")
     }
 
-    return await new Promise((resolve, reject) => {
-      const onNewClient = (client) => {
-        clearTimeout(timeout)
+    let onNewClient
+    const cleanupListener = () => {
+      if (onNewClient) {
         this.server?.events.off("newClient", onNewClient)
-        resolve(client)
       }
+    }
 
-      const timeout = setTimeout(() => {
-        this.server?.events.off("newClient", onNewClient)
-        reject(new Error("Timed out waiting for Scoundrel client"))
-      }, timeoutMs)
+    try {
+      return await timeout({timeout: timeoutMs, errorMessage: "Timed out waiting for Scoundrel client"}, async () => await new Promise((resolve) => {
+        onNewClient = (client) => {
+          cleanupListener()
+          resolve(client)
+        }
 
-      this.server.events.on("newClient", onNewClient)
-    })
+        this.server.events.on("newClient", onNewClient)
+      }))
+    } finally {
+      cleanupListener()
+    }
   }
 
   /**
@@ -975,13 +982,17 @@ export default class SystemTest {
    */
   async stop() {
     await this.stopScoundrel()
-    await this.systemTestHttpServer?.close()
+    if (this.systemTestHttpServer?.close) {
+      await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while closing HTTP server"}, async () => await this.systemTestHttpServer.close())
+    }
     if (this.ws) {
       this.ws.close()
       this.ws = null
     }
-    await this.closeWebSocketServer(this.clientWss)
-    await this.driver?.quit()
+    await this.closeWebSocketServer(this.clientWss, "client WebSocket server")
+    if (this.driver?.quit) {
+      await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while quitting WebDriver"}, async () => await this.driver.quit())
+    }
   }
 
   /**
@@ -1068,12 +1079,13 @@ export default class SystemTest {
 
   /**
    * @param {WebSocketServer | undefined} wss
+   * @param {string} [label]
    * @returns {Promise<void>}
    */
-  async closeWebSocketServer(wss) {
+  async closeWebSocketServer(wss, label = "WebSocket server") {
     if (!wss) return
 
-    await new Promise((resolve, reject) => {
+    await timeout({timeout: this.getTimeouts(), errorMessage: `timeout while closing ${label}`}, async () => await new Promise((resolve, reject) => {
       let settled = false
       const terminateClient = (client) => {
         try {
@@ -1097,6 +1109,6 @@ export default class SystemTest {
         if (error) settle(reject, error)
         else settle(resolve)
       })
-    })
+    }))
   }
 }

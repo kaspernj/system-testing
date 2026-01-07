@@ -8,12 +8,12 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "export:web": "EXPO_USE_STATIC=0 expo export -p web --output-dir dist",
+    "export:web": "EXPO_USE_STATIC=0 expo export -p web --output-dir dist --source-maps",
     "lint": "expo lint"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
-    "@kaspernj/api-maker": "^1.0.2062",
+    "@kaspernj/api-maker": "^1.0.2079",
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
@@ -38,6 +38,7 @@
     "react-native-screens": "~4.16.0",
     "react-native-web": "~0.21.0",
     "react-native-worklets": "0.5.1",
+    "scoundrel-remote-eval": "^1.0.28",
     "system-testing": "file:../.."
   },
   "devDependencies": {
