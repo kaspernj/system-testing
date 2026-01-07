@@ -1079,6 +1079,7 @@ export default class SystemTest {
 
   /**
    * @param {WebSocketServer | undefined} wss
+   * @param {string} [label]
    * @returns {Promise<void>}
    */
   async closeWebSocketServer(wss, label = "WebSocket server") {
