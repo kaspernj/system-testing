@@ -273,14 +273,25 @@ export default class SystemTest {
       throw new Error("Scoundrel server events are unavailable")
     }
 
-    return await timeout({timeout: timeoutMs, errorMessage: "Timed out waiting for Scoundrel client"}, async () => await new Promise((resolve) => {
-      const onNewClient = (client) => {
+    let onNewClient
+    const cleanupListener = () => {
+      if (onNewClient) {
         this.server?.events.off("newClient", onNewClient)
-        resolve(client)
       }
+    }
 
-      this.server.events.on("newClient", onNewClient)
-    }))
+    try {
+      return await timeout({timeout: timeoutMs, errorMessage: "Timed out waiting for Scoundrel client"}, async () => await new Promise((resolve) => {
+        onNewClient = (client) => {
+          cleanupListener()
+          resolve(client)
+        }
+
+        this.server.events.on("newClient", onNewClient)
+      }))
+    } finally {
+      cleanupListener()
+    }
   }
 
   /**
