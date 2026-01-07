@@ -1,12 +1,29 @@
 import qs from "qs"
 import SystemTestBrowserHelper from "./system-test-browser-helper.js"
-import {useCallback, useMemo} from "react"
-import useEventEmitter from "@kaspernj/api-maker/build/use-event-emitter.js"
+import {useCallback, useEffect, useMemo} from "react"
 import {useRouter} from "expo-router"
 
 const shared = {
   initialized: false,
   systemTestBrowserHelper: null
+}
+
+/**
+ * @param {import("eventemitter3").EventEmitter | undefined} events
+ * @param {string} eventName
+ * @param {(payload: any) => void} handler
+ * @returns {void}
+ */
+function useEventEmitter(events, eventName, handler) {
+  useEffect(() => {
+    if (!events) return
+
+    events.on(eventName, handler)
+
+    return () => {
+      events.off(eventName, handler)
+    }
+  }, [events, eventName, handler])
 }
 
 /**
@@ -60,7 +77,7 @@ export default function useSystemTest({onInitialize, ...restArgs} = {onInitializ
   const enabled = useMemo(() => isSystemTestEnabled(), [])
   const systemTestBrowserHelper = enabled ? getSystemTestBrowserHelper() : null
   const result = useMemo(() => ({enabled, systemTestBrowserHelper}), [enabled, systemTestBrowserHelper])
-  const instanceShared = useMemo(() => ({}), [])
+  const instanceShared = useMemo(() => ({enabled: false, router: null}), [])
 
   instanceShared.enabled = enabled
   instanceShared.router = router
