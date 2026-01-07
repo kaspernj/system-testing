@@ -6,3 +6,4 @@
 - Prefer `async () => await ...` for `awaitery` `timeout` callbacks when no functional difference.
 - Run `npm run typecheck` after changing JS files.
 - Run relevant checks for files that were changed or created.
+- When bumping package versions, update both `package.json` and `spec/dummy/package.json`.
