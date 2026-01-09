@@ -982,9 +982,6 @@ export default class SystemTest {
    */
   async stop() {
     await this.stopScoundrel()
-    if (this.systemTestHttpServer?.close) {
-      await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while closing HTTP server"}, async () => await this.systemTestHttpServer.close())
-    }
     if (this.ws) {
       this.ws.close()
       this.ws = null
@@ -992,6 +989,9 @@ export default class SystemTest {
     await this.closeWebSocketServer(this.clientWss, "client WebSocket server")
     if (this.driver?.quit) {
       await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while quitting WebDriver"}, async () => await this.driver.quit())
+    }
+    if (this.systemTestHttpServer?.close) {
+      await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while closing HTTP server"}, async () => await this.systemTestHttpServer.close())
     }
   }
 

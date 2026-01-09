@@ -12,6 +12,8 @@ export default class SystemTestHttpServer {
     this._host = host
     this._port = port
     this._debug = debug
+    /** @type {Set<import("node:net").Socket>} */
+    this._connections = new Set()
   }
 
   /** @param {string} message */
@@ -23,6 +25,13 @@ export default class SystemTestHttpServer {
   async close() {
     if (!this.httpServer) {
       throw new Error("HTTP server is not initialized")
+    }
+
+    if (this._connections.size > 0) {
+      for (const connection of this._connections) {
+        connection.destroy()
+      }
+      this._connections.clear()
     }
 
     await new Promise((resolve, reject) => {
@@ -89,6 +98,12 @@ export default class SystemTestHttpServer {
   startHttpServer() {
     return new Promise((resolve, reject) => {
       this.httpServer = http.createServer(this.onHttpServerRequest)
+      this.httpServer.on("connection", (connection) => {
+        this._connections.add(connection)
+        connection.on("close", () => {
+          this._connections.delete(connection)
+        })
+      })
       this.httpServer.on("error", (error) => {
         this.debugLog(`HTTP server error: ${error instanceof Error ? error.message : String(error)}`)
         reject(error)
