@@ -28,7 +28,7 @@ import {WebSocketServer} from "ws"
 /**
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
- * @property {boolean | null} [visible] Whether to require elements to be visible.
+ * @property {boolean} [visible] Whether to require elements to be visible.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 /**

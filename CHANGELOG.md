@@ -13,3 +13,4 @@
 - Make notification system test elements clickable for dismissal behavior.
 - Pin notification test container to the viewport for reliable clicks.
 - Only poll visible notification messages in `expectNotificationMessage`.
+- Document `FindArgs.visible` as a boolean-only option.
