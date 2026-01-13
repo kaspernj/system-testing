@@ -11,9 +11,12 @@
 - Allow dismissing notification messages after assertion with a `dismiss` arg.
 - Wait for the matching flash notification to disappear when dismissed.
 - Use notification `data-count` to track dismissals for `expectNotificationMessage`.
+- Fall back to dismissing notifications without `data-count` in `expectNotificationMessage`.
 - Read notification message text from `textContent` when available for DOM consistency.
 - Read notification message text via DOM `textContent` script lookup.
 - Make notification system test elements clickable for dismissal behavior.
 - Pin notification test container to the viewport for reliable clicks.
 - Only poll visible notification messages in `expectNotificationMessage`.
 - Document `FindArgs.visible` as a boolean-only option.
+- Capture flash notification events for `expectNotificationMessage` when DOM messages are missing.
+- Avoid waiting on missing notification elements when dismissing expected messages.

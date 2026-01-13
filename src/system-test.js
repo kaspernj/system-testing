@@ -649,6 +649,36 @@ export default class SystemTest {
   }
 
   /**
+   * Ensures flash notification events are captured even if the UI dismisses them quickly.
+   * @returns {Promise<void>}
+   */
+  async ensureNotificationListener() {
+    await this.getDriver().executeScript(`
+      if (!globalThis.__systemTestingNotifications) {
+        globalThis.__systemTestingNotifications = []
+      }
+
+      if (globalThis.__systemTestingNotificationsListener === undefined) {
+        const events = globalThis.flashNotificationsEvents
+
+        if (events && typeof events.on === "function") {
+          globalThis.__systemTestingNotificationsListener = (detail) => {
+            globalThis.__systemTestingNotifications.push({
+              message: detail?.message || "",
+              title: detail?.title || "",
+              type: detail?.type || ""
+            })
+          }
+
+          events.on("pushNotification", globalThis.__systemTestingNotificationsListener)
+        } else {
+          globalThis.__systemTestingNotificationsListener = null
+        }
+      }
+    `)
+  }
+
+  /**
    * Expects a notification message to appear and waits for it if necessary.
    * @param {string} expectedNotificationMessage
    * @param {NotificationMessageArgs} [args]
@@ -661,15 +691,27 @@ export default class SystemTest {
       throw new Error(`Unexpected args: ${Object.keys(restArgs).join(", ")}`)
     }
 
+    await this.ensureNotificationListener()
+
     /** @type {string[]} */
     const allDetectedNotificationMessages = []
     let foundNotificationMessageElement
     let foundNotificationMessageCount
+    let foundNotificationMessageViaEvent = false
 
     await waitFor(async () => {
-      const notificationMessageElements = await this.all("[data-testid='notification-message']", {useBaseSelector: false})
+      const notificationMessageElements = await this.getDriver().findElements(By.css("[data-testid='notification-message']"))
+      const visibleNotificationMessageElements = []
 
       for (const notificationMessageElement of notificationMessageElements) {
+        const isDisplayed = await notificationMessageElement.isDisplayed()
+
+        if (isDisplayed) {
+          visibleNotificationMessageElements.push(notificationMessageElement)
+        }
+      }
+
+      for (const notificationMessageElement of visibleNotificationMessageElements) {
         const notificationMessage = (await this.getDriver().executeScript("return arguments[0].textContent;", notificationMessageElement))?.trim() || await notificationMessageElement.getText()
 
         if (!allDetectedNotificationMessages.includes(notificationMessage)) {
@@ -683,16 +725,47 @@ export default class SystemTest {
         }
       }
 
+      const notificationsFromEvents = await this.getDriver().executeScript("return globalThis.__systemTestingNotifications || []")
+      for (const notificationFromEvents of notificationsFromEvents) {
+        const notificationMessage = notificationFromEvents?.message || ""
+
+        if (!notificationMessage) continue
+
+        if (!allDetectedNotificationMessages.includes(notificationMessage)) {
+          allDetectedNotificationMessages.push(notificationMessage)
+        }
+
+        if (notificationMessage == expectedNotificationMessage) {
+          foundNotificationMessageViaEvent = true
+          return
+        }
+      }
+
       throw new Error(`Notification message ${expectedNotificationMessage} wasn't included in: ${allDetectedNotificationMessages.join(", ")}`)
     })
 
     if (foundNotificationMessageElement && dismiss) {
       await this.interact(foundNotificationMessageElement, "click") // Dismiss the notification message
-      if (!foundNotificationMessageCount) {
-        throw new Error("Expected notification message to have a data-count")
-      }
+      if (foundNotificationMessageCount) {
+        await this.waitForNoSelector(`[data-testid='notification-message'][data-count='${foundNotificationMessageCount}']`, {useBaseSelector: false})
+      } else {
+        await waitFor(async () => {
+          const notificationMessageElements = await this.getDriver().findElements(By.css("[data-testid='notification-message']"))
 
-      await this.waitForNoSelector(`[data-testid='notification-message'][data-count='${foundNotificationMessageCount}']`, {useBaseSelector: false})
+          for (const notificationMessageElement of notificationMessageElements) {
+            if (!(await notificationMessageElement.isDisplayed())) continue
+
+            const notificationMessage = (await this.getDriver().executeScript("return arguments[0].textContent;", notificationMessageElement))?.trim()
+              || await notificationMessageElement.getText()
+
+            if (notificationMessage == expectedNotificationMessage) {
+              throw new Error(`Notification message ${expectedNotificationMessage} was still visible.`)
+            }
+          }
+        })
+      }
+    } else if (foundNotificationMessageViaEvent && dismiss) {
+      await this.waitForNoSelector("[data-testid='notification-message']", {useBaseSelector: false})
     }
   }
 
