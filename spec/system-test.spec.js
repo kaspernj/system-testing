@@ -48,4 +48,54 @@ describe("System test", () => {
     await systemTest.visit("/")
     await systemTest.findByTestID("welcomeText")
   })
+
+  it("dismisses only the matching notification message", async () => {
+    await SystemTest.run(async (runningSystemTest) => {
+      const scoundrelClient = await runningSystemTest.getScoundrelClient()
+
+      await scoundrelClient.eval(`
+        const containerId = "system-test-notifications"
+        let container = document.getElementById(containerId)
+
+        if (!container) {
+          container = document.createElement("div")
+          container.id = containerId
+          document.body.appendChild(container)
+        }
+
+        container.innerHTML = ""
+
+        const addNotification = (count, message) => {
+          const wrapper = document.createElement("div")
+          const messageContainer = document.createElement("div")
+          const messageText = document.createElement("span")
+
+          messageContainer.setAttribute("data-testid", "notification-message")
+          messageContainer.setAttribute("data-count", String(count))
+          messageText.textContent = message
+          messageContainer.appendChild(messageText)
+          wrapper.appendChild(messageContainer)
+          container.appendChild(wrapper)
+
+          messageText.addEventListener("click", () => {
+            setTimeout(() => wrapper.remove(), 100)
+          })
+        }
+
+        addNotification(1, "First notification")
+        addNotification(2, "Second notification")
+        return true
+      `)
+
+      await runningSystemTest.expectNotificationMessage("First notification")
+      await runningSystemTest.find("[data-testid='notification-message'][data-count='2']", {useBaseSelector: false})
+      await runningSystemTest.expectNoElement("[data-testid='notification-message'][data-count='1']", {useBaseSelector: false})
+
+      await scoundrelClient.eval(`
+        const container = document.getElementById("system-test-notifications")
+        if (container) container.remove()
+        return true
+      `)
+    })
+  })
 })
