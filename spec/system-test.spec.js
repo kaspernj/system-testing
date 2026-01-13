@@ -48,4 +48,62 @@ describe("System test", () => {
     await systemTest.visit("/")
     await systemTest.findByTestID("welcomeText")
   })
+
+  it("dismisses only the matching notification message", async () => {
+    await SystemTest.run(async (runningSystemTest) => {
+      const scoundrelClient = await runningSystemTest.getScoundrelClient()
+
+      await scoundrelClient.eval(`
+        const containerId = "system-test-notifications"
+        let container = document.getElementById(containerId)
+
+        if (!container) {
+          container = document.createElement("div")
+          container.id = containerId
+          container.style.position = "fixed"
+          container.style.top = "12px"
+          container.style.left = "12px"
+          container.style.zIndex = "9999"
+          document.body.appendChild(container)
+        }
+
+        container.innerHTML = ""
+
+        const addNotification = (count, message) => {
+          const wrapper = document.createElement("div")
+          const messageContainer = document.createElement("div")
+          const messageText = document.createElement("span")
+
+          messageContainer.setAttribute("data-testid", "notification-message")
+          messageContainer.setAttribute("data-count", String(count))
+          messageContainer.style.cursor = "pointer"
+          messageContainer.style.display = "inline-block"
+          messageContainer.style.padding = "4px"
+          messageContainer.style.border = "1px solid #000"
+          messageText.textContent = message
+          messageContainer.appendChild(messageText)
+          wrapper.appendChild(messageContainer)
+          container.appendChild(wrapper)
+
+          messageContainer.addEventListener("click", () => {
+            setTimeout(() => wrapper.remove(), 100)
+          })
+        }
+
+        addNotification(1, "First notification")
+        addNotification(2, "Second notification")
+        return true
+      `)
+
+      await runningSystemTest.expectNotificationMessage("First notification")
+      await runningSystemTest.find("[data-testid='notification-message'][data-count='2']", {useBaseSelector: false})
+      await runningSystemTest.expectNoElement("[data-testid='notification-message'][data-count='1']", {useBaseSelector: false})
+
+      await scoundrelClient.eval(`
+        const container = document.getElementById("system-test-notifications")
+        if (container) container.remove()
+        return true
+      `)
+    })
+  })
 })

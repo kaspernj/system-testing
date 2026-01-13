@@ -15,9 +15,6 @@ import {wait, waitFor} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
 import {WebSocketServer} from "ws"
 
-class ElementNotFoundError extends Error { }
-const {WebDriverError} = SeleniumError
-
 /**
  * @typedef {object} SystemTestArgs
  * @property {string} [host] Hostname for the app server.
@@ -28,14 +25,25 @@ const {WebDriverError} = SeleniumError
  * @property {(error: any) => boolean} [errorFilter] Filter for browser errors (return false to ignore).
  * @property {Record<string, any>} [urlArgs] Query params appended to the root path.
  */
+/**
+ * @typedef {object} FindArgs
+ * @property {number} [timeout] Override timeout for lookup.
+ * @property {boolean} [visible] Whether to require elements to be visible.
+ * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
+ */
+/**
+ * @typedef {object} WaitForNoSelectorArgs
+ * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
+ */
+/**
+ * @typedef {object} NotificationMessageArgs
+ * @property {boolean} [dismiss] Whether to dismiss the notification after it appears.
+ */
+
+class ElementNotFoundError extends Error { }
+const {WebDriverError} = SeleniumError
 
 export default class SystemTest {
-  /**
-   * @typedef {object} FindArgs
-   * @property {number} [timeout] Override timeout for lookup.
-   * @property {boolean} [visible] Whether to require elements to be visible.
-   * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
-   */
   static rootPath = "/blank?systemTest=true"
 
   /** @type {SystemTestCommunicator | undefined} */
@@ -297,10 +305,7 @@ export default class SystemTest {
   /**
    * Finds all elements by CSS selector
    * @param {string} selector
-   * @param {object} [args]
-   * @param {number} [args.timeout]
-   * @param {boolean} [args.visible]
-   * @param {boolean} [args.useBaseSelector]
+   * @param {FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement[]>}
    */
   async all(selector, args = {}) {
@@ -428,7 +433,7 @@ export default class SystemTest {
   /**
    * Finds a single element by test ID
    * @param {string} testID
-   * @param {object} [args]
+   * @param {FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
   async findByTestID(testID, args) { return await this.find(`[data-testid='${testID}']`, args) }
@@ -582,11 +587,10 @@ export default class SystemTest {
 
   /**
    * @param {string} selector
-   * @param {object} [args]
-   * @param {boolean} [args.useBaseSelector]
+   * @param {WaitForNoSelectorArgs} [args]
    * @returns {Promise<void>}
    */
-  async waitForNoSelector(selector, args) {
+  async waitForNoSelector(selector, args = {}) {
     const {useBaseSelector, ...restArgs} = args
 
     if (Object.keys(restArgs).length > 0) {
@@ -647,18 +651,26 @@ export default class SystemTest {
   /**
    * Expects a notification message to appear and waits for it if necessary.
    * @param {string} expectedNotificationMessage
+   * @param {NotificationMessageArgs} [args]
    * @returns {Promise<void>}
    */
-  async expectNotificationMessage(expectedNotificationMessage) {
+  async expectNotificationMessage(expectedNotificationMessage, args = {}) {
+    const {dismiss = true, ...restArgs} = args
+
+    if (Object.keys(restArgs).length > 0) {
+      throw new Error(`Unexpected args: ${Object.keys(restArgs).join(", ")}`)
+    }
+
     /** @type {string[]} */
     const allDetectedNotificationMessages = []
     let foundNotificationMessageElement
+    let foundNotificationMessageCount
 
     await waitFor(async () => {
       const notificationMessageElements = await this.all("[data-testid='notification-message']", {useBaseSelector: false})
 
       for (const notificationMessageElement of notificationMessageElements) {
-        const notificationMessage = await notificationMessageElement.getText()
+        const notificationMessage = (await this.getDriver().executeScript("return arguments[0].textContent;", notificationMessageElement))?.trim() || await notificationMessageElement.getText()
 
         if (!allDetectedNotificationMessages.includes(notificationMessage)) {
           allDetectedNotificationMessages.push(notificationMessage)
@@ -666,6 +678,7 @@ export default class SystemTest {
 
         if (notificationMessage == expectedNotificationMessage) {
           foundNotificationMessageElement = notificationMessageElement
+          foundNotificationMessageCount = await notificationMessageElement.getAttribute("data-count")
           return
         }
       }
@@ -673,8 +686,13 @@ export default class SystemTest {
       throw new Error(`Notification message ${expectedNotificationMessage} wasn't included in: ${allDetectedNotificationMessages.join(", ")}`)
     })
 
-    if (foundNotificationMessageElement) {
+    if (foundNotificationMessageElement && dismiss) {
       await this.interact(foundNotificationMessageElement, "click") // Dismiss the notification message
+      if (!foundNotificationMessageCount) {
+        throw new Error("Expected notification message to have a data-count")
+      }
+
+      await this.waitForNoSelector(`[data-testid='notification-message'][data-count='${foundNotificationMessageCount}']`, {useBaseSelector: false})
     }
   }
 
@@ -896,7 +914,7 @@ export default class SystemTest {
 
   /**
    * Handles a command received from the browser
-   * @param {{data: {message: string, backtrace: string, type: string, value: any[]}}} args
+   * @param {{data: {message: string, backtrace?: string, type: string, value: any[]}}} args
    * @returns {Promise<any>}
    */
   onCommandReceived = async ({data}) => {
