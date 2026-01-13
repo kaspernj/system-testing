@@ -8,6 +8,7 @@
 - Switch `useEventEmitter` import to `ya-use-event-emitter`.
 - Remove `@kaspernj/api-maker` peer dependency.
 - Remove `@kaspernj/api-maker` from the dummy app dependencies.
+- Add `qs` to the dummy app dependencies for system-testing hooks.
 - Run release patch commands with direct TTY handling for npm 2FA prompts.
 - Document allowed args for system test selector helpers with shared JSDoc typedefs.
 - Move JSDoc typedefs to follow imports per agent guidance.
