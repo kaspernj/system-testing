@@ -667,7 +667,7 @@ export default class SystemTest {
     let foundNotificationMessageCount
 
     await waitFor(async () => {
-      const notificationMessageElements = await this.all("[data-testid='notification-message']", {useBaseSelector: false, visible: null})
+      const notificationMessageElements = await this.all("[data-testid='notification-message']", {useBaseSelector: false})
 
       for (const notificationMessageElement of notificationMessageElements) {
         const notificationMessage = (await this.getDriver().executeScript("return arguments[0].textContent;", notificationMessageElement))?.trim() || await notificationMessageElement.getText()
