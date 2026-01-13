@@ -9,3 +9,7 @@
 - Wait for the matching flash notification to disappear when dismissed.
 - Use notification `data-count` to track dismissals for `expectNotificationMessage`.
 - Read notification message text from `textContent` when available for DOM consistency.
+- Read notification message text via DOM `textContent` script lookup.
+- Skip visibility filtering when polling notification messages.
+- Make notification system test elements clickable for dismissal behavior.
+- Pin notification test container to the viewport for reliable clicks.

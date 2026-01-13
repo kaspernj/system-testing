@@ -28,7 +28,7 @@ import {WebSocketServer} from "ws"
 /**
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
- * @property {boolean} [visible] Whether to require elements to be visible.
+ * @property {boolean | null} [visible] Whether to require elements to be visible.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 /**
@@ -667,10 +667,10 @@ export default class SystemTest {
     let foundNotificationMessageCount
 
     await waitFor(async () => {
-      const notificationMessageElements = await this.all("[data-testid='notification-message']", {useBaseSelector: false})
+      const notificationMessageElements = await this.all("[data-testid='notification-message']", {useBaseSelector: false, visible: null})
 
       for (const notificationMessageElement of notificationMessageElements) {
-        const notificationMessage = (await notificationMessageElement.getAttribute("textContent"))?.trim() || await notificationMessageElement.getText()
+        const notificationMessage = (await this.getDriver().executeScript("return arguments[0].textContent;", notificationMessageElement))?.trim() || await notificationMessageElement.getText()
 
         if (!allDetectedNotificationMessages.includes(notificationMessage)) {
           allDetectedNotificationMessages.push(notificationMessage)

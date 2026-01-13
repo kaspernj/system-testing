@@ -60,6 +60,10 @@ describe("System test", () => {
         if (!container) {
           container = document.createElement("div")
           container.id = containerId
+          container.style.position = "fixed"
+          container.style.top = "12px"
+          container.style.left = "12px"
+          container.style.zIndex = "9999"
           document.body.appendChild(container)
         }
 
@@ -72,12 +76,16 @@ describe("System test", () => {
 
           messageContainer.setAttribute("data-testid", "notification-message")
           messageContainer.setAttribute("data-count", String(count))
+          messageContainer.style.cursor = "pointer"
+          messageContainer.style.display = "inline-block"
+          messageContainer.style.padding = "4px"
+          messageContainer.style.border = "1px solid #000"
           messageText.textContent = message
           messageContainer.appendChild(messageText)
           wrapper.appendChild(messageContainer)
           container.appendChild(wrapper)
 
-          messageText.addEventListener("click", () => {
+          messageContainer.addEventListener("click", () => {
             setTimeout(() => wrapper.remove(), 100)
           })
         }
