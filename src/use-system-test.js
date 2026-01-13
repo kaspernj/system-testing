@@ -1,7 +1,7 @@
 import qs from "qs"
 import SystemTestBrowserHelper from "./system-test-browser-helper.js"
 import {useCallback, useMemo} from "react"
-import useEventEmitter from "@kaspernj/api-maker/build/use-event-emitter.js"
+import useEventEmitter from "ya-use-event-emitter"
 import {useRouter} from "expo-router"
 
 const shared = {
