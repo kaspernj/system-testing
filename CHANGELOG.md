@@ -8,3 +8,4 @@
 - Allow dismissing notification messages after assertion with a `dismiss` arg.
 - Wait for the matching flash notification to disappear when dismissed.
 - Use notification `data-count` to track dismissals for `expectNotificationMessage`.
+- Read notification message text from `textContent` when available for DOM consistency.

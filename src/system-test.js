@@ -670,7 +670,7 @@ export default class SystemTest {
       const notificationMessageElements = await this.all("[data-testid='notification-message']", {useBaseSelector: false})
 
       for (const notificationMessageElement of notificationMessageElements) {
-        const notificationMessage = await notificationMessageElement.getText()
+        const notificationMessage = (await notificationMessageElement.getAttribute("textContent"))?.trim() || await notificationMessageElement.getText()
 
         if (!allDetectedNotificationMessages.includes(notificationMessage)) {
           allDetectedNotificationMessages.push(notificationMessage)
