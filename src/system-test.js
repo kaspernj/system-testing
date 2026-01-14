@@ -637,9 +637,20 @@ export default class SystemTest {
           }
 
           // Found but not visible
-          const isDisplayed = await elements[0].isDisplayed()
+          try {
+            const isDisplayed = await elements[0].isDisplayed()
 
-          return !isDisplayed
+            return !isDisplayed
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              (error.constructor.name === "StaleElementReferenceError" || error.message.includes("stale element reference"))
+            ) {
+              return false
+            }
+
+            throw error
+          }
         },
         this.getTimeouts()
       )
