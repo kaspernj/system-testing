@@ -1,6 +1,6 @@
 {
   "name": "system-testing",
-  "version": "1.0.67",
+  "version": "1.0.68",
   "description": "System testing with Selenium and browsers.",
   "main": "build/index.js",
   "types": "build/index.d.ts",
