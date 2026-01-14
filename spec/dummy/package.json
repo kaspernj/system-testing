@@ -42,7 +42,7 @@
     "react-native-worklets": "0.5.1",
     "scoundrel-remote-eval": "^1.0.28",
     "system-testing": "file:../..",
-    "ya-use-event-emitter": "^0.1.1"
+    "ya-use-event-emitter": "^0.1.2"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
