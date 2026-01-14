@@ -38,4 +38,5 @@ const {stdout: versionStdout} = await execFileAsync("npm", ["pkg", "get", "versi
 const version = versionStdout.trim().replace(/"/g, "")
 await run("git", ["add", "package.json", "package-lock.json"])
 await run("git", ["commit", "-m", `Release v${version}`])
+await run("git", ["push", "origin", "master"])
 await run("npm", ["publish"])

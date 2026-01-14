@@ -32,3 +32,4 @@
 - Add system test coverage for `SystemTest.interact` selector objects.
 - Document finder options for selector helpers in the README.
 - Treat stale element reference errors as retryable in `waitForNoSelector`.
+- Push version bump commits to `master` in the patch release script.
