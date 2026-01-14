@@ -31,3 +31,4 @@
 - Allow `SystemTest.interact` to accept selector objects with finder args.
 - Add system test coverage for `SystemTest.interact` selector objects.
 - Document finder options for selector helpers in the README.
+- Treat stale element reference errors as retryable in `waitForNoSelector`.
