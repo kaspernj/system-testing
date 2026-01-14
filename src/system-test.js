@@ -626,35 +626,41 @@ export default class SystemTest {
 
     const actualSelector = useBaseSelector ? this.getSelector(selector) : selector
 
-    await this._withRethrownErrors(async () => {
-      await this.getDriver().wait(
-        async () => {
-          const elements = await this.getDriver().findElements(By.css(actualSelector))
+    await this.driverSetTimeouts(0)
 
-          // Not found at all
-          if (elements.length === 0) {
-            return true
-          }
+    try {
+      await this._withRethrownErrors(async () => {
+        await this.getDriver().wait(
+          async () => {
+            const elements = await this.getDriver().findElements(By.css(actualSelector))
 
-          // Found but not visible
-          try {
-            const isDisplayed = await elements[0].isDisplayed()
-
-            return !isDisplayed
-          } catch (error) {
-            if (
-              error instanceof Error &&
-              (error.constructor.name === "StaleElementReferenceError" || error.message.includes("stale element reference"))
-            ) {
-              return false
+            // Not found at all
+            if (elements.length === 0) {
+              return true
             }
 
-            throw error
-          }
-        },
-        this.getTimeouts()
-      )
-    })
+            // Found but not visible
+            try {
+              const isDisplayed = await elements[0].isDisplayed()
+
+              return !isDisplayed
+            } catch (error) {
+              if (
+                error instanceof Error &&
+                (error.constructor.name === "StaleElementReferenceError" || error.message.includes("stale element reference"))
+              ) {
+                return false
+              }
+
+              throw error
+            }
+          },
+          this.getTimeouts()
+        )
+      })
+    } finally {
+      await this.restoreTimeouts()
+    }
   }
 
   async _withRethrownErrors(callback) {

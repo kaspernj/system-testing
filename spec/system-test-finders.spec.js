@@ -95,4 +95,24 @@ describe("SystemTest finders", () => {
       }
     })
   })
+
+  it("returns quickly when waitForNoSelector has no matches", async () => {
+    await SystemTest.run(async (runningSystemTest) => {
+      const originalTimeouts = runningSystemTest.getTimeouts()
+
+      try {
+        await runningSystemTest.setTimeouts(2000)
+
+        const startTime = Date.now()
+
+        await runningSystemTest.waitForNoSelector("#does-not-exist", {useBaseSelector: false})
+
+        const elapsedMs = Date.now() - startTime
+
+        expect(elapsedMs).toBeLessThan(1500)
+      } finally {
+        await runningSystemTest.setTimeouts(originalTimeouts)
+      }
+    })
+  })
 })
