@@ -22,3 +22,6 @@
 - Pin notification test container to the viewport for reliable clicks.
 - Only poll visible notification messages in `expectNotificationMessage`.
 - Document `FindArgs.visible` as a boolean-only option.
+- Include error type details in system test selector errors.
+- Require the root system testing component to be visible before proceeding.
+- Bump `ya-use-event-emitter` to 0.1.2.

@@ -412,9 +412,9 @@ export default class SystemTest {
           elements = []
         }
 
-        throw new Error(`${error.message} (selector: ${this.getSelector(selector)})`)
+        throw new Error(`${error.constructor.name} - ${error.message} (selector: ${this.getSelector(selector)})`)
       } else {
-        throw new Error(`${error} (selector: ${this.getSelector(selector)})`)
+        throw new Error(`${typeof error} - ${error} (selector: ${this.getSelector(selector)})`)
       }
     }
 
@@ -772,12 +772,9 @@ export default class SystemTest {
     await this.driverVisit(rootPath)
     this.debugLog(`Visited root path ${rootPath}`)
 
-    //console.log("WAITING")
-    //await wait(180000)
-
     try {
       await this.find("body > #root", {useBaseSelector: false})
-      await this.findByTestID("systemTestingComponent", {visible: null, useBaseSelector: false, timeout: 30000})
+      await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true})
       this.debugLog("Found root and systemTestingComponent")
     } catch (error) {
       await this.takeScreenshot()
