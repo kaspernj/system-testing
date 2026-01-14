@@ -27,3 +27,7 @@
 - Bump `ya-use-event-emitter` to 0.1.2.
 - Retry `SystemTest.all` waits using remaining timeout and filter for visibility during lookups.
 - Add a system test covering `SystemTest.all` retries and visibility filtering.
+- Allow `SystemTest.click` to pass finder args like `useBaseSelector`.
+- Allow `SystemTest.interact` to accept selector objects with finder args.
+- Add system test coverage for `SystemTest.interact` selector objects.
+- Document finder options for selector helpers in the README.

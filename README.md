@@ -122,6 +122,26 @@ await systemTest.findByTestID("scannerModeExitPinInput", {useBaseSelector: false
 
 Use `useBaseSelector: false` only for modal or overlay content. Keep the default scoping for regular screens to avoid false matches.
 
+### Finder options
+
+Most selector helpers accept the same options:
+
+- `timeout` (number): override how long the lookup should wait.
+- `visible` (boolean): require elements to be visible (`true`) or hidden (`false`).
+- `useBaseSelector` (boolean): scope the selector to the focused container.
+
+These options are supported by `find`, `findByTestID`, and `all`. `click` also accepts the same options when a selector string is used:
+
+```js
+await systemTest.click("[data-testid='signInButton']", {useBaseSelector: false, visible: true})
+```
+
+`interact` supports a selector object so you can pass finder options inline:
+
+```js
+await systemTest.interact({selector: "[data-testid='scanFooterMenuButton']", useBaseSelector: false}, "click")
+```
+
 ### Reinitialize a system test
 
 Some test failures can leave the app in a broken state (for example a crashed React tree or a stuck WebSocket session). In those cases, fully restart the SystemTest instance to restore a clean browser/app state before continuing.

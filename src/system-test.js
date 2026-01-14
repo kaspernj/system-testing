@@ -377,14 +377,20 @@ export default class SystemTest {
    * @param {string|import("selenium-webdriver").WebElement} elementOrIdentifier
    * @returns {Promise<void>}
    */
-  async click(elementOrIdentifier) {
+  /**
+   * Clicks an element, allowing selector args when using a CSS selector.
+   * @param {string|import("selenium-webdriver").WebElement} elementOrIdentifier
+   * @param {FindArgs} [args]
+   * @returns {Promise<void>}
+   */
+  async click(elementOrIdentifier, args) {
     let tries = 0
 
     while (true) {
       tries++
 
       try {
-        const element = await this._findElement(elementOrIdentifier)
+        const element = await this._findElement(elementOrIdentifier, args)
         const actions = this.getDriver().actions({async: true})
 
         await actions.move({origin: element}).click().perform()
@@ -455,16 +461,22 @@ export default class SystemTest {
 
 
   /**
-   * @param {string|import("selenium-webdriver").WebElement} elementOrIdentifier
+   * @param {string|import("selenium-webdriver").WebElement|{selector: string} & FindArgs} elementOrIdentifier
+   * @param {FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
-  async _findElement(elementOrIdentifier) {
+  async _findElement(elementOrIdentifier, args) {
+    /** @type {import("selenium-webdriver").WebElement} */
     let element
 
     if (typeof elementOrIdentifier == "string") {
-      element = await this.find(elementOrIdentifier)
+      element = await this.find(elementOrIdentifier, args)
+    } else if (typeof elementOrIdentifier == "object" && elementOrIdentifier !== null && "selector" in elementOrIdentifier) {
+      const {selector, ...restArgs} = elementOrIdentifier
+
+      element = await this.find(selector, restArgs)
     } else {
-      element = elementOrIdentifier
+      element = /** @type {import("selenium-webdriver").WebElement} */ (elementOrIdentifier)
     }
 
     return element
@@ -521,7 +533,7 @@ export default class SystemTest {
   /**
    * Interacts with an element by calling a method on it with the given arguments.
    * Retrying on ElementNotInteractableError, ElementClickInterceptedError, or StaleElementReferenceError.
-   * @param {import("selenium-webdriver").WebElement|string} elementOrIdentifier The element or a CSS selector to find the element.
+   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & FindArgs} elementOrIdentifier The element or a CSS selector to find the element.
    * @param {string} methodName The method name to call on the element.
    * @param {...any} args Arguments to pass to the method.
    * @returns {Promise<any>}
