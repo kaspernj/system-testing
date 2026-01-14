@@ -68,6 +68,10 @@ describe("SystemTest finders", () => {
           container.id = containerId
           container.setAttribute("data-testid", "allRetryTarget")
           container.style.display = "none"
+          container.style.width = "12px"
+          container.style.height = "12px"
+          container.style.background = "#000"
+          container.textContent = "Retry target"
           base.appendChild(container)
 
           setTimeout(() => {
