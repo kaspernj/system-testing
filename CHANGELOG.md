@@ -33,3 +33,5 @@
 - Document finder options for selector helpers in the README.
 - Treat stale element reference errors as retryable in `waitForNoSelector`.
 - Push version bump commits to `master` in the patch release script.
+- Disable implicit waits during `waitForNoSelector` polling.
+- Add a system test to ensure `waitForNoSelector` returns quickly when nothing matches.
