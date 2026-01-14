@@ -322,39 +322,54 @@ export default class SystemTest {
     if (restArgsKeys.length > 0) throw new Error(`Unknown arguments: ${restArgsKeys.join(", ")}`)
 
     const actualSelector = useBaseSelector ? this.getSelector(selector) : selector
-    const getElements = async () => await this.getDriver().findElements(By.css(actualSelector))
-    let elements = []
+    const startTime = Date.now()
+    const getTimeLeft = () => Math.max(actualTimeout - (Date.now() - startTime), 0)
+    const getElements = async () => {
+      const foundElements = await this.getDriver().findElements(By.css(actualSelector))
 
-    try {
-      if (actualTimeout == 0) {
-        elements = await getElements()
-      } else {
-        await this.getDriver().wait(async () => {
-          elements = await getElements()
-
-          return elements.length > 0
-        }, actualTimeout)
+      if (visible !== true && visible !== false) {
+        return foundElements
       }
-    } catch (error) {
-      throw new Error(`Couldn't get elements with selector: ${actualSelector}: ${error instanceof Error ? error.message : error}`)
-    }
 
-    const activeElements = []
+      const filteredElements = []
 
-    for (const element of elements) {
-      let keep = true
-
-      if (visible === true || visible === false) {
+      for (const element of foundElements) {
         const isDisplayed = await element.isDisplayed()
 
-        if (visible && !isDisplayed) keep = false
-        if (!visible && isDisplayed) keep = false
+        if (visible && !isDisplayed) continue
+        if (!visible && isDisplayed) continue
+
+        filteredElements.push(element)
       }
 
-      if (keep) activeElements.push(element)
+      return filteredElements
     }
+    let elements = []
 
-    return activeElements
+    while (true) {
+      const timeLeft = actualTimeout == 0 ? 0 : getTimeLeft()
+
+      try {
+        if (timeLeft == 0) {
+          elements = await getElements()
+        } else {
+          await this.getDriver().wait(async () => {
+            elements = await getElements()
+
+            return elements.length > 0
+          }, timeLeft)
+        }
+
+        break
+      } catch (error) {
+        if (error instanceof SeleniumError.TimeoutError && getTimeLeft() > 0) {
+          continue
+        }
+
+        throw new Error(`Couldn't get elements with selector: ${actualSelector}: ${error instanceof Error ? error.message : error}`)
+      }
+    }
+    return elements
   }
 
   /**
