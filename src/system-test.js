@@ -151,16 +151,22 @@ export default class SystemTest {
       throw new Error("SystemTest.run requires a callback")
     }
 
-    systemTest.debugLog("Run started")
+    systemTest.debugLog("Run started - send initialize")
     await systemTest.getCommunicator().sendCommand({type: "initialize"})
-    systemTest.debugLog("Sent initialize command")
+
+    systemTest.debugLog("getRootPath")
     const rootPath = systemTest.getRootPath()
+
+    systemTest.debugLog(`Visit rootPath with dismissTo: ${rootPath}`)
     await systemTest.dismissTo(rootPath)
     systemTest.debugLog(`Dismissed to root path ${rootPath}`)
 
     try {
+      systemTest.debugLog("findByTestID blankText")
       await systemTest.findByTestID("blankText", {useBaseSelector: false})
       systemTest.debugLog("Found blankText")
+
+      systemTest.debugLog("resolvedCallback")
       await resolvedCallback(systemTest)
       systemTest.debugLog("Run callback completed")
     } catch (error) {
