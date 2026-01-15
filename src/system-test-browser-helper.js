@@ -139,14 +139,10 @@ export default class SystemTestBrowserHelper {
     this.overrideConsoleLog()
   }
 
-  /**
-   * @returns {boolean}
-   */
+  /** @returns {boolean} */
   getEnabled() { return this._enabled }
 
-  /**
-   * @returns {EventEmitter}
-   */
+  /** @returns {EventEmitter} */
   getEvents() { return this.events }
 
   /**
