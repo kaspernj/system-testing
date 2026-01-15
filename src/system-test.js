@@ -152,7 +152,9 @@ export default class SystemTest {
     }
 
     systemTest.debugLog("Run started - send initialize")
-    await systemTest.getCommunicator().sendCommand({type: "initialize"})
+    await timeout({timeout: 10_000, errorMessage: "Sending intialize to useSystemTest() timed out"}, async () => {
+      await systemTest.getCommunicator().sendCommand({type: "initialize"})
+    })
 
     systemTest.debugLog("getRootPath")
     const rootPath = systemTest.getRootPath()
