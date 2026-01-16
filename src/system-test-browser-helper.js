@@ -24,6 +24,7 @@ export default class SystemTestBrowserHelper {
   constructor() {
     this.communicator = new SystemTestCommunicator({parent: this, onCommand: this.onCommand})
     this._enabled = false
+    this._hasInitialized = false
     this.events = new EventEmitter()
 
     shared.systemTestBrowserHelper = this
@@ -219,6 +220,14 @@ export default class SystemTestBrowserHelper {
     if (data.type == "initialize") {
       this.events.emit("initialize")
 
+      if (!this._hasInitialized) {
+        this._hasInitialized = true
+
+        if (this._onFirstInitializeCallback) {
+          await this._onFirstInitializeCallback()
+        }
+      }
+
       if (this._onInitializeCallback) {
         await this._onInitializeCallback()
       }
@@ -239,6 +248,14 @@ export default class SystemTestBrowserHelper {
    */
   onInitialize(callback) {
     this._onInitializeCallback = callback
+  }
+
+  /**
+   * @param {function() : void} callback
+   * @returns {void}
+   */
+  onFirstInitialize(callback) {
+    this._onFirstInitializeCallback = callback
   }
 
   /**
