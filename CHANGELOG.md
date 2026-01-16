@@ -36,3 +36,4 @@
 - Disable implicit waits during `waitForNoSelector` polling.
 - Add a system test to ensure `waitForNoSelector` returns quickly when nothing matches.
 - Add a timeout around system test initialization to surface stalled communicator setup.
+- Add `onFirstInitialize` for one-time setup when system testing initializes.

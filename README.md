@@ -74,8 +74,11 @@ import useSystemTest from "system-testing/build/use-system-test.js"
 
 export default function RootLayout() {
   const {enabled, systemTestBrowserHelper} = useSystemTest({
+    onFirstInitialize: () => {
+      // One-time setup the first time the helper initializes
+    },
     onInitialize: () => {
-      // Reset any app state before tests run
+      // Reset any app state before each test run
     }
   })
 
@@ -96,7 +99,8 @@ export default function RootLayout() {
 
 Notes:
 - The hook auto-connects when the page is opened with `?systemTest=true` (as the runner does).
-- `onInitialize` runs once when the helper is ready; use it to reset globals/session.
+- `onFirstInitialize` runs only on the first `initialize` command; use it for one-time setup.
+- `onInitialize` is registered once when the helper is ready, but it runs on every `initialize` command (each `SystemTest.run`); use it to reset globals/session.
 - If you need scoundrel remote evaluation, wait for `systemTestBrowserHelper` and register your classes there, as shown in the commented snippet above.
 - Add a root wrapper with `testID="systemTestingComponent"` (and optionally `data-focussed="true"`) around your app so the runner has a stable element to detect and scope selectors against.
 - From your tests, use `await systemTest.getScoundrelClient()` to obtain the browser Scoundrel client for remote evaluation.

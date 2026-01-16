@@ -44,9 +44,10 @@ function getSystemTestBrowserHelper() {
  * A hook that provides system test capabilities.
  * @param {object} options - Options for the hook.
  * @param {function() : void} options.onInitialize - A callback function that is called when the system test browser helper is initialized.
+ * @param {function() : void} options.onFirstInitialize - A callback function that is called the first time the system test browser helper is initialized.
  * @returns {{enabled: boolean, systemTestBrowserHelper: SystemTestBrowserHelper}}
  */
-export default function useSystemTest({onInitialize, ...restArgs} = {onInitialize: undefined}) {
+export default function useSystemTest({onFirstInitialize, onInitialize, ...restArgs} = {onFirstInitialize: undefined, onInitialize: undefined}) {
   if (!useMemo) throw new Error("[useSystemTest] React.useMemo is not available")
   if (!useCallback) throw new Error("[useSystemTest] React.useCallback is not available")
 
@@ -91,9 +92,10 @@ export default function useSystemTest({onInitialize, ...restArgs} = {onInitializ
   useMemo(() => {
     if (enabled && !shared.initialized) {
       shared.initialized = true
+      shared.systemTestBrowserHelper?.onFirstInitialize(onFirstInitialize)
       shared.systemTestBrowserHelper?.onInitialize(onInitialize)
     }
-  }, [enabled, onInitialize, shared.systemTestBrowserHelper])
+  }, [enabled, onFirstInitialize, onInitialize, shared.systemTestBrowserHelper])
 
   const restArgsKeys = Object.keys(restArgs)
 
