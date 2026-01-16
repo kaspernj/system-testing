@@ -156,29 +156,58 @@ export default class SystemTestHttpServer {
    */
   async assertReachable({timeoutMs = 5000} = {}) {
     const url = `http://${this._connectHost}:${this._port}/`
+    const maxAttempts = 3
 
-    await new Promise((resolve, reject) => {
-      const request = http.get(url, (response) => {
-        const chunks = []
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await new Promise((resolve, reject) => {
+          const request = http.get(url, (response) => {
+            const chunks = []
 
-        response.on("data", (chunk) => chunks.push(chunk))
-        response.on("end", () => {
-          const body = Buffer.concat(chunks).toString("utf8")
+            response.on("data", (chunk) => chunks.push(chunk))
+            response.on("end", () => {
+              const body = Buffer.concat(chunks).toString("utf8")
 
-          if (response.statusCode !== 200) {
-            reject(new Error(`HTTP server health check failed with status ${response.statusCode} for ${url}: ${body.slice(0, 200)}`))
-            return
-          }
+              if (response.statusCode !== 200) {
+                reject(new Error(`HTTP server health check failed with status ${response.statusCode} for ${url}: ${body.slice(0, 200)}`))
+                return
+              }
 
-          resolve(undefined)
+              resolve(undefined)
+            })
+          })
+
+          request.on("error", (error) => reject(error))
+
+          request.setTimeout(timeoutMs, () => {
+            request.destroy(new Error(`HTTP server health check timed out after ${timeoutMs}ms for ${url}`))
+          })
         })
-      })
 
-      request.on("error", (error) => reject(error))
+        return
+      } catch (error) {
+        if (attempt === maxAttempts || !this.isRetryableHealthCheckError(error)) {
+          throw error
+        }
 
-      request.setTimeout(timeoutMs, () => {
-        request.destroy(new Error(`HTTP server health check timed out after ${timeoutMs}ms for ${url}`))
-      })
-    })
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+    }
+  }
+
+  /**
+   * @param {unknown} error
+   * @returns {boolean}
+   */
+  isRetryableHealthCheckError(error) {
+    if (error && typeof error === "object" && "code" in error) {
+      if (error.code === "ECONNRESET") return true
+      if (error.code === "ECONNREFUSED") return true
+      if (error.code === "ETIMEDOUT") return true
+    }
+
+    const message = error instanceof Error ? error.message : String(error)
+
+    return message.includes("socket hang up")
   }
 }
