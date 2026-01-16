@@ -38,3 +38,4 @@
 - Add a timeout around system test initialization to surface stalled communicator setup.
 - Add `onFirstInitialize` for one-time setup when system testing initializes.
 - Add HTTP server health checks on system test startup and surface post-start server errors.
+- Use a separate connect host for HTTP server health checks when binding to 0.0.0.0.

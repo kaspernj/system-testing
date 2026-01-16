@@ -6,14 +6,15 @@ import mime from "mime"
 
 export default class SystemTestHttpServer {
   /**
-   * @param {{host?: string, port?: number, debug?: boolean, onError?: (error: Error) => void}} [args]
+   * @param {{host?: string, port?: number, debug?: boolean, onError?: (error: Error) => void, connectHost?: string}} [args]
    */
-  constructor({host = "localhost", port = 1984, debug = false, onError} = {}) {
+  constructor({host = "localhost", port = 1984, debug = false, onError, connectHost} = {}) {
     this._host = host
     this._port = port
     this._debug = debug
     this._onError = onError
     this._started = false
+    this._connectHost = connectHost ?? (host === "0.0.0.0" ? "127.0.0.1" : host)
     /** @type {Set<import("node:net").Socket>} */
     this._connections = new Set()
   }
@@ -154,7 +155,7 @@ export default class SystemTestHttpServer {
    * @returns {Promise<void>}
    */
   async assertReachable({timeoutMs = 5000} = {}) {
-    const url = `http://${this._host}:${this._port}/`
+    const url = `http://${this._connectHost}:${this._port}/`
 
     await new Promise((resolve, reject) => {
       const request = http.get(url, (response) => {
