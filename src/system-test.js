@@ -59,6 +59,8 @@ export default class SystemTest {
   _httpPort = 1984
   /** @type {(error: any) => boolean | undefined} */
   _errorFilter = undefined
+  /** @type {Error | undefined} */
+  _httpServerError = undefined
   /** @type {WebSocketServer | undefined} */
   scoundrelWss = undefined
   /** @type {WebSocketServer | undefined} */
@@ -217,6 +219,7 @@ export default class SystemTest {
   getDriver() {
     if (!this) throw new Error("No this?")
     if (!this.driver) throw new Error("Driver hasn't been initialized yet")
+    this.throwIfHttpServerError()
 
     return this.driver
   }
@@ -237,14 +240,43 @@ export default class SystemTest {
   }
 
   /**
-   * Logs messages when debugging is enabled
-   * @param {string} message
+   * Logs messages
+   * @param {any[]} args
    * @returns {void}
    */
-  debugLog(message) {
+  debugError(...args) {
     if (this._debug) {
-      console.log(`[SystemTest debug] ${message}`)
+      console.error("[SystemTest debug]", ...args)
     }
+  }
+
+  /**
+   * Logs messages when debugging is enabled
+   * @param {any[]} args
+   * @returns {void}
+   */
+  debugLog(...args) {
+    if (this._debug) {
+      console.log("[SystemTest debug]", ...args)
+    }
+  }
+
+  /** @returns {void} */
+  throwIfHttpServerError() {
+    if (this._httpServerError) {
+      throw new Error(`HTTP server error: ${this._httpServerError.message}`)
+    }
+  }
+
+  /**
+   * @param {Error} error
+   * @returns {void}
+   */
+  onHttpServerError = (error) => {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+
+    this._httpServerError = error instanceof Error ? error : new Error(errorMessage)
+    console.error(`HTTP server error: ${errorMessage}`)
   }
 
   /**
@@ -784,10 +816,17 @@ export default class SystemTest {
       this.currentUrl = `http://${this._httpHost}:${this._httpPort}`
 
       this.debugLog(`Spawning HTTP server for dist on ${this._httpHost}:${this._httpPort}`)
-      this.systemTestHttpServer = new SystemTestHttpServer({host: this._httpHost, port: this._httpPort, debug: this._debug})
+      this.systemTestHttpServer = new SystemTestHttpServer({
+        host: this._httpHost,
+        port: this._httpPort,
+        debug: this._debug,
+        onError: this.onHttpServerError
+      })
 
       this.debugLog("Starting HTTP server")
       await this.systemTestHttpServer.start()
+      this.debugLog("Checking HTTP server health")
+      await this.systemTestHttpServer.assertReachable({timeoutMs: this.getTimeouts()})
       this.debugLog("HTTP server started")
     } else {
       throw new Error("Please set SYSTEM_TEST_HOST to 'expo-dev-server' or 'dist'")
@@ -944,6 +983,8 @@ export default class SystemTest {
     this.clientWss.on("connection", this.onWebSocketConnection)
     this.clientWss.on("close", this.onWebSocketClose)
     this.clientWss.on("error", (error) => {
+      this.debugError(error)
+
       if (this.waitForClientWebSocketPromiseReject) {
         this.waitForClientWebSocketPromiseReject(error instanceof Error ? error : new Error(String(error)))
         delete this.waitForClientWebSocketPromiseReject
@@ -1054,10 +1095,10 @@ export default class SystemTest {
       this.ws = null
     }
     await this.closeWebSocketServer(this.clientWss, "client WebSocket server")
-    if (this.driver?.quit) {
+    if (this.driver) {
       await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while quitting WebDriver"}, async () => await this.driver.quit())
     }
-    if (this.systemTestHttpServer?.close) {
+    if (this.systemTestHttpServer) {
       await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while closing HTTP server"}, async () => await this.systemTestHttpServer.close())
     }
   }
@@ -1079,6 +1120,7 @@ export default class SystemTest {
     this.server = undefined
     this.serverWebSocket = undefined
     this.systemTestHttpServer = undefined
+    this._httpServerError = undefined
     this.waitForClientWebSocketPromiseReject = undefined
     this.waitForClientWebSocketPromiseResolve = undefined
     this.communicator = new SystemTestCommunicator({onCommand: this.onCommandReceived})
