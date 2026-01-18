@@ -233,6 +233,9 @@ export default class SystemTestBrowserHelper {
       }
 
       return {result: "initialized"}
+    } else if (data.type == "waitForScoundrel") {
+      await this.waitForScoundrelStarted()
+      return {result: "scoundrel-ready"}
     } else if (data.type == "visit") {
       this.events.emit("navigate", {path: data.path})
     } else if (data.type == "dismissTo") {

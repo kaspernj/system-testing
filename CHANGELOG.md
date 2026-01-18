@@ -41,3 +41,4 @@
 - Use a separate connect host for HTTP server health checks when binding to 0.0.0.0.
 - Retry HTTP server health checks on transient connection errors.
 - Always print system test debug errors instead of hiding them behind debug mode.
+- Wait for the browser Scoundrel client to initialize before resolving `getScoundrelClient`.
