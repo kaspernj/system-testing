@@ -309,6 +309,10 @@ export default class SystemTest {
       throw new Error("Scoundrel server is not started")
     }
 
+    await timeout({timeout: timeoutMs, errorMessage: "Timed out waiting for Scoundrel to initialize"}, async () => {
+      await this.getCommunicator().sendCommand({type: "waitForScoundrel"})
+    })
+
     const existingClients = this.server.getClients?.()
 
     if (existingClients && existingClients.length > 0) {
