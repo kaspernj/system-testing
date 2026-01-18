@@ -21,7 +21,7 @@ export default class SystemTestHttpServer {
 
   /** @param {any[]} args */
   debugError(...args) {
-    console.log("[SystemTestHttpServer]", ...args)
+    console.error("[SystemTestHttpServer error]", ...args)
   }
 
   /** @param {any[]} args */

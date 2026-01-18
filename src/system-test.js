@@ -245,9 +245,7 @@ export default class SystemTest {
    * @returns {void}
    */
   debugError(...args) {
-    if (this._debug) {
-      console.error("[SystemTest debug]", ...args)
-    }
+    console.error("[SystemTest error]", ...args)
   }
 
   /**
