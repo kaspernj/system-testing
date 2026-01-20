@@ -52,3 +52,4 @@
 - Locate Android SDK tools dynamically in Peakflow setup.
 - Add a Node script to configure and boot the Android emulator for Peakflow.
 - Install Android SDK packages via apt when the SDK is missing in Peakflow.
+- Download Android cmdline-tools when they are missing in Peakflow.

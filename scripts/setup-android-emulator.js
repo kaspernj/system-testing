@@ -5,7 +5,7 @@ import fs from "node:fs"
 import path from "node:path"
 
 const sdkRoot = ensureSdkRoot()
-const {sdkmanagerPath, avdmanagerPath} = resolveCmdlineTools(sdkRoot)
+const {sdkmanagerPath, avdmanagerPath} = ensureCmdlineTools(sdkRoot)
 const emulatorPath = path.join(sdkRoot, "emulator", "emulator")
 const adbPath = path.join(sdkRoot, "platform-tools", "adb")
 const avdName = process.env.ANDROID_AVD_NAME ?? "system-test-android"
@@ -191,16 +191,31 @@ function resolveSdkRoot() {
 
 /** @returns {void} */
 function installSdkPackages() {
+  run("mkdir", ["-p", "/usr/lib/android-sdk"], {sudo: true})
   const packages = [
     "android-sdk",
     "android-sdk-platform-tools",
-    "android-sdk-emulator",
     "android-sdk-build-tools",
-    "android-sdk-cmdline-tools"
+    "curl",
+    "unzip"
   ]
 
   run("apt-get", ["update"], {sudo: true})
   run("apt-get", ["install", "-y", ...packages], {sudo: true})
+}
+
+/**
+ * @param {string} root
+ * @returns {{sdkmanagerPath: string, avdmanagerPath: string}}
+ */
+function ensureCmdlineTools(root) {
+  try {
+    return resolveCmdlineTools(root)
+  } catch {
+    installCmdlineTools(root)
+  }
+
+  return resolveCmdlineTools(root)
 }
 
 /**
@@ -227,4 +242,24 @@ function resolveCmdlineTools(root) {
   }
 
   throw new Error(`Android cmdline-tools missing sdkmanager/avdmanager under ${cmdlineRoot}`)
+}
+
+/**
+ * @param {string} root
+ * @returns {void}
+ */
+function installCmdlineTools(root) {
+  const toolsUrl = "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+  const downloadPath = "/tmp/android-cmdline-tools.zip"
+  const extractPath = "/tmp/android-cmdline-tools"
+  const cmdlineRoot = path.join(root, "cmdline-tools")
+
+  run("rm", ["-rf", extractPath], {sudo: true})
+  run("rm", ["-f", downloadPath], {sudo: true})
+  run("curl", ["-fsSL", toolsUrl, "-o", downloadPath], {sudo: false})
+  run("mkdir", ["-p", extractPath], {sudo: false})
+  run("unzip", ["-q", downloadPath, "-d", extractPath], {sudo: false})
+  run("mkdir", ["-p", cmdlineRoot], {sudo: true})
+  run("rm", ["-rf", path.join(cmdlineRoot, "latest")], {sudo: true})
+  run("mv", [path.join(extractPath, "cmdline-tools"), path.join(cmdlineRoot, "latest")], {sudo: true})
 }
