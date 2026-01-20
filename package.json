@@ -34,6 +34,8 @@
     "lint": "eslint --max-warnings 0",
     "prepublishOnly": "npm run build",
     "release:patch": "node scripts/release-patch.js",
+    "test:appium:android": "npm run export:web && (npx appium driver update uiautomator2 || npx appium driver install uiautomator2) && SDK_PATH=$(node -e \"const fs=require('fs'); const path=require('path'); const os=require('os'); const candidates=[process.env.ANDROID_SDK_ROOT, process.env.ANDROID_HOME, path.join(os.homedir(),'Android','Sdk'), path.join(os.homedir(),'Library','Android','sdk'), '/usr/lib/android-sdk', '/usr/local/android-sdk', '/opt/android-sdk', '/opt/android-sdk-linux']; const found=candidates.find((candidate)=>candidate && fs.existsSync(candidate)); if (found) process.stdout.write(found);\") && ANDROID_HOME=${ANDROID_HOME:-$SDK_PATH} ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-$SDK_PATH} node -e \"if (!process.env.ANDROID_HOME && !process.env.ANDROID_SDK_ROOT) { console.error('ANDROID_HOME or ANDROID_SDK_ROOT must be set to run Appium Android tests'); process.exit(1) }\" && ANDROID_HOME=${ANDROID_HOME:-$SDK_PATH} ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-$SDK_PATH} SYSTEM_TEST_HOST=dist SYSTEM_TEST_DRIVER=appium SYSTEM_TEST_APPIUM_DRIVERS=uiautomator2 SYSTEM_TEST_APPIUM_TEST_ID_STRATEGY=css SYSTEM_TEST_APPIUM_SERVER_ARGS='{\"allowInsecure\":[\"uiautomator2:chromedriver_autodownload\"]}' SYSTEM_TEST_APPIUM_CAPABILITIES='{\"platformName\":\"Android\",\"appium:automationName\":\"UiAutomator2\",\"appium:deviceName\":\"Android Emulator\",\"browserName\":\"Chrome\",\"appium:chromedriverAutodownload\":true}' npm test",
+    "test:selenium": "SYSTEM_TEST_HOST=dist npm test",
     "test": "jasmine",
     "typecheck": "tsc --noEmit",
     "watch": "tsc -w"
@@ -67,6 +69,7 @@
     "@types/qs": "^6.14.0",
     "@types/react": "^19.2.7",
     "@types/selenium-webdriver": "^4.35.4",
+    "appium-uiautomator2-driver": "^6.7.10",
     "eslint": "^9.39.1",
     "eslint-plugin-jsdoc": "^62.0.0",
     "expo-router": "^6.0.21",

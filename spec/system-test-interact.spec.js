@@ -9,7 +9,8 @@ systemTestHelper.installJasmineHooks()
 describe("SystemTest interact", () => {
   it("retries on StaleElementReferenceError", async () => {
     const systemTest = systemTestHelper.getSystemTest()
-    const originalFindElement = systemTest._findElement
+    const driverAdapter = systemTest.getDriverAdapter()
+    const originalFindElement = driverAdapter._findElement
     let findCalls = 0
 
     class StaleElementReferenceError extends Error {}
@@ -24,7 +25,7 @@ describe("SystemTest interact", () => {
       click: async () => "ok"
     }
 
-    systemTest._findElement = async () => {
+    driverAdapter._findElement = async () => {
       findCalls += 1
       return findCalls === 1 ? staleElement : freshElement
     }
@@ -35,7 +36,7 @@ describe("SystemTest interact", () => {
       expect(result).toBe("ok")
       expect(findCalls).toBe(2)
     } finally {
-      systemTest._findElement = originalFindElement
+      driverAdapter._findElement = originalFindElement
     }
   })
 

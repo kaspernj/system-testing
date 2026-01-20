@@ -68,13 +68,15 @@ export default class AppiumDriver extends WebDriverDriver {
    * @returns {Promise<void>}
    */
   async stop() {
-    await super.stop()
+    try {
+      await super.stop()
+    } finally {
+      if (this.appiumServer?.close) {
+        await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while closing Appium server"}, async () => await this.appiumServer.close())
+      }
 
-    if (this.appiumServer?.close) {
-      await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while closing Appium server"}, async () => await this.appiumServer.close())
+      this.appiumServer = undefined
     }
-
-    this.appiumServer = undefined
   }
 
   /**

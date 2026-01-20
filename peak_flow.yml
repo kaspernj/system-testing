@@ -1,3 +1,11 @@
+before_install:
+  - sudo ANDROID_SDK_ROOT=/usr/lib/android-sdk /usr/lib/android-sdk/cmdline-tools/13.0/bin/sdkmanager --licenses
+  - sudo ANDROID_SDK_ROOT=/usr/lib/android-sdk /usr/lib/android-sdk/cmdline-tools/13.0/bin/sdkmanager "platform-tools" "platforms;android-33" "emulator" "system-images;android-33;google_apis;x86_64"
+  - ANDROID_SDK_ROOT=/usr/lib/android-sdk /usr/lib/android-sdk/cmdline-tools/13.0/bin/avdmanager list avd
+  - printf "no\n" | ANDROID_SDK_ROOT=/usr/lib/android-sdk /usr/lib/android-sdk/cmdline-tools/13.0/bin/avdmanager create avd -n system-test-android -k "system-images;android-33;google_apis;x86_64" -d "pixel_5"
+  - /usr/lib/android-sdk/emulator/emulator -avd system-test-android -no-window -no-audio -gpu swiftshader_indirect -no-snapshot-save -no-boot-anim &
+  - /usr/lib/android-sdk/platform-tools/adb wait-for-device
+  - /usr/lib/android-sdk/platform-tools/adb shell getprop sys.boot_completed
 before_script:
   - npm install
   - cd spec/dummy && npm install
@@ -9,13 +17,14 @@ builds:
   build_2:
     name: Appium Android
     environment:
+      ANDROID_SDK_ROOT: /usr/lib/android-sdk
       SYSTEM_TEST_HOST: dist
       SYSTEM_TEST_DRIVER: appium
       SYSTEM_TEST_APPIUM_DRIVERS: uiautomator2
       SYSTEM_TEST_APPIUM_TEST_ID_STRATEGY: css
-      SYSTEM_TEST_APPIUM_SERVER_ARGS: '{"allowInsecure":["chromedriver_autodownload"]}'
+      SYSTEM_TEST_APPIUM_SERVER_ARGS: '{"allowInsecure":["uiautomator2:chromedriver_autodownload"]}'
       SYSTEM_TEST_APPIUM_CAPABILITIES: '{"platformName":"Android","appium:automationName":"UiAutomator2","appium:deviceName":"Android Emulator","browserName":"Chrome","appium:chromedriverAutodownload":true}'
     script:
       - npm run export:web
-      - npx appium driver install uiautomator2
+      - npx appium driver update uiautomator2 || npx appium driver install uiautomator2
       - npm test

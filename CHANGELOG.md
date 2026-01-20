@@ -44,3 +44,8 @@
 - Wait for the browser Scoundrel client to initialize before resolving `getScoundrelClient`.
 - Extract Selenium behavior into drivers and add Appium driver support with configurable sub-drivers.
 - Add a Peakflow Appium Android build to run system tests against the dummy app.
+- Add npm scripts for Selenium and Appium Android system test runs.
+- Add Appium Android test script preflight for Android SDK env vars.
+- Ensure Appium server shutdown runs even when WebDriver teardown fails.
+- Allow the Appium Android test script to infer the Android SDK path.
+- Add Android emulator setup steps to Peakflow for Appium runs.
