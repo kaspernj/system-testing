@@ -1,5 +1,21 @@
 before_script:
   - npm install
   - cd spec/dummy && npm install
-script:
-  - npm run all-checks
+builds:
+  build_1:
+    name: Default checks
+    script:
+      - npm run all-checks
+  build_2:
+    name: Appium Android
+    environment:
+      SYSTEM_TEST_HOST: dist
+      SYSTEM_TEST_DRIVER: appium
+      SYSTEM_TEST_APPIUM_DRIVERS: uiautomator2
+      SYSTEM_TEST_APPIUM_TEST_ID_STRATEGY: css
+      SYSTEM_TEST_APPIUM_SERVER_ARGS: '{"allowInsecure":["chromedriver_autodownload"]}'
+      SYSTEM_TEST_APPIUM_CAPABILITIES: '{"platformName":"Android","appium:automationName":"UiAutomator2","appium:deviceName":"Android Emulator","browserName":"Chrome","appium:chromedriverAutodownload":true}'
+    script:
+      - npm run export:web
+      - npx appium driver install uiautomator2
+      - npm test

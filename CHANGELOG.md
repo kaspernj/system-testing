@@ -43,3 +43,4 @@
 - Always print system test debug errors instead of hiding them behind debug mode.
 - Wait for the browser Scoundrel client to initialize before resolving `getScoundrelClient`.
 - Extract Selenium behavior into drivers and add Appium driver support with configurable sub-drivers.
+- Add a Peakflow Appium Android build to run system tests against the dummy app.
