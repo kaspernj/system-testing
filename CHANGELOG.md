@@ -59,3 +59,4 @@
 - Fall back to sudo for emulator/adb when KVM access requires root in containers.
 - Run emulator and adb with sudo in container environments.
 - Share ANDROID_AVD_HOME across sudo/non-sudo runs to avoid missing AVDs.
+- Create AVDs with sudo and permissive AVD home permissions in CI containers.

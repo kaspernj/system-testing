@@ -43,8 +43,13 @@ function ensurePackages() {
 /** @returns {void} */
 function ensureAvd() {
   console.log(`[android] Ensuring AVD ${avdName}`)
-  run("mkdir", ["-p", avdHome], {sudo: true})
-  const listResult = run(avdmanagerPath, ["list", "avd"], {env: sdkEnv(), captureOutput: true})
+  run("mkdir", ["-p", avdHome], {sudo: useSudoForEmulator})
+  run("chmod", ["-R", "777", avdHome], {sudo: useSudoForEmulator})
+  const listResult = run(avdmanagerPath, ["list", "avd"], {
+    env: sdkEnv(),
+    captureOutput: true,
+    sudo: useSudoForEmulator
+  })
   const output = listResult.stdout ?? ""
 
   if (output.includes(`Name: ${avdName}`)) {
@@ -55,7 +60,8 @@ function ensureAvd() {
   console.log(`[android] Creating AVD ${avdName}`)
   run(avdmanagerPath, ["create", "avd", "-n", avdName, "-k", systemImage, "-d", avdDevice], {
     env: sdkEnv(),
-    input: "no\n"
+    input: "no\n",
+    sudo: useSudoForEmulator
   })
 }
 
