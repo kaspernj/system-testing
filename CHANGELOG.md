@@ -56,5 +56,6 @@
 - Add 5s timeouts around screenshot, log, and HTML capture in system tests.
 - Forward /dev/kvm into Peakflow builds for Android emulator support.
 - Move KVM device mapping into the Appium build config.
-- Attempt to add the build user to the kvm group during emulator setup.
-- Fail fast when KVM permissions are missing during emulator setup.
+- Fall back to sudo for emulator/adb when KVM access requires root in containers.
+- Run emulator and adb with sudo in container environments.
+- Share ANDROID_AVD_HOME across sudo/non-sudo runs to avoid missing AVDs.

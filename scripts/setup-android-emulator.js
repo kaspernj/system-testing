@@ -14,6 +14,7 @@ const adbPath = path.join(sdkRoot, "platform-tools", "adb")
 const avdName = process.env.ANDROID_AVD_NAME ?? "system-test-android"
 const systemImage = process.env.ANDROID_SYSTEM_IMAGE ?? "system-images;android-33;google_apis;x86_64"
 const avdDevice = process.env.ANDROID_AVD_DEVICE ?? "pixel_5"
+const avdHome = process.env.ANDROID_AVD_HOME ?? "/tmp/android-avd"
 const packages = [
   "platform-tools",
   "platforms;android-33",
@@ -42,6 +43,7 @@ function ensurePackages() {
 /** @returns {void} */
 function ensureAvd() {
   console.log(`[android] Ensuring AVD ${avdName}`)
+  run("mkdir", ["-p", avdHome], {sudo: true})
   const listResult = run(avdmanagerPath, ["list", "avd"], {env: sdkEnv(), captureOutput: true})
   const output = listResult.stdout ?? ""
 
@@ -76,7 +78,7 @@ function startEmulator() {
   ]
 
   const command = useSudoForEmulator ? "sudo" : emulatorPath
-  const args = useSudoForEmulator ? [emulatorPath, ...emulatorArgs] : emulatorArgs
+  const args = useSudoForEmulator ? buildSudoArgs(emulatorPath, emulatorArgs, sdkEnv()) : emulatorArgs
   const child = spawn(command, args, {
     env: sdkEnv(),
     stdio: "inherit",
@@ -149,7 +151,7 @@ function runWithYes(args, {sudo}) {
  */
 function run(command, args, {sudo = false, env = process.env, input, captureOutput = false} = {}) {
   const fullCommand = sudo ? sudoPrefix({sudo: true}) : command
-  const fullArgs = sudo ? [command, ...args] : args
+  const fullArgs = sudo ? buildSudoArgs(command, args, env) : args
   console.log(`[android] ${fullCommand} ${fullArgs.join(" ")}`)
   /** @type {import("node:child_process").StdioOptions} */
   const stdio = captureOutput ? ["pipe", "pipe", "inherit"] : ["pipe", "inherit", "inherit"]
@@ -180,7 +182,9 @@ function sudoPrefix({sudo}) {
 function sdkEnv() {
   return {
     ...process.env,
-    ANDROID_SDK_ROOT: sdkRoot
+    ANDROID_SDK_ROOT: sdkRoot,
+    ANDROID_SDK_HOME: process.env.ANDROID_SDK_HOME ?? sdkRoot,
+    ANDROID_AVD_HOME: avdHome
   }
 }
 
@@ -292,4 +296,29 @@ function installCmdlineTools(root) {
   run("mkdir", ["-p", cmdlineRoot], {sudo: true})
   run("rm", ["-rf", path.join(cmdlineRoot, "latest")], {sudo: true})
   run("mv", [path.join(extractPath, "cmdline-tools"), path.join(cmdlineRoot, "latest")], {sudo: true})
+}
+
+/**
+ * @param {string} command
+ * @param {string[]} args
+ * @param {Record<string, string | undefined>} env
+ * @returns {string[]}
+ */
+function buildSudoArgs(command, args, env) {
+  const envArgs = buildEnvArgs(env)
+  const baseArgs = envArgs.length > 0 ? ["env", ...envArgs, command, ...args] : [command, ...args]
+
+  return ["-E", ...baseArgs]
+}
+
+/**
+ * @param {Record<string, string | undefined>} env
+ * @returns {string[]}
+ */
+function buildEnvArgs(env) {
+  const keys = ["ANDROID_SDK_ROOT", "ANDROID_SDK_HOME", "ANDROID_AVD_HOME", "HOME"]
+
+  return keys
+    .map((key) => (env[key] ? `${key}=${env[key]}` : undefined))
+    .filter((value) => typeof value === "string")
 }
