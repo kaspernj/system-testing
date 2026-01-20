@@ -613,7 +613,6 @@ export default class SystemTest {
       this.systemTestHttpServer = new SystemTestHttpServer({
         host: this._httpHost,
         port: this._httpPort,
-        connectHost: this._httpConnectHost,
         debug: this._debug,
         onError: this.onHttpServerError
       })
