@@ -50,3 +50,4 @@
 - Allow the Appium Android test script to infer the Android SDK path.
 - Add Android emulator setup steps to Peakflow for Appium runs.
 - Locate Android SDK tools dynamically in Peakflow setup.
+- Add a Node script to configure and boot the Android emulator for Peakflow.

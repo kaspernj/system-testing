@@ -1,13 +1,5 @@
 before_install:
-  - SDKMANAGER=$(ls -1 /usr/lib/android-sdk/cmdline-tools/*/bin/sdkmanager | head -n 1)
-  - AVDMANAGER=$(ls -1 /usr/lib/android-sdk/cmdline-tools/*/bin/avdmanager | head -n 1)
-  - sudo ANDROID_SDK_ROOT=/usr/lib/android-sdk $SDKMANAGER --licenses
-  - sudo ANDROID_SDK_ROOT=/usr/lib/android-sdk $SDKMANAGER "platform-tools" "platforms;android-33" "emulator" "system-images;android-33;google_apis;x86_64"
-  - ANDROID_SDK_ROOT=/usr/lib/android-sdk $AVDMANAGER list avd
-  - printf "no\n" | ANDROID_SDK_ROOT=/usr/lib/android-sdk $AVDMANAGER create avd -n system-test-android -k "system-images;android-33;google_apis;x86_64" -d "pixel_5"
-  - /usr/lib/android-sdk/emulator/emulator -avd system-test-android -no-window -no-audio -gpu swiftshader_indirect -no-snapshot-save -no-boot-anim &
-  - /usr/lib/android-sdk/platform-tools/adb wait-for-device
-  - /usr/lib/android-sdk/platform-tools/adb shell getprop sys.boot_completed
+  - node scripts/setup-android-emulator.js
 before_script:
   - npm install
   - cd spec/dummy && npm install
