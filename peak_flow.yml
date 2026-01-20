@@ -4,7 +4,7 @@ before_script:
   - npm install
   - cd spec/dummy && npm install
 devices:
-  - /dev/kvm
+  - /dev/kvm:/dev/kvm
 builds:
   build_1:
     name: Default checks
