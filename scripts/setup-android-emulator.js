@@ -41,8 +41,8 @@ function ensurePackages() {
 /** @returns {void} */
 function ensureAvd() {
   console.log(`[android] Ensuring AVD ${avdName}`)
-  const listResult = run(avdmanagerPath, ["list", "avd"], {env: sdkEnv()})
-  const output = listResult.stdout
+  const listResult = run(avdmanagerPath, ["list", "avd"], {env: sdkEnv(), captureOutput: true})
+  const output = listResult.stdout ?? ""
 
   if (output.includes(`Name: ${avdName}`)) {
     console.log(`[android] AVD ${avdName} already exists`)
@@ -140,18 +140,19 @@ function runWithYes(args, {sudo}) {
 /**
  * @param {string} command
  * @param {string[]} args
- * @param {{sudo?: boolean, env?: Record<string, string | undefined>, input?: string}} [options]
+ * @param {{sudo?: boolean, env?: Record<string, string | undefined>, input?: string, captureOutput?: boolean}} [options]
  * @returns {import("node:child_process").SpawnSyncReturns<string>}
  */
-function run(command, args, {sudo = false, env = process.env, input} = {}) {
+function run(command, args, {sudo = false, env = process.env, input, captureOutput = false} = {}) {
   const fullCommand = sudo ? sudoPrefix({sudo: true}) : command
   const fullArgs = sudo ? [command, ...args] : args
   console.log(`[android] ${fullCommand} ${fullArgs.join(" ")}`)
+  const stdio = captureOutput ? ["pipe", "pipe", "inherit"] : ["pipe", "inherit", "inherit"]
   const result = spawnSync(fullCommand, fullArgs, {
     encoding: "utf-8",
     env,
     input,
-    stdio: ["pipe", "inherit", "inherit"]
+    stdio
   })
 
   if (result.status !== 0) {
