@@ -4,7 +4,7 @@ import {spawn, spawnSync} from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 
-const sdkRoot = resolveSdkRoot()
+const sdkRoot = ensureSdkRoot()
 const {sdkmanagerPath, avdmanagerPath} = resolveCmdlineTools(sdkRoot)
 const emulatorPath = path.join(sdkRoot, "emulator", "emulator")
 const adbPath = path.join(sdkRoot, "platform-tools", "adb")
@@ -162,20 +162,45 @@ function sdkEnv() {
 }
 
 /** @returns {string} */
+function ensureSdkRoot() {
+  const resolved = resolveSdkRoot()
+
+  if (resolved) return resolved
+
+  installSdkPackages()
+
+  const resolvedAfterInstall = resolveSdkRoot()
+
+  if (resolvedAfterInstall) return resolvedAfterInstall
+
+  throw new Error("Android SDK root not found. Set ANDROID_SDK_ROOT or ANDROID_HOME.")
+}
+
+/** @returns {string | undefined} */
 function resolveSdkRoot() {
   const candidates = [
     process.env.ANDROID_SDK_ROOT,
     process.env.ANDROID_HOME,
-    "/usr/lib/android-sdk"
+    "/usr/lib/android-sdk",
+    "/usr/local/android-sdk",
+    "/opt/android-sdk"
   ].filter(Boolean)
 
-  const found = candidates.find((candidate) => fs.existsSync(candidate))
+  return candidates.find((candidate) => fs.existsSync(candidate))
+}
 
-  if (!found) {
-    throw new Error("Android SDK root not found. Set ANDROID_SDK_ROOT or ANDROID_HOME.")
-  }
+/** @returns {void} */
+function installSdkPackages() {
+  const packages = [
+    "android-sdk",
+    "android-sdk-platform-tools",
+    "android-sdk-emulator",
+    "android-sdk-build-tools",
+    "android-sdk-cmdline-tools"
+  ]
 
-  return found
+  run("apt-get", ["update"], {sudo: true})
+  run("apt-get", ["install", "-y", ...packages], {sudo: true})
 }
 
 /**
