@@ -62,4 +62,5 @@
 - Create AVDs with sudo and permissive AVD home permissions in CI containers.
 - Poll for emulator boot completion with a timeout in the setup script.
 - Allow specifying an HTTP connect host for emulator access in Appium runs.
+- Start the adb server as the build user so Appium can see emulator devices.
 - Keep HTTP server health checks on the host even when the driver connects via a different host.
