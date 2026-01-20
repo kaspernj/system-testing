@@ -5,7 +5,10 @@ import fs from "node:fs"
 import path from "node:path"
 
 const sdkRoot = ensureSdkRoot()
+console.log(`[android] Using SDK root: ${sdkRoot}`)
 const {sdkmanagerPath, avdmanagerPath} = ensureCmdlineTools(sdkRoot)
+console.log(`[android] sdkmanager: ${sdkmanagerPath}`)
+console.log(`[android] avdmanager: ${avdmanagerPath}`)
 const emulatorPath = path.join(sdkRoot, "emulator", "emulator")
 const adbPath = path.join(sdkRoot, "platform-tools", "adb")
 const avdName = process.env.ANDROID_AVD_NAME ?? "system-test-android"
@@ -30,19 +33,23 @@ ensureBootCompleted()
 
 /** @returns {void} */
 function ensurePackages() {
+  console.log("[android] Ensuring SDK packages")
   runWithYes(["--licenses"], {sudo: true})
   runSdkManager(packages, {sudo: true})
 }
 
 /** @returns {void} */
 function ensureAvd() {
+  console.log(`[android] Ensuring AVD ${avdName}`)
   const listResult = run(avdmanagerPath, ["list", "avd"], {env: sdkEnv()})
   const output = listResult.stdout
 
   if (output.includes(`Name: ${avdName}`)) {
+    console.log(`[android] AVD ${avdName} already exists`)
     return
   }
 
+  console.log(`[android] Creating AVD ${avdName}`)
   run(avdmanagerPath, ["create", "avd", "-n", avdName, "-k", systemImage, "-d", avdDevice], {
     env: sdkEnv(),
     input: "no\n"
@@ -51,6 +58,7 @@ function ensureAvd() {
 
 /** @returns {void} */
 function startEmulator() {
+  console.log(`[android] Starting emulator ${avdName}`)
   if (!fs.existsSync(emulatorPath)) {
     throw new Error(`Emulator binary not found at ${emulatorPath}`)
   }
@@ -68,7 +76,7 @@ function startEmulator() {
 
   const child = spawn(emulatorPath, emulatorArgs, {
     env: sdkEnv(),
-    stdio: "ignore",
+    stdio: "inherit",
     detached: true
   })
 
@@ -77,6 +85,7 @@ function startEmulator() {
 
 /** @returns {void} */
 function waitForDevice() {
+  console.log("[android] Waiting for adb device")
   if (!fs.existsSync(adbPath)) {
     throw new Error(`adb not found at ${adbPath}`)
   }
@@ -86,6 +95,7 @@ function waitForDevice() {
 
 /** @returns {void} */
 function ensureBootCompleted() {
+  console.log("[android] Checking boot completion")
   if (!fs.existsSync(adbPath)) {
     throw new Error(`adb not found at ${adbPath}`)
   }
@@ -104,6 +114,7 @@ function ensureBootCompleted() {
  * @returns {void}
  */
 function runSdkManager(args, {sudo}) {
+  console.log(`[android] sdkmanager ${args.join(" ")}`)
   run(sdkmanagerPath, args, {sudo, env: sdkEnv()})
 }
 
@@ -114,10 +125,15 @@ function runSdkManager(args, {sudo}) {
  */
 function runWithYes(args, {sudo}) {
   const command = `${sudoPrefix({sudo})} "${sdkmanagerPath}" ${args.join(" ")}`
-  const result = spawnSync("bash", ["-lc", `yes | ${command}`], {env: sdkEnv(), encoding: "utf-8"})
+  console.log(`[android] yes | ${command}`)
+  const result = spawnSync("bash", ["-lc", `yes | ${command}`], {
+    env: sdkEnv(),
+    encoding: "utf-8",
+    stdio: "inherit"
+  })
 
   if (result.status !== 0) {
-    throw new Error(result.stderr || `sdkmanager failed with exit code ${result.status}`)
+    throw new Error(`sdkmanager failed with exit code ${result.status}`)
   }
 }
 
@@ -130,15 +146,16 @@ function runWithYes(args, {sudo}) {
 function run(command, args, {sudo = false, env = process.env, input} = {}) {
   const fullCommand = sudo ? sudoPrefix({sudo: true}) : command
   const fullArgs = sudo ? [command, ...args] : args
+  console.log(`[android] ${fullCommand} ${fullArgs.join(" ")}`)
   const result = spawnSync(fullCommand, fullArgs, {
     encoding: "utf-8",
     env,
     input,
-    stdio: ["pipe", "pipe", "pipe"]
+    stdio: ["pipe", "inherit", "inherit"]
   })
 
   if (result.status !== 0) {
-    throw new Error(result.stderr || `Command failed: ${fullCommand} ${fullArgs.join(" ")}`)
+    throw new Error(`Command failed: ${fullCommand} ${fullArgs.join(" ")}`)
   }
 
   return result
@@ -191,6 +208,7 @@ function resolveSdkRoot() {
 
 /** @returns {void} */
 function installSdkPackages() {
+  console.log("[android] Installing SDK packages via apt")
   run("mkdir", ["-p", "/usr/lib/android-sdk"], {sudo: true})
   const packages = [
     "android-sdk",
@@ -212,6 +230,7 @@ function ensureCmdlineTools(root) {
   try {
     return resolveCmdlineTools(root)
   } catch {
+    console.log("[android] cmdline-tools missing, downloading")
     installCmdlineTools(root)
   }
 
@@ -249,6 +268,7 @@ function resolveCmdlineTools(root) {
  * @returns {void}
  */
 function installCmdlineTools(root) {
+  console.log("[android] Installing cmdline-tools")
   const toolsUrl = "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
   const downloadPath = "/tmp/android-cmdline-tools.zip"
   const extractPath = "/tmp/android-cmdline-tools"
