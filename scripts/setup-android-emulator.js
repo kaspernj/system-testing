@@ -20,6 +20,7 @@ const packages = [
   "emulator",
   systemImage
 ]
+const useSudoForEmulator = true
 
 if (!fs.existsSync(emulatorPath)) {
   ensurePackages()
@@ -27,7 +28,6 @@ if (!fs.existsSync(emulatorPath)) {
 
 ensurePackages()
 ensureAvd()
-ensureKvmAccess()
 startEmulator()
 waitForDevice()
 ensureBootCompleted()
@@ -75,7 +75,9 @@ function startEmulator() {
     "-no-boot-anim"
   ]
 
-  const child = spawn(emulatorPath, emulatorArgs, {
+  const command = useSudoForEmulator ? "sudo" : emulatorPath
+  const args = useSudoForEmulator ? [emulatorPath, ...emulatorArgs] : emulatorArgs
+  const child = spawn(command, args, {
     env: sdkEnv(),
     stdio: "inherit",
     detached: true
@@ -91,7 +93,7 @@ function waitForDevice() {
     throw new Error(`adb not found at ${adbPath}`)
   }
 
-  run(adbPath, ["wait-for-device"], {env: sdkEnv()})
+  run(adbPath, ["wait-for-device"], {env: sdkEnv(), sudo: useSudoForEmulator})
 }
 
 /** @returns {void} */
@@ -101,7 +103,7 @@ function ensureBootCompleted() {
     throw new Error(`adb not found at ${adbPath}`)
   }
 
-  const result = run(adbPath, ["shell", "getprop", "sys.boot_completed"], {env: sdkEnv()})
+  const result = run(adbPath, ["shell", "getprop", "sys.boot_completed"], {env: sdkEnv(), sudo: useSudoForEmulator, captureOutput: true})
   const value = result.stdout.trim()
 
   if (value !== "1") {
@@ -110,36 +112,6 @@ function ensureBootCompleted() {
 }
 
 /** @returns {void} */
-function ensureKvmAccess() {
-  if (!fs.existsSync("/dev/kvm")) {
-    console.log("[android] /dev/kvm is not present, skipping permission setup")
-    return
-  }
-
-  const kvmGroup = findGroupId("kvm")
-  const username = process.env.USER
-
-  if (!kvmGroup || !username) {
-    throw new Error("KVM group or current user is unavailable; cannot verify /dev/kvm permissions")
-  }
-
-  const groups = getUserGroups(username)
-
-  if (groups.includes("kvm")) {
-    console.log(`[android] ${username} already has kvm group access`)
-    return
-  }
-
-  console.log(`[android] Adding ${username} to kvm group`)
-  run("gpasswd", ["-a", username, "kvm"], {sudo: true})
-
-  const refreshedGroups = getUserGroups(username)
-
-  if (!refreshedGroups.includes("kvm")) {
-    throw new Error("User was added to the kvm group but the session has not been refreshed; log out/in or restart the build to use /dev/kvm")
-  }
-}
-
 /**
  * @param {string[]} args
  * @param {{sudo: boolean}} options
@@ -179,6 +151,7 @@ function run(command, args, {sudo = false, env = process.env, input, captureOutp
   const fullCommand = sudo ? sudoPrefix({sudo: true}) : command
   const fullArgs = sudo ? [command, ...args] : args
   console.log(`[android] ${fullCommand} ${fullArgs.join(" ")}`)
+  /** @type {import("node:child_process").StdioOptions} */
   const stdio = captureOutput ? ["pipe", "pipe", "inherit"] : ["pipe", "inherit", "inherit"]
   const result = spawnSync(fullCommand, fullArgs, {
     encoding: "utf-8",
@@ -234,7 +207,7 @@ function resolveSdkRoot() {
     "/usr/lib/android-sdk",
     "/usr/local/android-sdk",
     "/opt/android-sdk"
-  ].filter(Boolean)
+  ].filter((candidate) => typeof candidate === "string")
 
   return candidates.find((candidate) => fs.existsSync(candidate))
 }
@@ -259,35 +232,6 @@ function installSdkPackages() {
  * @param {string} groupName
  * @returns {string | undefined}
  */
-function findGroupId(groupName) {
-  const groupFile = "/etc/group"
-
-  if (!fs.existsSync(groupFile)) {
-    return undefined
-  }
-
-  const content = fs.readFileSync(groupFile, "utf-8")
-  const lines = content.split("\n")
-  const match = lines.find((line) => line.startsWith(`${groupName}:`))
-
-  if (!match) {
-    throw new Error("kvm group not found in /etc/group; create it and set /dev/kvm permissions before running the emulator")
-  }
-
-  return match
-}
-
-/**
- * @param {string} username
- * @returns {string[]}
- */
-function getUserGroups(username) {
-  const result = run("id", ["-Gn", username], {captureOutput: true})
-  const output = result.stdout ?? ""
-
-  return output.split(/\s+/).map((group) => group.trim()).filter(Boolean)
-}
-
 /**
  * @param {string} root
  * @returns {{sdkmanagerPath: string, avdmanagerPath: string}}
