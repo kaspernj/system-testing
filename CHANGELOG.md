@@ -57,3 +57,4 @@
 - Forward /dev/kvm into Peakflow builds for Android emulator support.
 - Move KVM device mapping into the Appium build config.
 - Attempt to add the build user to the kvm group during emulator setup.
+- Fail fast when KVM permissions are missing during emulator setup.

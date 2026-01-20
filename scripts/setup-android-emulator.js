@@ -120,8 +120,7 @@ function ensureKvmAccess() {
   const username = process.env.USER
 
   if (!kvmGroup || !username) {
-    console.log("[android] Unable to resolve kvm group or user for permission setup")
-    return
+    throw new Error("KVM group or current user is unavailable; cannot verify /dev/kvm permissions")
   }
 
   const groups = getUserGroups(username)
@@ -133,6 +132,12 @@ function ensureKvmAccess() {
 
   console.log(`[android] Adding ${username} to kvm group`)
   run("gpasswd", ["-a", username, "kvm"], {sudo: true})
+
+  const refreshedGroups = getUserGroups(username)
+
+  if (!refreshedGroups.includes("kvm")) {
+    throw new Error("User was added to the kvm group but the session has not been refreshed; log out/in or restart the build to use /dev/kvm")
+  }
 }
 
 /**
@@ -265,7 +270,9 @@ function findGroupId(groupName) {
   const lines = content.split("\n")
   const match = lines.find((line) => line.startsWith(`${groupName}:`))
 
-  if (!match) return undefined
+  if (!match) {
+    throw new Error("kvm group not found in /etc/group; create it and set /dev/kvm permissions before running the emulator")
+  }
 
   return match
 }
