@@ -53,3 +53,5 @@
 - Add a Node script to configure and boot the Android emulator for Peakflow.
 - Install Android SDK packages via apt when the SDK is missing in Peakflow.
 - Download Android cmdline-tools when they are missing in Peakflow.
+- Add 5s timeouts around screenshot, log, and HTML capture in system tests.
+- Forward /dev/kvm into Peakflow builds for Android emulator support.

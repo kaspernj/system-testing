@@ -179,7 +179,7 @@ export default class SystemTest {
       await resolvedCallback(systemTest)
       systemTest.debugLog("Run callback completed")
     } catch (error) {
-      systemTest.debugLog("Run error caught, taking screenshot")
+      systemTest.debugLog(`Run error caught, taking screenshot: ${error instanceof Error ? error.message : error}`)
       await systemTest.takeScreenshot()
 
       throw error
@@ -924,7 +924,7 @@ export default class SystemTest {
     await fs.mkdir(path, {recursive: true})
 
     this.debugLog("Getting screenshot image content")
-    const imageContent = await this.getDriverAdapter().takeScreenshot()
+    const imageContent = await timeout({timeout: 5000, errorMessage: "timeout while taking screenshot"}, async () => await this.getDriverAdapter().takeScreenshot())
 
     this.debugLog("Generating date variables")
     const now = new Date()
@@ -933,8 +933,8 @@ export default class SystemTest {
     const logsPath = `${path}/${moment(now).format("YYYY-MM-DD-HH-MM-SS")}.logs.txt`
 
     this.debugLog("Getting browser logs")
-    const logsText = await this.getBrowserLogs()
-    const html = await this.getHTML()
+    const logsText = await timeout({timeout: 5000, errorMessage: "timeout while reading browser logs"}, async () => await this.getBrowserLogs())
+    const html = await timeout({timeout: 5000, errorMessage: "timeout while reading page HTML"}, async () => await this.getHTML())
     const htmlPretty = prettify(html)
 
     this.debugLog("Writing files")
