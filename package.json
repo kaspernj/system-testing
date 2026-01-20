@@ -39,6 +39,7 @@
     "watch": "tsc -w"
   },
   "dependencies": {
+    "appium": "^3.1.2",
     "awaitery": "^1.0.12",
     "diggerize": "^1.0.9",
     "eventemitter3": "^5.0.1",
