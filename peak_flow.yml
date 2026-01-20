@@ -1,5 +1,5 @@
 before_install:
-  - node scripts/setup-android-emulator.js
+  - ANDROID_EMULATOR_STAGE=install node scripts/setup-android-emulator.js
 before_script:
   - npm install
   - cd spec/dummy && npm install
@@ -22,6 +22,7 @@ builds:
       SYSTEM_TEST_APPIUM_SERVER_ARGS: '{"allowInsecure":["uiautomator2:chromedriver_autodownload"]}'
       SYSTEM_TEST_APPIUM_CAPABILITIES: '{"platformName":"Android","appium:automationName":"UiAutomator2","appium:deviceName":"Android Emulator","browserName":"Chrome","appium:chromedriverAutodownload":true}'
     script:
+      - ANDROID_EMULATOR_STAGE=start node scripts/setup-android-emulator.js
       - npm run export:web
       - npx appium driver update uiautomator2 || npx appium driver install uiautomator2
       - npm test

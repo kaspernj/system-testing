@@ -63,4 +63,5 @@
 - Poll for emulator boot completion with a timeout in the setup script.
 - Allow specifying an HTTP connect host for emulator access in Appium runs.
 - Start the adb server as the build user so Appium can see emulator devices.
+- Split emulator setup into install and start stages for CI.
 - Keep HTTP server health checks on the host even when the driver connects via a different host.

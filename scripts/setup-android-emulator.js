@@ -24,17 +24,23 @@ const packages = [
 ]
 const useSudoForEmulator = true
 const useSudoForAdb = false
+const stage = process.env.ANDROID_EMULATOR_STAGE ?? "full"
 
-if (!fs.existsSync(emulatorPath)) {
+if (!fs.existsSync(emulatorPath) && stage !== "start") {
   ensurePackages()
 }
 
-ensurePackages()
-ensureAvd()
-ensureAdbServer()
-startEmulator()
-waitForDevice()
-ensureBootCompleted()
+if (stage !== "start") {
+  ensurePackages()
+  ensureAvd()
+}
+
+if (stage !== "install") {
+  ensureAdbServer()
+  startEmulator()
+  waitForDevice()
+  ensureBootCompleted()
+}
 
 /** @returns {void} */
 function ensurePackages() {
