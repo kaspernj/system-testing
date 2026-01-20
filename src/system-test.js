@@ -1147,19 +1147,27 @@ export default class SystemTest {
    * @returns {Promise<void>}
    */
   async takeScreenshot() {
+    this.debugLog("Getting path for screenshots")
     const path = `${process.cwd()}/tmp/screenshots`
 
+    this.debugLog(`Creating dir with recursive: ${path}`)
     await fs.mkdir(path, {recursive: true})
 
+    this.debugLog("Getting screenshot image content")
     const imageContent = await this.getDriver().takeScreenshot()
+
+    this.debugLog("Generating date variables")
     const now = new Date()
     const screenshotPath = `${path}/${moment(now).format("YYYY-MM-DD-HH-MM-SS")}.png`
     const htmlPath = `${path}/${moment(now).format("YYYY-MM-DD-HH-MM-SS")}.html`
     const logsPath = `${path}/${moment(now).format("YYYY-MM-DD-HH-MM-SS")}.logs.txt`
+
+    this.debugLog("Getting browser logs")
     const logsText = await this.getBrowserLogs()
     const html = await this.getHTML()
     const htmlPretty = prettify(html)
 
+    this.debugLog("Writing files")
     await fs.writeFile(htmlPath, htmlPretty)
     await fs.writeFile(logsPath, logsText.join("\n"))
     await fs.writeFile(screenshotPath, imageContent, "base64")
