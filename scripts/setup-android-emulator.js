@@ -111,11 +111,26 @@ function ensureBootCompleted() {
     throw new Error(`adb not found at ${adbPath}`)
   }
 
-  const result = run(adbPath, ["shell", "getprop", "sys.boot_completed"], {env: sdkEnv(), sudo: useSudoForEmulator, captureOutput: true})
-  const value = result.stdout.trim()
+  const startTime = Date.now()
+  const timeoutMs = 300000
 
-  if (value !== "1") {
-    throw new Error(`Android boot did not complete. sys.boot_completed=${value}`)
+  while (true) {
+    const result = run(adbPath, ["shell", "getprop", "sys.boot_completed"], {env: sdkEnv(), sudo: useSudoForEmulator, captureOutput: true})
+    const value = result.stdout.trim()
+
+    if (value === "1") {
+      console.log("[android] Boot completed")
+      return
+    }
+
+    const elapsedMs = Date.now() - startTime
+
+    if (elapsedMs >= timeoutMs) {
+      throw new Error(`Android boot did not complete after ${Math.round(timeoutMs / 1000)}s. sys.boot_completed=${value}`)
+    }
+
+    console.log("[android] Waiting for boot completion")
+    sleep(5)
   }
 }
 
@@ -302,6 +317,14 @@ function installCmdlineTools(root) {
   run("mkdir", ["-p", cmdlineRoot], {sudo: true})
   run("rm", ["-rf", path.join(cmdlineRoot, "latest")], {sudo: true})
   run("mv", [path.join(extractPath, "cmdline-tools"), path.join(cmdlineRoot, "latest")], {sudo: true})
+}
+
+/**
+ * @param {number} seconds
+ * @returns {void}
+ */
+function sleep(seconds) {
+  run("sleep", [String(seconds)])
 }
 
 /**

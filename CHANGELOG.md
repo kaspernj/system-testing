@@ -60,3 +60,4 @@
 - Run emulator and adb with sudo in container environments.
 - Share ANDROID_AVD_HOME across sudo/non-sudo runs to avoid missing AVDs.
 - Create AVDs with sudo and permissive AVD home permissions in CI containers.
+- Poll for emulator boot completion with a timeout in the setup script.
