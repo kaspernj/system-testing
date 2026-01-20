@@ -27,6 +27,7 @@ if (!fs.existsSync(emulatorPath)) {
 
 ensurePackages()
 ensureAvd()
+ensureKvmAccess()
 startEmulator()
 waitForDevice()
 ensureBootCompleted()
@@ -106,6 +107,32 @@ function ensureBootCompleted() {
   if (value !== "1") {
     throw new Error(`Android boot did not complete. sys.boot_completed=${value}`)
   }
+}
+
+/** @returns {void} */
+function ensureKvmAccess() {
+  if (!fs.existsSync("/dev/kvm")) {
+    console.log("[android] /dev/kvm is not present, skipping permission setup")
+    return
+  }
+
+  const kvmGroup = findGroupId("kvm")
+  const username = process.env.USER
+
+  if (!kvmGroup || !username) {
+    console.log("[android] Unable to resolve kvm group or user for permission setup")
+    return
+  }
+
+  const groups = getUserGroups(username)
+
+  if (groups.includes("kvm")) {
+    console.log(`[android] ${username} already has kvm group access`)
+    return
+  }
+
+  console.log(`[android] Adding ${username} to kvm group`)
+  run("gpasswd", ["-a", username, "kvm"], {sudo: true})
 }
 
 /**
@@ -221,6 +248,37 @@ function installSdkPackages() {
 
   run("apt-get", ["update"], {sudo: true})
   run("apt-get", ["install", "-y", ...packages], {sudo: true})
+}
+
+/**
+ * @param {string} groupName
+ * @returns {string | undefined}
+ */
+function findGroupId(groupName) {
+  const groupFile = "/etc/group"
+
+  if (!fs.existsSync(groupFile)) {
+    return undefined
+  }
+
+  const content = fs.readFileSync(groupFile, "utf-8")
+  const lines = content.split("\n")
+  const match = lines.find((line) => line.startsWith(`${groupName}:`))
+
+  if (!match) return undefined
+
+  return match
+}
+
+/**
+ * @param {string} username
+ * @returns {string[]}
+ */
+function getUserGroups(username) {
+  const result = run("id", ["-Gn", username], {captureOutput: true})
+  const output = result.stdout ?? ""
+
+  return output.split(/\s+/).map((group) => group.trim()).filter(Boolean)
 }
 
 /**

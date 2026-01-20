@@ -55,3 +55,5 @@
 - Download Android cmdline-tools when they are missing in Peakflow.
 - Add 5s timeouts around screenshot, log, and HTML capture in system tests.
 - Forward /dev/kvm into Peakflow builds for Android emulator support.
+- Move KVM device mapping into the Appium build config.
+- Attempt to add the build user to the kvm group during emulator setup.
