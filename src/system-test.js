@@ -11,8 +11,8 @@ import SystemTestHttpServer from "./system-test-http-server.js"
 import {waitFor} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
 import {WebSocketServer} from "ws"
-import AppiumDriver from "./drivers/appium-driver.js"
 import SeleniumDriver from "./drivers/selenium-driver.js"
+import AppiumDriver from "./drivers/appium-driver.js"
 
 /**
  * @typedef {object} SystemTestArgs
@@ -20,6 +20,7 @@ import SeleniumDriver from "./drivers/selenium-driver.js"
  * @property {number} [port] Port for the app server.
  * @property {string} [httpHost] Hostname for the static HTTP server.
  * @property {number} [httpPort] Port for the static HTTP server.
+ * @property {string} [httpConnectHost] Hostname used by the driver to reach the HTTP server.
  * @property {boolean} [debug] Enable debug logging.
  * @property {(error: any) => boolean} [errorFilter] Filter for browser errors (return false to ignore).
  * @property {Record<string, any>} [urlArgs] Query params appended to the root path.
@@ -190,7 +191,7 @@ export default class SystemTest {
    * Creates a new SystemTest instance
    * @param {SystemTestArgs} [args]
    */
-  constructor({host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, debug = false, errorFilter, urlArgs, driver, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
+  constructor({host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, httpConnectHost, debug = false, errorFilter, urlArgs, driver, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
     const restArgsKeys = Object.keys(restArgs)
 
     if (restArgsKeys.length > 0) {
@@ -201,6 +202,7 @@ export default class SystemTest {
     this._port = port
     this._httpHost = httpHost
     this._httpPort = httpPort
+    this._httpConnectHost = httpConnectHost
     this._debug = debug
     this._errorFilter = errorFilter
     this._urlArgs = urlArgs
@@ -604,12 +606,14 @@ export default class SystemTest {
       this.currentUrl = `http://${this._host}:${this._port}`
       this.debugLog(`Using expo-dev-server at ${this.currentUrl}`)
     } else if (process.env.SYSTEM_TEST_HOST == "dist") {
-      this.currentUrl = `http://${this._httpHost}:${this._httpPort}`
+      const connectHost = this._httpConnectHost ?? this._httpHost
+      this.currentUrl = `http://${connectHost}:${this._httpPort}`
 
       this.debugLog(`Spawning HTTP server for dist on ${this._httpHost}:${this._httpPort}`)
       this.systemTestHttpServer = new SystemTestHttpServer({
         host: this._httpHost,
         port: this._httpPort,
+        connectHost: this._httpConnectHost,
         debug: this._debug,
         onError: this.onHttpServerError
       })

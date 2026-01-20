@@ -56,6 +56,7 @@ export default class SystemTestHelper {
         port: 3601,
         httpHost: "0.0.0.0",
         httpPort: 3602,
+        httpConnectHost: process.env.SYSTEM_TEST_HTTP_CONNECT_HOST,
         errorFilter: (error) => {
           if (typeof error?.value?.[0] === "string" && error.value[0].includes("Uncaught Error: Minified React error #418; visit")) return false
           return true

@@ -6,8 +6,6 @@ before_script:
 builds:
   build_1:
     name: Default checks
-    devices:
-      - /dev/kvm:/dev/kvm
     script:
       - npm run all-checks
   build_2:
@@ -16,6 +14,7 @@ builds:
       - /dev/kvm:/dev/kvm
     environment:
       ANDROID_SDK_ROOT: /usr/lib/android-sdk
+      SYSTEM_TEST_HTTP_CONNECT_HOST: 10.0.2.2
       SYSTEM_TEST_HOST: dist
       SYSTEM_TEST_DRIVER: appium
       SYSTEM_TEST_APPIUM_DRIVERS: uiautomator2
