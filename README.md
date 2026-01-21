@@ -94,6 +94,8 @@ If you already run an Appium server, provide `serverUrl` instead of `serverArgs`
 
 `useSystemTest` wires your Expo app to the system-testing runner: it listens for WebSocket commands, initializes the browser helper, and lets tests navigate or reset state. Add it near the root layout of your Expo Router app (for example in `_layout.tsx` or a top-level provider component).
 
+To enable system tests in native builds, set `EXPO_PUBLIC_SYSTEM_TEST=true` at build time (and optionally `EXPO_PUBLIC_SYSTEM_TEST_HOST` to reach the test runner from a device/emulator). For native Appium runs, set `SYSTEM_TEST_HOST=native` in the test environment and point Appium at your APK.
+
 Minimal example:
 
 ```jsx

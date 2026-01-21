@@ -602,7 +602,12 @@ export default class SystemTest {
    */
   async start() {
     this.debugLog("Start called")
-    if (process.env.SYSTEM_TEST_HOST == "expo-dev-server") {
+    const isNativeHost = process.env.SYSTEM_TEST_HOST === "native"
+
+    if (isNativeHost) {
+      this.currentUrl = "native://"
+      this.debugLog("Using native app host")
+    } else if (process.env.SYSTEM_TEST_HOST == "expo-dev-server") {
       this.currentUrl = `http://${this._host}:${this._port}`
       this.debugLog(`Using expo-dev-server at ${this.currentUrl}`)
     } else if (process.env.SYSTEM_TEST_HOST == "dist") {
@@ -623,7 +628,7 @@ export default class SystemTest {
       await this.systemTestHttpServer.assertReachable({timeoutMs: this.getTimeouts()})
       this.debugLog("HTTP server started")
     } else {
-      throw new Error("Please set SYSTEM_TEST_HOST to 'expo-dev-server' or 'dist'")
+      throw new Error("Please set SYSTEM_TEST_HOST to 'expo-dev-server', 'dist', or 'native'")
     }
 
     this.driverAdapter.setBaseUrl(this.currentUrl)
@@ -639,19 +644,29 @@ export default class SystemTest {
     await this.startWebSocketServer()
     this.debugLog("WebSocket server started")
 
-    // Visit the root page and wait for Expo to be loaded and the app to appear
-    this.debugLog("Visiting root path")
-    const rootPath = this.getRootPath()
-    await this.driverVisit(rootPath)
-    this.debugLog(`Visited root path ${rootPath}`)
+    if (!isNativeHost) {
+      // Visit the root page and wait for Expo to be loaded and the app to appear
+      this.debugLog("Visiting root path")
+      const rootPath = this.getRootPath()
+      await this.driverVisit(rootPath)
+      this.debugLog(`Visited root path ${rootPath}`)
 
-    try {
-      await this.find("body > #root", {useBaseSelector: false})
-      await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true})
-      this.debugLog("Found root and systemTestingComponent")
-    } catch (error) {
-      await this.takeScreenshot()
-      throw error
+      try {
+        await this.find("body > #root", {useBaseSelector: false})
+        await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true})
+        this.debugLog("Found root and systemTestingComponent")
+      } catch (error) {
+        await this.takeScreenshot()
+        throw error
+      }
+    } else {
+      try {
+        await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true})
+        this.debugLog("Found systemTestingComponent for native app")
+      } catch (error) {
+        await this.takeScreenshot()
+        throw error
+      }
     }
 
     // Wait for client to connect
@@ -662,7 +677,9 @@ export default class SystemTest {
     this.debugLog("Client WebSocket connected")
 
     this._started = true
-    this.setBaseSelector("[data-testid='systemTestingComponent'][data-focussed='true']")
+    if (!isNativeHost) {
+      this.setBaseSelector("[data-testid='systemTestingComponent'][data-focussed='true']")
+    }
     this.debugLog("Start completed")
   }
 

@@ -5,6 +5,8 @@ import SystemTestHelper from "./support/system-test-helper.js"
 
 const systemTestHelper = new SystemTestHelper()
 systemTestHelper.installJasmineHooks()
+const isNative = process.env.SYSTEM_TEST_NATIVE === "true"
+const itIfWeb = isNative ? it.skip : it
 
 describe("System test", () => {
   it("shows the welcome text on the front page", async () => {
@@ -14,7 +16,7 @@ describe("System test", () => {
     })
   })
 
-  it("evaluates browser JavaScript via Scoundrel", async () => {
+  itIfWeb("evaluates browser JavaScript via Scoundrel", async () => {
     await SystemTest.run(async (runningSystemTest) => {
       const scoundrelClient = await runningSystemTest.getScoundrelClient()
       const evalProxy = await scoundrelClient.eval("return ({ sum: 2 + 3, href: window.location.href })")
@@ -27,7 +29,7 @@ describe("System test", () => {
     })
   })
 
-  it("reinitializes and can keep running", async () => {
+  itIfWeb("reinitializes and can keep running", async () => {
     const systemTest = systemTestHelper.getSystemTest()
 
     await systemTest.visit("/")
@@ -49,7 +51,7 @@ describe("System test", () => {
     await systemTest.findByTestID("welcomeText")
   })
 
-  it("dismisses only the matching notification message", async () => {
+  itIfWeb("dismisses only the matching notification message", async () => {
     await SystemTest.run(async (runningSystemTest) => {
       const scoundrelClient = await runningSystemTest.getScoundrelClient()
 

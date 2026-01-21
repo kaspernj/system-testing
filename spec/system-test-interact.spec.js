@@ -5,6 +5,8 @@ import SystemTestHelper from "./support/system-test-helper.js"
 
 const systemTestHelper = new SystemTestHelper()
 systemTestHelper.installJasmineHooks()
+const isNative = process.env.SYSTEM_TEST_NATIVE === "true"
+const itIfWeb = isNative ? it.skip : it
 
 describe("SystemTest interact", () => {
   it("retries on StaleElementReferenceError", async () => {
@@ -40,7 +42,7 @@ describe("SystemTest interact", () => {
     }
   })
 
-  it("accepts selector objects with finder args", async () => {
+  itIfWeb("accepts selector objects with finder args", async () => {
     await SystemTest.run(async (runningSystemTest) => {
       const originalBaseSelector = runningSystemTest.getBaseSelector()
 

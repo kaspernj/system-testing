@@ -68,3 +68,8 @@
 - Remove unsupported emulator args that caused startup failures in CI.
 - Use the current page host (or systemTestHost query param) for system test WebSocket connections.
 - Use the WebSocket protocol for Scoundrel connections from the browser helper.
+- Rename the Appium web build and add a separate Appium Android build in Peakflow.
+- Install OpenJDK 17 in Android emulator setup for native app builds.
+- Allow native runs by enabling system tests via Expo public env vars.
+- Skip web-only specs when running native Appium tests.
+- Add a native Appium Android Peakflow build that prebuilds and installs the dummy APK.

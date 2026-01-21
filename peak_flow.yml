@@ -9,7 +9,7 @@ builds:
     script:
       - npm run all-checks
   build_2:
-    name: Appium Android
+    name: Appium Web (Android Chrome)
     devices:
       - /dev/kvm:/dev/kvm
     environment:
@@ -24,5 +24,26 @@ builds:
     script:
       - ANDROID_EMULATOR_STAGE=start node scripts/setup-android-emulator.js
       - npm run export:web
+      - npx appium driver update uiautomator2 || npx appium driver install uiautomator2
+      - npm test
+  build_3:
+    name: Appium Android
+    devices:
+      - /dev/kvm:/dev/kvm
+    environment:
+      ANDROID_SDK_ROOT: /usr/lib/android-sdk
+      ANDROID_HOME: /usr/lib/android-sdk
+      SYSTEM_TEST_HOST: native
+      SYSTEM_TEST_NATIVE: "true"
+      EXPO_PUBLIC_SYSTEM_TEST: "true"
+      EXPO_PUBLIC_SYSTEM_TEST_HOST: 10.0.2.2
+      SYSTEM_TEST_DRIVER: appium
+      SYSTEM_TEST_APPIUM_DRIVERS: uiautomator2
+      SYSTEM_TEST_APPIUM_CAPABILITIES: '{"platformName":"Android","appium:automationName":"UiAutomator2","appium:deviceName":"Android Emulator","appium:autoGrantPermissions":true,"appium:appWaitActivity":"*","appium:app":"spec/dummy/android/app/build/outputs/apk/debug/app-debug.apk"}'
+    script:
+      - ANDROID_EMULATOR_STAGE=start node scripts/setup-android-emulator.js
+      - cd spec/dummy && EXPO_PUBLIC_SYSTEM_TEST=true EXPO_PUBLIC_SYSTEM_TEST_HOST=10.0.2.2 npx expo prebuild --platform android --no-install --non-interactive
+      - cd spec/dummy/android && ./gradlew assembleDebug
+      - cd /home/build/project
       - npx appium driver update uiautomator2 || npx appium driver install uiautomator2
       - npm test

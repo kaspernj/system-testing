@@ -253,6 +253,7 @@ function installSdkPackages() {
     "android-sdk",
     "android-sdk-platform-tools",
     "android-sdk-build-tools",
+    "openjdk-17-jdk",
     "curl",
     "unzip"
   ]

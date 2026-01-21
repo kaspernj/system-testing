@@ -66,6 +66,8 @@ export default class SystemTestBrowserHelper {
   }
 
   connectOnError() {
+    if (!window?.addEventListener) return
+
     window.addEventListener("error", (event) => {
       this.handleError({
         type: "error",
@@ -80,6 +82,8 @@ export default class SystemTestBrowserHelper {
   }
 
   connectUnhandledRejection() {
+    if (!window?.addEventListener) return
+
     window.addEventListener("unhandledrejection", (event) => {
       this.handleError({
         type: "unhandledrejection",
@@ -138,6 +142,9 @@ export default class SystemTestBrowserHelper {
     const location = globalThis.location
     const defaultHost = location?.hostname || "localhost"
     const search = location?.search
+    const envHost = process.env.EXPO_PUBLIC_SYSTEM_TEST_HOST
+
+    if (envHost) return envHost
 
     if (!search) return defaultHost
 
