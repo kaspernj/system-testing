@@ -87,3 +87,5 @@
 - Set GRADLE_USER_HOME to a writable directory in Peakflow.
 - Stop Appium web tests from configuring Android in the npm script.
 - Install default JDK in Peakflow before Android SDK setup.
+- Skip Android setup for the Peakflow web build.
+- Run the Peakflow web Appium build without Android emulator setup.
