@@ -7,6 +7,7 @@ before_install:
 before_script:
   - npm install
   - cd spec/dummy && npm install
+mem_limit: 16384m
 builds:
   build_1:
     name: Default checks
