@@ -91,3 +91,4 @@
 - Run the Peakflow web Appium build without Android emulator setup.
 - Install chromedriver for the Appium Chromium build in Peakflow.
 - Install the Chromium Appium driver before downloading Chromedriver in Peakflow.
+- Set Chrome binary and headless args for the Peakflow Appium web build.
