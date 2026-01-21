@@ -15,11 +15,13 @@ const avdName = process.env.ANDROID_AVD_NAME ?? "system-test-android"
 const systemImage = process.env.ANDROID_SYSTEM_IMAGE ?? "system-images;android-33;google_apis;x86_64"
 const avdDevice = process.env.ANDROID_AVD_DEVICE ?? "pixel_5"
 const avdHome = process.env.ANDROID_AVD_HOME ?? "/tmp/android-avd"
+const ndkVersion = process.env.ANDROID_NDK_VERSION
 const packages = [
   "platform-tools",
   "platforms;android-33",
   "emulator",
-  systemImage
+  systemImage,
+  ...(ndkVersion ? [`ndk;${ndkVersion}`] : [])
 ]
 const useSudoForEmulator = true
 const useSudoForAdb = false

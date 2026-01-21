@@ -73,3 +73,4 @@
 - Allow native runs by enabling system tests via Expo public env vars.
 - Skip web-only specs when running native Appium tests.
 - Add a native Appium Android Peakflow build that prebuilds and installs the dummy APK.
+- Allow the emulator setup to install a specific NDK version for native builds.

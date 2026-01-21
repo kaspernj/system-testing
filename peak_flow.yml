@@ -33,6 +33,7 @@ builds:
     environment:
       ANDROID_SDK_ROOT: /usr/lib/android-sdk
       ANDROID_HOME: /usr/lib/android-sdk
+      ANDROID_NDK_VERSION: 27.1.12297006
       SYSTEM_TEST_HOST: native
       SYSTEM_TEST_NATIVE: "true"
       EXPO_PUBLIC_SYSTEM_TEST: "true"
