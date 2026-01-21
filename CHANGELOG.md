@@ -67,3 +67,4 @@
 - Keep HTTP server health checks on the host even when the driver connects via a different host.
 - Remove unsupported emulator args that caused startup failures in CI.
 - Use the current page host (or systemTestHost query param) for system test WebSocket connections.
+- Use the WebSocket protocol for Scoundrel connections from the browser helper.

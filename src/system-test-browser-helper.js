@@ -34,7 +34,7 @@ export default class SystemTestBrowserHelper {
 
   async startScoundrel() {
     const host = this.getSystemTestHost()
-    this.scoundrelWs = new WebSocket(`http://${host}:8090`)
+    this.scoundrelWs = new WebSocket(`ws://${host}:8090`)
 
     // @ts-expect-error
     this.scoundrelClientWebSocket = new ClientWebSocket(this.scoundrelWs)
