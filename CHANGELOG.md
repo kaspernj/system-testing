@@ -93,3 +93,6 @@
 - Install the Chromium Appium driver before downloading Chromedriver in Peakflow.
 - Set Chrome binary and headless args for the Peakflow Appium web build.
 - Install Google Chrome for the Peakflow Appium web build.
+- Move Peakflow Chrome apt installs to global before_install.
+- Limit Gradle memory and disable the daemon for the Peakflow Appium Android build.
+- Use a lowercase platformName for the Appium Chromium build caps.
