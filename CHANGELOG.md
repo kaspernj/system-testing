@@ -74,3 +74,4 @@
 - Skip web-only specs when running native Appium tests.
 - Add a native Appium Android Peakflow build that prebuilds and installs the dummy APK.
 - Allow the emulator setup to install a specific NDK version for native builds.
+- Allow extra Android SDK packages to be installed during emulator setup.

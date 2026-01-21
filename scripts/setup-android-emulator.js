@@ -16,12 +16,16 @@ const systemImage = process.env.ANDROID_SYSTEM_IMAGE ?? "system-images;android-3
 const avdDevice = process.env.ANDROID_AVD_DEVICE ?? "pixel_5"
 const avdHome = process.env.ANDROID_AVD_HOME ?? "/tmp/android-avd"
 const ndkVersion = process.env.ANDROID_NDK_VERSION
+const extraPackages = process.env.ANDROID_SDK_PACKAGES
+  ? process.env.ANDROID_SDK_PACKAGES.split(",").map((value) => value.trim()).filter(Boolean)
+  : []
 const packages = [
   "platform-tools",
   "platforms;android-33",
   "emulator",
   systemImage,
-  ...(ndkVersion ? [`ndk;${ndkVersion}`] : [])
+  ...(ndkVersion ? [`ndk;${ndkVersion}`] : []),
+  ...extraPackages
 ]
 const useSudoForEmulator = true
 const useSudoForAdb = false
