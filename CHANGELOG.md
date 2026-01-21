@@ -103,4 +103,4 @@
 - Ensure Appium web build re-links /usr/bin/node before installing Chromedriver.
 - Skip relinking /usr/bin/node when it already matches.
 - Run Appium by default in the `test:appium:web` npm script.
-- Install OpenJDK 17 and set JAVA_HOME for the Appium Android build.
+- Install OpenJDK 17 and set JAVA_HOME for the Appium Android build (without overriding PATH).

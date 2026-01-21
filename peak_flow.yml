@@ -1,5 +1,5 @@
 before_install:
-  - sudo apt-get update && sudo apt-get install -y ca-certificates default-jdk wget
+  - sudo apt-get update && sudo apt-get install -y ca-certificates openjdk-17-jdk wget
   - if [ ! -x /usr/bin/node ]; then sudo ln -sf "$(command -v node)" /usr/bin/node; fi
   - wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
   - sudo apt-get install -y ./google-chrome-stable_current_amd64.deb
@@ -33,6 +33,7 @@ builds:
       ANDROID_SDK_ROOT: /tmp/android-sdk
       ANDROID_HOME: /tmp/android-sdk
       ANDROID_SDK_HOME: /tmp/android-sdk-home
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
       GRADLE_USER_HOME: /tmp/gradle-home
       GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dorg.gradle.jvmargs=-Xmx3g -Dkotlin.daemon.jvm.options=-Xmx2g"
       ANDROID_GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dorg.gradle.jvmargs=-Xmx3g -Dkotlin.daemon.jvm.options=-Xmx2g"
