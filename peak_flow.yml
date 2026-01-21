@@ -16,8 +16,8 @@ builds:
       SYSTEM_TEST_APPIUM_CAPABILITIES: '{"platformName":"Linux","browserName":"chrome","appium:automationName":"Chromium","appium:autodownloadEnabled":true}'
     script:
       - npm run export:web
-      - npx appium driver run chromium install-chromedriver
       - npx appium driver update chromium || npx appium driver install chromium
+      - npx appium driver run chromium install-chromedriver
       - npm test
   build_3:
     name: Appium Android
