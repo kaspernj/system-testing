@@ -101,3 +101,4 @@
 - Force Selenium for Peakflow default checks to avoid Appium leakage.
 - Ensure npx can run chromium's chromedriver installer in Peakflow.
 - Ensure Appium web build re-links /usr/bin/node before installing Chromedriver.
+- Skip relinking /usr/bin/node when it already matches.
