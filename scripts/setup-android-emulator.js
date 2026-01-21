@@ -42,6 +42,9 @@ if (stage !== "start") {
 }
 
 if (stage !== "install") {
+  if (!fs.existsSync(adbPath)) {
+    ensurePackages()
+  }
   ensureAdbServer()
   startEmulator()
   waitForDevice()

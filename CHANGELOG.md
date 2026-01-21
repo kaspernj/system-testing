@@ -80,3 +80,4 @@
 - Pass the SDK env vars when assembling the Android APK in Peakflow.
 - Write `local.properties` with the SDK path for the Android Gradle build.
 - Honor ANDROID_SDK_ROOT/ANDROID_HOME even when the SDK dir does not exist yet.
+- Reinstall SDK packages on start stage when adb is missing.
