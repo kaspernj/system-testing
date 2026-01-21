@@ -44,6 +44,7 @@ builds:
     script:
       - ANDROID_EMULATOR_STAGE=start node scripts/setup-android-emulator.js
       - cd spec/dummy && EXPO_PUBLIC_SYSTEM_TEST=true EXPO_PUBLIC_SYSTEM_TEST_HOST=10.0.2.2 npx expo prebuild --platform android --no-install --non-interactive
+      - cd spec/dummy/android && echo "sdk.dir=/tmp/android-sdk" > local.properties
       - cd spec/dummy/android && ANDROID_SDK_ROOT=/tmp/android-sdk ANDROID_HOME=/tmp/android-sdk ./gradlew assembleDebug
       - cd /home/build/project
       - npx appium driver update uiautomator2 || npx appium driver install uiautomator2
