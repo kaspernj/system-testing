@@ -113,4 +113,7 @@
 - Default Appium test ID strategy to accessibility id unless overridden.
 - Skip unsupported browser logs when Appium doesn't provide them.
 - Use accessibility IDs for Appium Android selectors in Peakflow.
+- Skip unsupported current URL lookup for native runs.
+- Map dummy app test IDs to accessibility labels for native Appium runs.
+- Avoid setting a native base selector string in system tests.
 - Install OpenJDK 17 and set JAVA_HOME for the Appium Android build (without overriding PATH).

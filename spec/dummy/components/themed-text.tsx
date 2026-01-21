@@ -16,6 +16,8 @@ export function ThemedText({
   ...rest
 }: ThemedTextProps) {
   const color = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
+  const accessibilityLabel = rest.accessibilityLabel
+    ?? (typeof rest.testID === 'string' ? rest.testID : undefined);
 
   return (
     <Text
@@ -28,6 +30,7 @@ export function ThemedText({
         type === 'link' ? styles.link : undefined,
         style,
       ]}
+      accessibilityLabel={accessibilityLabel}
       {...rest}
     />
   );

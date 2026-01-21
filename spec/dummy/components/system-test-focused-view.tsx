@@ -19,6 +19,7 @@ export function SystemTestFocusedView({
       {...rest}
       style={[{ flex: 1 }, style]}
       testID="systemTestingComponent"
+      accessibilityLabel="systemTestingComponent"
       // @ts-ignore dataSet is supported at runtime for React Native Web
       dataSet={{ focussed: isFocussed ? 'true' : 'false' }}
     >

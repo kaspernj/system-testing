@@ -142,7 +142,11 @@ export default class WebDriverDriver {
 
   /** @returns {Promise<string>} */
   async getCurrentUrl() {
-    return await this.getWebDriver().getCurrentUrl()
+    try {
+      return await this.getWebDriver().getCurrentUrl()
+    } catch {
+      return ""
+    }
   }
 
   /** @returns {Promise<string>} */
