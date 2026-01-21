@@ -76,3 +76,4 @@
 - Allow the emulator setup to install a specific NDK version for native builds.
 - Allow extra Android SDK packages to be installed during emulator setup.
 - Quote ANDROID_SDK_PACKAGES in Peakflow to avoid shell parsing.
+- Use a writable SDK root in Peakflow to avoid Gradle install failures.

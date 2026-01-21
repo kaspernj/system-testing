@@ -37,6 +37,7 @@ if (!fs.existsSync(emulatorPath) && stage !== "start") {
 
 if (stage !== "start") {
   ensurePackages()
+  ensureWritableSdkRoot()
   ensureAvd()
 }
 
@@ -52,6 +53,12 @@ function ensurePackages() {
   console.log("[android] Ensuring SDK packages")
   runWithYes(["--licenses"], {sudo: true})
   runSdkManager(packages, {sudo: true})
+}
+
+/** @returns {void} */
+function ensureWritableSdkRoot() {
+  if (!sdkRoot.startsWith("/tmp/")) return
+  run("chmod", ["-R", "777", sdkRoot], {sudo: true})
 }
 
 /** @returns {void} */

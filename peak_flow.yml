@@ -1,5 +1,5 @@
 before_install:
-  - ANDROID_EMULATOR_STAGE=install ANDROID_NDK_VERSION=27.1.12297006 ANDROID_SDK_PACKAGES="build-tools;36.0.0,platforms;android-36,cmake;3.22.1" node scripts/setup-android-emulator.js
+  - ANDROID_SDK_ROOT=/tmp/android-sdk ANDROID_HOME=/tmp/android-sdk ANDROID_EMULATOR_STAGE=install ANDROID_NDK_VERSION=27.1.12297006 ANDROID_SDK_PACKAGES="build-tools;36.0.0,platforms;android-36,cmake;3.22.1" node scripts/setup-android-emulator.js
 before_script:
   - npm install
   - cd spec/dummy && npm install
@@ -13,7 +13,8 @@ builds:
     devices:
       - /dev/kvm:/dev/kvm
     environment:
-      ANDROID_SDK_ROOT: /usr/lib/android-sdk
+      ANDROID_SDK_ROOT: /tmp/android-sdk
+      ANDROID_HOME: /tmp/android-sdk
       SYSTEM_TEST_HTTP_CONNECT_HOST: 10.0.2.2
       SYSTEM_TEST_HOST: dist
       SYSTEM_TEST_DRIVER: appium
@@ -31,8 +32,8 @@ builds:
     devices:
       - /dev/kvm:/dev/kvm
     environment:
-      ANDROID_SDK_ROOT: /usr/lib/android-sdk
-      ANDROID_HOME: /usr/lib/android-sdk
+      ANDROID_SDK_ROOT: /tmp/android-sdk
+      ANDROID_HOME: /tmp/android-sdk
       SYSTEM_TEST_HOST: native
       SYSTEM_TEST_NATIVE: "true"
       EXPO_PUBLIC_SYSTEM_TEST: "true"
