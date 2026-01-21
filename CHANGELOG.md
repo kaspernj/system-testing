@@ -82,3 +82,4 @@
 - Honor ANDROID_SDK_ROOT/ANDROID_HOME even when the SDK dir does not exist yet.
 - Reinstall SDK packages on start stage when adb is missing.
 - Ensure the SDK root is writable when installing components.
+- Ensure the SDK `.android` directory is writable for Gradle.
