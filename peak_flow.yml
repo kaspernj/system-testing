@@ -13,7 +13,7 @@ builds:
       SYSTEM_TEST_DRIVER: appium
       SYSTEM_TEST_APPIUM_DRIVERS: chromium
       SYSTEM_TEST_APPIUM_TEST_ID_STRATEGY: css
-      SYSTEM_TEST_APPIUM_SERVER_ARGS: '{"allowInsecure":["chromedriver_autodownload"]}'
+      SYSTEM_TEST_APPIUM_SERVER_ARGS: '{"allowInsecure":["chromium:chromedriver_autodownload"]}'
       SYSTEM_TEST_APPIUM_CAPABILITIES: '{"platformName":"Linux","browserName":"Chrome","appium:automationName":"Chromium","appium:chromedriverAutodownload":true}'
     script:
       - npm run export:web
