@@ -232,6 +232,13 @@ function sdkEnv() {
 
 /** @returns {string} */
 function ensureSdkRoot() {
+  const preferredRoot = getPreferredSdkRoot()
+
+  if (preferredRoot) {
+    ensureSdkRootDir(preferredRoot)
+    return preferredRoot
+  }
+
   const resolved = resolveSdkRoot()
 
   if (resolved) return resolved
@@ -243,6 +250,20 @@ function ensureSdkRoot() {
   if (resolvedAfterInstall) return resolvedAfterInstall
 
   throw new Error("Android SDK root not found. Set ANDROID_SDK_ROOT or ANDROID_HOME.")
+}
+
+/** @returns {string | undefined} */
+function getPreferredSdkRoot() {
+  return process.env.ANDROID_SDK_ROOT ?? process.env.ANDROID_HOME
+}
+
+/**
+ * @param {string} root
+ * @returns {void}
+ */
+function ensureSdkRootDir(root) {
+  if (fs.existsSync(root)) return
+  run("mkdir", ["-p", root], {sudo: true})
 }
 
 /** @returns {string | undefined} */
