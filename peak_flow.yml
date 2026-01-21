@@ -4,6 +4,7 @@ before_script:
 before_install:
   - sudo apt-get update
   - sudo apt-get install -y ca-certificates wget
+  - if [ ! -x /usr/bin/node ]; then sudo ln -sf "$(command -v node)" /usr/bin/node; fi
   - wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
   - sudo apt-get install -y ./google-chrome-stable_current_amd64.deb
   - rm -f google-chrome-stable_current_amd64.deb
@@ -22,7 +23,7 @@ builds:
       SYSTEM_TEST_APPIUM_CAPABILITIES: '{"platformName":"linux","browserName":"chrome","appium:automationName":"Chromium","appium:autodownloadEnabled":true,"goog:chromeOptions":{"binary":"/usr/bin/google-chrome","args":["--headless=new","--no-sandbox","--disable-dev-shm-usage","--disable-gpu"]}}'
     script:
       - npx appium driver update chromium || npx appium driver install chromium
-      - node node_modules/appium-chromium-driver/scripts/install-chromedriver.mjs
+      - npx appium driver run chromium install-chromedriver
       - npm run test:appium:web
   build_3:
     name: Appium Android

@@ -99,4 +99,4 @@
 - Run the Appium web npm script in the Peakflow web build.
 - Ensure Peakflow Appium web installs the Chromium driver before running the script.
 - Force Selenium for Peakflow default checks to avoid Appium leakage.
-- Run Chromium chromedriver install via the driver script in Peakflow.
+- Ensure npx can run chromium's chromedriver installer in Peakflow.
