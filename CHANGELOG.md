@@ -89,4 +89,4 @@
 - Install default JDK in Peakflow before Android SDK setup.
 - Skip Android setup for the Peakflow web build.
 - Run the Peakflow web Appium build without Android emulator setup.
-- Scope Appium chromedriver autoload to the Chromium driver.
+- Install chromedriver for the Appium Chromium build in Peakflow.
