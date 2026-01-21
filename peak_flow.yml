@@ -11,6 +11,8 @@ environment:
   SYSTEM_TEST_APPIUM_SERVER_ARGS: '{"allowInsecure":["uiautomator2:chromedriver_autodownload"]}'
   SYSTEM_TEST_APPIUM_CAPABILITIES: '{"platformName":"Android","appium:automationName":"UiAutomator2","appium:deviceName":"Android Emulator","browserName":"Chrome","appium:chromedriverAutodownload":true}'
 before_install:
+  - sudo apt-get update
+  - sudo apt-get install -y default-jdk
   - ANDROID_EMULATOR_STAGE=install ANDROID_NDK_VERSION=27.1.12297006 ANDROID_SDK_PACKAGES="build-tools;36.0.0,platforms;android-36,cmake;3.22.1" node scripts/setup-android-emulator.js
 before_script:
   - npm install
