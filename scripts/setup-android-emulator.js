@@ -60,7 +60,6 @@ function ensurePackages() {
 
 /** @returns {void} */
 function ensureWritableSdkRoot() {
-  if (!sdkRoot.startsWith("/tmp/")) return
   run("chmod", ["-R", "777", sdkRoot], {sudo: true})
 }
 
@@ -265,8 +264,13 @@ function getPreferredSdkRoot() {
  * @returns {void}
  */
 function ensureSdkRootDir(root) {
-  if (fs.existsSync(root)) return
+  if (fs.existsSync(root)) {
+    run("chmod", ["-R", "777", root], {sudo: true})
+    return
+  }
+
   run("mkdir", ["-p", root], {sudo: true})
+  run("chmod", ["-R", "777", root], {sudo: true})
 }
 
 /** @returns {string | undefined} */
