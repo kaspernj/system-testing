@@ -61,7 +61,8 @@ function ensurePackages() {
 /** @returns {void} */
 function ensureWritableSdkRoot() {
   run("chmod", ["-R", "777", sdkRoot], {sudo: true})
-  run("chmod", ["-R", "777", path.join(sdkRoot, ".android")], {sudo: true})
+  const sdkHome = process.env.ANDROID_SDK_HOME ?? path.join(sdkRoot, ".android")
+  run("chmod", ["-R", "777", sdkHome], {sudo: true})
 }
 
 /** @returns {void} */
@@ -267,12 +268,14 @@ function getPreferredSdkRoot() {
 function ensureSdkRootDir(root) {
   if (fs.existsSync(root)) {
     run("chmod", ["-R", "777", root], {sudo: true})
-    run("chmod", ["-R", "777", path.join(root, ".android")], {sudo: true})
+    const sdkHome = process.env.ANDROID_SDK_HOME ?? path.join(root, ".android")
+    run("chmod", ["-R", "777", sdkHome], {sudo: true})
     return
   }
 
   run("mkdir", ["-p", root], {sudo: true})
-  run("mkdir", ["-p", path.join(root, ".android")], {sudo: true})
+  const sdkHome = process.env.ANDROID_SDK_HOME ?? path.join(root, ".android")
+  run("mkdir", ["-p", sdkHome], {sudo: true})
   run("chmod", ["-R", "777", root], {sudo: true})
 }
 

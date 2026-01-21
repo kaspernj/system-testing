@@ -83,3 +83,4 @@
 - Reinstall SDK packages on start stage when adb is missing.
 - Ensure the SDK root is writable when installing components.
 - Ensure the SDK `.android` directory is writable for Gradle.
+- Use a dedicated ANDROID_SDK_HOME in Peakflow for writable SDK metadata.
