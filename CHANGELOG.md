@@ -102,3 +102,4 @@
 - Ensure npx can run chromium's chromedriver installer in Peakflow.
 - Ensure Appium web build re-links /usr/bin/node before installing Chromedriver.
 - Skip relinking /usr/bin/node when it already matches.
+- Run Chromium chromedriver install via `npx node` in Peakflow.
