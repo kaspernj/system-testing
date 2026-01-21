@@ -6,7 +6,7 @@ import SystemTestHelper from "./support/system-test-helper.js"
 const systemTestHelper = new SystemTestHelper()
 systemTestHelper.installJasmineHooks()
 const isNative = process.env.SYSTEM_TEST_NATIVE === "true"
-const itIfWeb = isNative ? it.skip : it
+const itIfWeb = isNative ? xit : it
 
 describe("SystemTest interact", () => {
   it("retries on StaleElementReferenceError", async () => {

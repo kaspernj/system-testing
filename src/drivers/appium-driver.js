@@ -52,6 +52,9 @@ export default class AppiumDriver extends WebDriverDriver {
     if (this.options.browserName && !capabilities.browserName) {
       capabilities.browserName = this.options.browserName
     }
+    if (capabilities.browserName === undefined) {
+      capabilities.browserName = ""
+    }
 
     const builder = new Builder().usingServer(this.serverUrl)
 

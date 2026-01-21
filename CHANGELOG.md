@@ -107,4 +107,7 @@
 - Run Appium Android tests against the built APK.
 - Run Chromium chromedriver install via `npx node` in Peakflow.
 - Use `xdescribe` for native skips in system test finders.
+- Ensure Appium native runs set an explicit browserName.
+- Skip web-only system test specs with `xit` for native runs.
+- Add a dummy APK build npm script and use it in Peakflow.
 - Install OpenJDK 17 and set JAVA_HOME for the Appium Android build (without overriding PATH).

@@ -46,8 +46,6 @@ builds:
     script:
       - ANDROID_EMULATOR_STAGE=install ANDROID_NDK_VERSION=27.1.12297006 ANDROID_SDK_PACKAGES="build-tools;36.0.0,platforms;android-36,cmake;3.22.1" node scripts/setup-android-emulator.js
       - ANDROID_EMULATOR_STAGE=start node scripts/setup-android-emulator.js
-      - cd spec/dummy && EXPO_PUBLIC_SYSTEM_TEST=true EXPO_PUBLIC_SYSTEM_TEST_HOST=10.0.2.2 npx expo prebuild --platform android --no-install --non-interactive
-      - cd spec/dummy/android && echo "sdk.dir=/tmp/android-sdk" > local.properties
-      - cd spec/dummy/android && ANDROID_SDK_ROOT=/tmp/android-sdk ANDROID_HOME=/tmp/android-sdk ANDROID_SDK_HOME=/tmp/android-sdk-home GRADLE_USER_HOME=/tmp/gradle-home ./gradlew --no-daemon --stacktrace assembleDebug
+      - npm run build:apk:dummy
       - npx appium driver update uiautomator2 || npx appium driver install uiautomator2
       - npm test
