@@ -110,4 +110,7 @@
 - Ensure Appium native runs set an explicit browserName.
 - Skip web-only system test specs with `xit` for native runs.
 - Add a dummy APK build npm script and use it in Peakflow.
+- Default Appium test ID strategy to accessibility id unless overridden.
+- Skip unsupported browser logs when Appium doesn't provide them.
+- Use accessibility IDs for Appium Android selectors in Peakflow.
 - Install OpenJDK 17 and set JAVA_HOME for the Appium Android build (without overriding PATH).

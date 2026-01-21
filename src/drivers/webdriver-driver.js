@@ -160,7 +160,13 @@ export default class WebDriverDriver {
    * @returns {Promise<string[]>}
    */
   async getBrowserLogs() {
-    const entries = await this.getWebDriver().manage().logs().get(logging.Type.BROWSER)
+    let entries
+
+    try {
+      entries = await this.getWebDriver().manage().logs().get(logging.Type.BROWSER)
+    } catch {
+      return []
+    }
     const browserLogs = []
 
     for (const entry of entries) {
