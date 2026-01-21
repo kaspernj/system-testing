@@ -2,8 +2,7 @@ before_script:
   - npm install
   - cd spec/dummy && npm install
 before_install:
-  - sudo apt-get update
-  - sudo apt-get install -y ca-certificates wget
+  - sudo apt-get update && sudo apt-get install -y ca-certificates default-jdk wget
   - if [ ! -x /usr/bin/node ]; then sudo ln -sf "$(command -v node)" /usr/bin/node; fi
   - wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
   - sudo apt-get install -y ./google-chrome-stable_current_amd64.deb
@@ -22,6 +21,7 @@ builds:
       SYSTEM_TEST_APPIUM_TEST_ID_STRATEGY: css
       SYSTEM_TEST_APPIUM_CAPABILITIES: '{"platformName":"linux","browserName":"chrome","appium:automationName":"Chromium","appium:autodownloadEnabled":true,"goog:chromeOptions":{"binary":"/usr/bin/google-chrome","args":["--headless=new","--no-sandbox","--disable-dev-shm-usage","--disable-gpu"]}}'
     script:
+      - sudo ln -sf "$(command -v node)" /usr/bin/node
       - npx appium driver update chromium || npx appium driver install chromium
       - npx appium driver run chromium install-chromedriver
       - npm run test:appium:web
@@ -44,8 +44,6 @@ builds:
       SYSTEM_TEST_APPIUM_SERVER_ARGS: '{"allowInsecure":["uiautomator2:chromedriver_autodownload"]}'
       SYSTEM_TEST_APPIUM_CAPABILITIES: '{"platformName":"Android","appium:automationName":"UiAutomator2","appium:deviceName":"Android Emulator","browserName":"Chrome","appium:chromedriverAutodownload":true}'
     script:
-      - sudo apt-get update
-      - sudo apt-get install -y default-jdk
       - ANDROID_EMULATOR_STAGE=install ANDROID_NDK_VERSION=27.1.12297006 ANDROID_SDK_PACKAGES="build-tools;36.0.0,platforms;android-36,cmake;3.22.1" node scripts/setup-android-emulator.js
       - ANDROID_EMULATOR_STAGE=start node scripts/setup-android-emulator.js
       - cd spec/dummy && EXPO_PUBLIC_SYSTEM_TEST=true EXPO_PUBLIC_SYSTEM_TEST_HOST=10.0.2.2 npx expo prebuild --platform android --no-install --non-interactive
