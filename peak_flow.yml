@@ -11,7 +11,7 @@ builds:
   build_1:
     name: Default checks
     script:
-      - npm run all-checks
+      - SYSTEM_TEST_DRIVER=selenium SYSTEM_TEST_APPIUM_DRIVERS= SYSTEM_TEST_APPIUM_CAPABILITIES= SYSTEM_TEST_APPIUM_SERVER_ARGS= npm run all-checks
   build_2:
     name: Appium Web (Chrome)
     environment:

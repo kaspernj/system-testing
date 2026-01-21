@@ -98,3 +98,4 @@
 - Use a lowercase platformName for the Appium Chromium build caps.
 - Run the Appium web npm script in the Peakflow web build.
 - Ensure Peakflow Appium web installs the Chromium driver before running the script.
+- Force Selenium for Peakflow default checks to avoid Appium leakage.
