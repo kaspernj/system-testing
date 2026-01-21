@@ -92,3 +92,4 @@
 - Install chromedriver for the Appium Chromium build in Peakflow.
 - Install the Chromium Appium driver before downloading Chromedriver in Peakflow.
 - Set Chrome binary and headless args for the Peakflow Appium web build.
+- Install Google Chrome for the Peakflow Appium web build.

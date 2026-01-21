@@ -15,6 +15,11 @@ builds:
       SYSTEM_TEST_APPIUM_TEST_ID_STRATEGY: css
       SYSTEM_TEST_APPIUM_CAPABILITIES: '{"platformName":"Linux","browserName":"chrome","appium:automationName":"Chromium","appium:autodownloadEnabled":true,"goog:chromeOptions":{"binary":"/usr/bin/google-chrome","args":["--headless=new","--no-sandbox","--disable-dev-shm-usage","--disable-gpu"]}}'
     script:
+      - sudo apt-get update
+      - sudo apt-get install -y ca-certificates wget
+      - wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+      - sudo apt-get install -y ./google-chrome-stable_current_amd64.deb
+      - rm -f google-chrome-stable_current_amd64.deb
       - npm run export:web
       - npx appium driver update chromium || npx appium driver install chromium
       - npx appium driver run chromium install-chromedriver
