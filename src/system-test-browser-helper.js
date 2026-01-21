@@ -33,7 +33,8 @@ export default class SystemTestBrowserHelper {
   }
 
   async startScoundrel() {
-    this.scoundrelWs = new WebSocket("http://localhost:8090")
+    const host = this.getSystemTestHost()
+    this.scoundrelWs = new WebSocket(`http://${host}:8090`)
 
     // @ts-expect-error
     this.scoundrelClientWebSocket = new ClientWebSocket(this.scoundrelWs)
@@ -122,11 +123,28 @@ export default class SystemTestBrowserHelper {
    * @returns {void}
    */
   connectWebSocket() {
-    this.ws = new WebSocket("ws://localhost:1985")
+    const host = this.getSystemTestHost()
+    this.ws = new WebSocket(`ws://${host}:1985`)
     this.communicator.ws = this.ws
     this.ws.addEventListener("error", digg(this, "communicator", "onError"))
     this.ws.addEventListener("open", digg(this, "communicator", "onOpen"))
     this.ws.addEventListener("message", (event) => this.communicator.onMessage(event.data))
+  }
+
+  /**
+   * @returns {string}
+   */
+  getSystemTestHost() {
+    const location = globalThis.location
+    const defaultHost = location?.hostname || "localhost"
+    const search = location?.search
+
+    if (!search) return defaultHost
+
+    const params = new URLSearchParams(search)
+    const host = params.get("systemTestHost")
+
+    return host || defaultHost
   }
 
   /**
