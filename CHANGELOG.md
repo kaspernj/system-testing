@@ -96,3 +96,5 @@
 - Move Peakflow Chrome apt installs to global before_install.
 - Limit Gradle memory and disable the daemon for the Peakflow Appium Android build.
 - Use a lowercase platformName for the Appium Chromium build caps.
+- Run the Appium web npm script in the Peakflow web build.
+- Ensure Peakflow Appium web installs the Chromium driver before running the script.

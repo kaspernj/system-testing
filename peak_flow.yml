@@ -21,10 +21,9 @@ builds:
       SYSTEM_TEST_APPIUM_TEST_ID_STRATEGY: css
       SYSTEM_TEST_APPIUM_CAPABILITIES: '{"platformName":"linux","browserName":"chrome","appium:automationName":"Chromium","appium:autodownloadEnabled":true,"goog:chromeOptions":{"binary":"/usr/bin/google-chrome","args":["--headless=new","--no-sandbox","--disable-dev-shm-usage","--disable-gpu"]}}'
     script:
-      - npm run export:web
       - npx appium driver update chromium || npx appium driver install chromium
       - npx appium driver run chromium install-chromedriver
-      - npm test
+      - npm run test:appium:web
   build_3:
     name: Appium Android
     devices:
