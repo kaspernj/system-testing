@@ -9,7 +9,7 @@ import WebDriverDriver from "./webdriver-driver.js"
  * @property {string[]} [useDrivers] Appium driver names to load when starting the server.
  * @property {Record<string, any>} [capabilities] Desired capabilities for the session.
  * @property {string} [browserName] Browser name for web sessions.
- * @property {"accessibilityId"|"css"} [testIdStrategy] Strategy for resolving test IDs.
+ * @property {"accessibilityId"|"css"|"id"} [testIdStrategy] Strategy for resolving test IDs.
  * @property {string} [testIdAttribute] Attribute name when using the CSS test ID strategy.
  */
 /**
@@ -94,6 +94,9 @@ export default class AppiumDriver extends WebDriverDriver {
     if (testIdStrategy === "css") {
       const testIdAttribute = this.options.testIdAttribute ?? "data-testid"
       return await this.find(`[${testIdAttribute}='${testId}']`, args)
+    }
+    if (testIdStrategy === "id") {
+      return await this.findById(testId, args)
     }
 
     return await this.findByAccessibilityId(testId, args)
@@ -208,6 +211,111 @@ export default class AppiumDriver extends WebDriverDriver {
         }
 
         throw new Error(`Couldn't get elements with accessibility id: ${testId}: ${error instanceof Error ? error.message : error}`)
+      }
+    }
+
+    return elements
+  }
+
+  /**
+   * @param {string} testId
+   * @param {FindArgs} [args]
+   * @returns {Promise<import("selenium-webdriver").WebElement>}
+   */
+  async findById(testId, args = {}) {
+    const startTime = Date.now()
+    let elements = []
+
+    try {
+      elements = await this.allById(testId, args)
+    } catch (error) {
+      // Re-throw to recover stack trace
+      if (error instanceof Error) {
+        if (error.message.startsWith("Wait timed out after")) {
+          elements = []
+        }
+
+        throw new Error(`${error.constructor.name} - ${error.message} (id: ${testId})`)
+      } else {
+        throw new Error(`${typeof error} - ${error} (id: ${testId})`)
+      }
+    }
+
+    if (elements.length > 1) {
+      throw new Error(`More than 1 elements (${elements.length}) was found by id: ${testId}`)
+    }
+
+    if (!elements[0]) {
+      const elapsedSeconds = (Date.now() - startTime) / 1000
+      throw new Error(`Element couldn't be found after ${elapsedSeconds.toFixed(2)}s by id: ${testId}`)
+    }
+
+    return elements[0]
+  }
+
+  /**
+   * @param {string} testId
+   * @param {FindArgs} [args]
+   * @returns {Promise<import("selenium-webdriver").WebElement[]>}
+   */
+  async allById(testId, args = {}) {
+    const {visible = true, timeout, ...restArgs} = args
+    const restArgsKeys = Object.keys(restArgs).filter((key) => key !== "useBaseSelector")
+    let actualTimeout
+
+    if (timeout === undefined) {
+      actualTimeout = this._driverTimeouts
+    } else {
+      actualTimeout = timeout
+    }
+
+    if (restArgsKeys.length > 0) throw new Error(`Unknown arguments: ${restArgsKeys.join(", ")}`)
+
+    const startTime = Date.now()
+    const getTimeLeft = () => Math.max(actualTimeout - (Date.now() - startTime), 0)
+    const getElements = async () => {
+      const foundElements = await this.getWebDriver().findElements(By.id(testId))
+
+      if (visible !== true && visible !== false) {
+        return foundElements
+      }
+
+      const filteredElements = []
+
+      for (const element of foundElements) {
+        const isDisplayed = await element.isDisplayed()
+
+        if (visible && !isDisplayed) continue
+        if (!visible && isDisplayed) continue
+
+        filteredElements.push(element)
+      }
+
+      return filteredElements
+    }
+    let elements = []
+
+    while (true) {
+      const timeLeft = actualTimeout == 0 ? 0 : getTimeLeft()
+
+      try {
+        if (timeLeft == 0) {
+          elements = await getElements()
+        } else {
+          await this.getWebDriver().wait(async () => {
+            elements = await getElements()
+
+            return elements.length > 0
+          }, timeLeft)
+        }
+
+        break
+      } catch (error) {
+        if (error instanceof Error && error.constructor.name === "TimeoutError" && getTimeLeft() > 0) {
+          continue
+        }
+
+        throw new Error(`Couldn't get elements with id: ${testId}: ${error instanceof Error ? error.message : error}`)
       }
     }
 

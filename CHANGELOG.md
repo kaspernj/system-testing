@@ -110,9 +110,9 @@
 - Ensure Appium native runs set an explicit browserName.
 - Skip web-only system test specs with `xit` for native runs.
 - Add a dummy APK build npm script and use it in Peakflow.
-- Default Appium test ID strategy to accessibility id unless overridden.
+- Default Appium test ID strategy to `id` for native runs unless overridden.
 - Skip unsupported browser logs when Appium doesn't provide them.
-- Use accessibility IDs for Appium Android selectors in Peakflow.
+- Use resource IDs for Appium Android selectors in Peakflow.
 - Skip unsupported current URL lookup for native runs.
 - Map dummy app test IDs to accessibility labels for native Appium runs.
 - Avoid setting a native base selector string in system tests.
