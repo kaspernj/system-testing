@@ -85,3 +85,4 @@
 - Ensure the SDK `.android` directory is writable for Gradle.
 - Use a dedicated ANDROID_SDK_HOME in Peakflow for writable SDK metadata.
 - Set GRADLE_USER_HOME to a writable directory in Peakflow.
+- Stop Appium web tests from configuring Android in the npm script.
