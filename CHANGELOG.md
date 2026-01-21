@@ -106,4 +106,5 @@
 - Skip dist checks for native system test runs.
 - Run Appium Android tests against the built APK.
 - Run Chromium chromedriver install via `npx node` in Peakflow.
+- Use `xdescribe` for native skips in system test finders.
 - Install OpenJDK 17 and set JAVA_HOME for the Appium Android build (without overriding PATH).

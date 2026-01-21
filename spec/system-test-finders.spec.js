@@ -7,7 +7,7 @@ import {error as SeleniumError} from "selenium-webdriver"
 const systemTestHelper = new SystemTestHelper()
 systemTestHelper.installJasmineHooks()
 const isNative = process.env.SYSTEM_TEST_NATIVE === "true"
-const describeIfWeb = isNative ? describe.skip : describe
+const describeIfWeb = isNative ? xdescribe : describe
 
 describeIfWeb("SystemTest finders", () => {
   it("respects useBaseSelector for find", async () => {
