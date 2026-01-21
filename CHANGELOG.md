@@ -103,4 +103,7 @@
 - Ensure Appium web build re-links /usr/bin/node before installing Chromedriver.
 - Skip relinking /usr/bin/node when it already matches.
 - Run Appium by default in the `test:appium:web` npm script.
+- Skip dist checks for native system test runs.
+- Run Appium Android tests against the built APK.
+- Run Chromium chromedriver install via `npx node` in Peakflow.
 - Install OpenJDK 17 and set JAVA_HOME for the Appium Android build (without overriding PATH).

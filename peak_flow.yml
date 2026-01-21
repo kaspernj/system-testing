@@ -38,12 +38,11 @@ builds:
       GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dorg.gradle.jvmargs=-Xmx3g -Dkotlin.daemon.jvm.options=-Xmx2g"
       ANDROID_GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dorg.gradle.jvmargs=-Xmx3g -Dkotlin.daemon.jvm.options=-Xmx2g"
       SYSTEM_TEST_HTTP_CONNECT_HOST: 10.0.2.2
-      SYSTEM_TEST_HOST: dist
+      SYSTEM_TEST_HOST: native
+      SYSTEM_TEST_NATIVE: "true"
       SYSTEM_TEST_DRIVER: appium
       SYSTEM_TEST_APPIUM_DRIVERS: uiautomator2
-      SYSTEM_TEST_APPIUM_TEST_ID_STRATEGY: css
-      SYSTEM_TEST_APPIUM_SERVER_ARGS: '{"allowInsecure":["uiautomator2:chromedriver_autodownload"]}'
-      SYSTEM_TEST_APPIUM_CAPABILITIES: '{"platformName":"Android","appium:automationName":"UiAutomator2","appium:deviceName":"Android Emulator","browserName":"Chrome","appium:chromedriverAutodownload":true}'
+      SYSTEM_TEST_APPIUM_CAPABILITIES: '{"platformName":"Android","appium:automationName":"UiAutomator2","appium:deviceName":"Android Emulator","appium:autoGrantPermissions":true,"appium:appWaitActivity":"*","appium:app":"spec/dummy/android/app/build/outputs/apk/debug/app-debug.apk"}'
     script:
       - ANDROID_EMULATOR_STAGE=install ANDROID_NDK_VERSION=27.1.12297006 ANDROID_SDK_PACKAGES="build-tools;36.0.0,platforms;android-36,cmake;3.22.1" node scripts/setup-android-emulator.js
       - ANDROID_EMULATOR_STAGE=start node scripts/setup-android-emulator.js
