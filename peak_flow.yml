@@ -16,6 +16,7 @@ builds:
       ANDROID_SDK_ROOT: /tmp/android-sdk
       ANDROID_HOME: /tmp/android-sdk
       ANDROID_SDK_HOME: /tmp/android-sdk-home
+      GRADLE_USER_HOME: /tmp/gradle-home
       SYSTEM_TEST_HTTP_CONNECT_HOST: 10.0.2.2
       SYSTEM_TEST_HOST: dist
       SYSTEM_TEST_DRIVER: appium
@@ -36,6 +37,7 @@ builds:
       ANDROID_SDK_ROOT: /tmp/android-sdk
       ANDROID_HOME: /tmp/android-sdk
       ANDROID_SDK_HOME: /tmp/android-sdk-home
+      GRADLE_USER_HOME: /tmp/gradle-home
       SYSTEM_TEST_HOST: native
       SYSTEM_TEST_NATIVE: "true"
       EXPO_PUBLIC_SYSTEM_TEST: "true"
@@ -47,7 +49,7 @@ builds:
       - ANDROID_EMULATOR_STAGE=start node scripts/setup-android-emulator.js
       - cd spec/dummy && EXPO_PUBLIC_SYSTEM_TEST=true EXPO_PUBLIC_SYSTEM_TEST_HOST=10.0.2.2 npx expo prebuild --platform android --no-install --non-interactive
       - cd spec/dummy/android && echo "sdk.dir=/tmp/android-sdk" > local.properties
-      - cd spec/dummy/android && ANDROID_SDK_ROOT=/tmp/android-sdk ANDROID_HOME=/tmp/android-sdk ANDROID_SDK_HOME=/tmp/android-sdk-home ./gradlew assembleDebug
+      - cd spec/dummy/android && ANDROID_SDK_ROOT=/tmp/android-sdk ANDROID_HOME=/tmp/android-sdk ANDROID_SDK_HOME=/tmp/android-sdk-home GRADLE_USER_HOME=/tmp/gradle-home ./gradlew assembleDebug
       - cd /home/build/project
       - npx appium driver update uiautomator2 || npx appium driver install uiautomator2
       - npm test
