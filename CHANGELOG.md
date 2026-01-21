@@ -116,4 +116,5 @@
 - Skip unsupported current URL lookup for native runs.
 - Map dummy app test IDs to accessibility labels for native Appium runs.
 - Avoid setting a native base selector string in system tests.
+- Mark the system testing root view as accessible for Appium lookups.
 - Install OpenJDK 17 and set JAVA_HOME for the Appium Android build (without overriding PATH).
