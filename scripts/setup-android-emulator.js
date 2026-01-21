@@ -15,7 +15,6 @@ const avdName = process.env.ANDROID_AVD_NAME ?? "system-test-android"
 const systemImage = process.env.ANDROID_SYSTEM_IMAGE ?? "system-images;android-33;google_apis;x86_64"
 const avdDevice = process.env.ANDROID_AVD_DEVICE ?? "pixel_5"
 const avdHome = process.env.ANDROID_AVD_HOME ?? "/tmp/android-avd"
-const adbServerPort = process.env.ANDROID_ADB_SERVER_PORT ?? "5037"
 const packages = [
   "platform-tools",
   "platforms;android-33",
@@ -89,9 +88,7 @@ function startEmulator() {
     "-gpu",
     "swiftshader_indirect",
     "-no-snapshot-save",
-    "-no-boot-anim",
-    "-adb-server-port",
-    adbServerPort
+    "-no-boot-anim"
   ]
 
   const command = useSudoForEmulator ? "sudo" : emulatorPath
@@ -217,7 +214,6 @@ function sdkEnv() {
     ANDROID_SDK_ROOT: sdkRoot,
     ANDROID_SDK_HOME: process.env.ANDROID_SDK_HOME ?? sdkRoot,
     ANDROID_AVD_HOME: avdHome,
-    ANDROID_ADB_SERVER_PORT: adbServerPort
   }
 }
 
