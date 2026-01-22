@@ -56,10 +56,12 @@ export default class SystemTestHelper {
         port: 3601,
         httpHost: "0.0.0.0",
         httpPort: 3602,
+        httpConnectHost: process.env.SYSTEM_TEST_HTTP_CONNECT_HOST,
         errorFilter: (error) => {
           if (typeof error?.value?.[0] === "string" && error.value[0].includes("Uncaught Error: Minified React error #418; visit")) return false
           return true
-        }
+        },
+        driver: this.getDriverConfig()
       })
       sharedState.systemTest = this.systemTest
       this.debugLog("[system-test] beforeAll: starting SystemTest")
@@ -96,5 +98,40 @@ export default class SystemTestHelper {
   getSystemTest() {
     if (!this.systemTest) throw new Error("SystemTest hasn't been started yet")
     return this.systemTest
+  }
+
+  /** @returns {import("../../src/system-test.js").SystemTestDriverConfig | undefined} */
+  getDriverConfig() {
+    if (process.env.SYSTEM_TEST_DRIVER !== "appium") return undefined
+
+    const parseJson = (value, label) => {
+      if (!value) return undefined
+
+      try {
+        return JSON.parse(value)
+      } catch (error) {
+        throw new Error(`Invalid ${label} JSON: ${value}: ${error instanceof Error ? error.message : error}`)
+      }
+    }
+
+    const serverArgs = parseJson(process.env.SYSTEM_TEST_APPIUM_SERVER_ARGS, "SYSTEM_TEST_APPIUM_SERVER_ARGS")
+    const capabilities = parseJson(process.env.SYSTEM_TEST_APPIUM_CAPABILITIES, "SYSTEM_TEST_APPIUM_CAPABILITIES")
+    const useDrivers = process.env.SYSTEM_TEST_APPIUM_DRIVERS ? process.env.SYSTEM_TEST_APPIUM_DRIVERS.split(",").map((driverName) => driverName.trim()).filter(Boolean) : undefined
+    const testIdStrategy = process.env.SYSTEM_TEST_APPIUM_TEST_ID_STRATEGY
+      ?? (process.env.SYSTEM_TEST_NATIVE === "true" ? "id" : "css")
+    const serverUrl = process.env.SYSTEM_TEST_APPIUM_SERVER_URL
+
+    return {
+      type: "appium",
+      options: {
+        serverUrl,
+        serverArgs,
+        useDrivers,
+        capabilities,
+        testIdStrategy,
+        testIdAttribute: process.env.SYSTEM_TEST_APPIUM_TEST_ID_ATTRIBUTE,
+        browserName: process.env.SYSTEM_TEST_APPIUM_BROWSER_NAME
+      }
+    }
   }
 }

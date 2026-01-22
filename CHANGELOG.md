@@ -42,3 +42,94 @@
 - Retry HTTP server health checks on transient connection errors.
 - Always print system test debug errors instead of hiding them behind debug mode.
 - Wait for the browser Scoundrel client to initialize before resolving `getScoundrelClient`.
+- Extract Selenium behavior into drivers and add Appium driver support with configurable sub-drivers.
+- Add a Peakflow Appium Android build to run system tests against the dummy app.
+- Add npm scripts for Selenium and Appium Android system test runs.
+- Add Appium Android test script preflight for Android SDK env vars.
+- Ensure Appium server shutdown runs even when WebDriver teardown fails.
+- Allow the Appium Android test script to infer the Android SDK path.
+- Add Android emulator setup steps to Peakflow for Appium runs.
+- Locate Android SDK tools dynamically in Peakflow setup.
+- Add a Node script to configure and boot the Android emulator for Peakflow.
+- Install Android SDK packages via apt when the SDK is missing in Peakflow.
+- Download Android cmdline-tools when they are missing in Peakflow.
+- Add 5s timeouts around screenshot, log, and HTML capture in system tests.
+- Forward /dev/kvm into Peakflow builds for Android emulator support.
+- Move KVM device mapping into the Appium build config.
+- Fall back to sudo for emulator/adb when KVM access requires root in containers.
+- Run emulator and adb with sudo in container environments.
+- Share ANDROID_AVD_HOME across sudo/non-sudo runs to avoid missing AVDs.
+- Create AVDs with sudo and permissive AVD home permissions in CI containers.
+- Poll for emulator boot completion with a timeout in the setup script.
+- Allow specifying an HTTP connect host for emulator access in Appium runs.
+- Start the adb server as the build user so Appium can see emulator devices.
+- Split emulator setup into install and start stages for CI.
+- Keep HTTP server health checks on the host even when the driver connects via a different host.
+- Remove unsupported emulator args that caused startup failures in CI.
+- Use the current page host (or systemTestHost query param) for system test WebSocket connections.
+- Use the WebSocket protocol for Scoundrel connections from the browser helper.
+- Rename the Appium web build and add a separate Appium Android build in Peakflow.
+- Install OpenJDK 17 in Android emulator setup for native app builds.
+- Allow native runs by enabling system tests via Expo public env vars.
+- Skip web-only specs when running native Appium tests.
+- Add a native Appium Android Peakflow build that prebuilds and installs the dummy APK.
+- Allow the emulator setup to install a specific NDK version for native builds.
+- Allow extra Android SDK packages to be installed during emulator setup.
+- Quote ANDROID_SDK_PACKAGES in Peakflow to avoid shell parsing.
+- Use a writable SDK root in Peakflow to avoid Gradle install failures.
+- Pass the SDK env vars when assembling the Android APK in Peakflow.
+- Write `local.properties` with the SDK path for the Android Gradle build.
+- Honor ANDROID_SDK_ROOT/ANDROID_HOME even when the SDK dir does not exist yet.
+- Reinstall SDK packages on start stage when adb is missing.
+- Ensure the SDK root is writable when installing components.
+- Ensure the SDK `.android` directory is writable for Gradle.
+- Use a dedicated ANDROID_SDK_HOME in Peakflow for writable SDK metadata.
+- Set GRADLE_USER_HOME to a writable directory in Peakflow.
+- Stop Appium web tests from configuring Android in the npm script.
+- Install default JDK in Peakflow before Android SDK setup.
+- Skip Android setup for the Peakflow web build.
+- Run the Peakflow web Appium build without Android emulator setup.
+- Install chromedriver for the Appium Chromium build in Peakflow.
+- Install the Chromium Appium driver before downloading Chromedriver in Peakflow.
+- Set Chrome binary and headless args for the Peakflow Appium web build.
+- Install Google Chrome for the Peakflow Appium web build.
+- Move Peakflow Chrome apt installs to global before_install.
+- Limit Gradle memory and disable the daemon for the Peakflow Appium Android build.
+- Use a lowercase platformName for the Appium Chromium build caps.
+- Run the Appium web npm script in the Peakflow web build.
+- Ensure Peakflow Appium web installs the Chromium driver before running the script.
+- Force Selenium for Peakflow default checks to avoid Appium leakage.
+- Ensure npx can run chromium's chromedriver installer in Peakflow.
+- Ensure Appium web build re-links /usr/bin/node before installing Chromedriver.
+- Skip relinking /usr/bin/node when it already matches.
+- Run Appium by default in the `test:appium:web` npm script.
+- Skip dist checks for native system test runs.
+- Run Appium Android tests against the built APK.
+- Run Chromium chromedriver install via `npx node` in Peakflow.
+- Use `xdescribe` for native skips in system test finders.
+- Ensure Appium native runs set an explicit browserName.
+- Skip web-only system test specs with `xit` for native runs.
+- Add a dummy APK build npm script and use it in Peakflow.
+- Default Appium test ID strategy to `id` for native runs unless overridden.
+- Skip unsupported browser logs when Appium doesn't provide them.
+- Use resource IDs for Appium Android selectors in Peakflow.
+- Skip unsupported current URL lookup for native runs.
+- Map dummy app test IDs to accessibility labels for native Appium runs.
+- Avoid setting a native base selector string in system tests.
+- Mark the system testing root view as accessible for Appium lookups.
+- Install OpenJDK 17 and set JAVA_HOME for the Appium Android build (without overriding PATH).
+- Default Appium native test IDs to accessibility IDs for Android runs.
+- Keep the system test root view from collapsing on Android and set nativeID for Appium.
+- Add a hidden root marker text node to make Appium test IDs discoverable.
+- Increase Appium Android ADB exec timeout to avoid emulator package lookup timeouts.
+- Avoid marking the system test root view as accessible so the marker is discoverable.
+- Make the native root marker visible while remaining visually unobtrusive.
+- Avoid duplicate web test IDs for the system test root marker.
+- Return Appium Android test IDs to the resource ID strategy now that the native marker owns native IDs.
+- Persist Peakflow system test screenshots as build artifacts.
+- Build the dummy Android APK in release mode so the bundle is embedded for Appium runs.
+- Use Android logcat for Appium native log capture instead of unsupported browser logs.
+- Normalize system test host resolution for web runs bound to 0.0.0.0.
+- Use the source `useSystemTest` hook in the dummy Expo app so release bundling can resolve it.
+- Restore the dummy Expo app to use the built `useSystemTest` hook for Metro resolution.
+- Run `prepare:dummy` before building the dummy APK so Metro can resolve `system-testing` during bundling.

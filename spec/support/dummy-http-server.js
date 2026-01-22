@@ -23,9 +23,13 @@ export default class DummyHttpServerEnvironment {
     if (this.started) return
 
     this.originalCwd = process.cwd()
-    await this.ensureDistFolder()
-    process.chdir(this.dummyAppRoot)
-    process.env.SYSTEM_TEST_HOST ||= this.host
+    const resolvedHost = process.env.SYSTEM_TEST_HOST ?? this.host
+    process.env.SYSTEM_TEST_HOST ||= resolvedHost
+
+    if (resolvedHost === "dist") {
+      await this.ensureDistFolder()
+      process.chdir(this.dummyAppRoot)
+    }
     this.started = true
   }
 

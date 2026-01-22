@@ -5,7 +5,8 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { SystemTestFocusedView } from '@/components/system-test-focused-view';
-import useSystemTest from 'system-testing/build/use-system-test.js';
+import { SystemTestRootMarker } from '@/components/system-test-root-marker';
+import useSystemTest from "system-testing/build/use-system-test.js";
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -18,6 +19,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <SystemTestFocusedView focussed>
+        <SystemTestRootMarker />
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />

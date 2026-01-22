@@ -1,5 +1,5 @@
 import { useIsFocused } from '@react-navigation/native';
-import { View, type ViewProps } from 'react-native';
+import { Platform, View, type ViewProps } from 'react-native';
 
 type SystemTestFocusedViewProps = ViewProps & {
   focussed?: boolean;
@@ -18,7 +18,9 @@ export function SystemTestFocusedView({
     <View
       {...rest}
       style={[{ flex: 1 }, style]}
-      testID="systemTestingComponent"
+      testID={Platform.OS === 'web' ? 'systemTestingComponent' : undefined}
+      nativeID={Platform.OS === 'web' ? 'systemTestingComponent' : undefined}
+      collapsable={false}
       // @ts-ignore dataSet is supported at runtime for React Native Web
       dataSet={{ focussed: isFocussed ? 'true' : 'false' }}
     >

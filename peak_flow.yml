@@ -1,5 +1,55 @@
+artifact_dirs:
+  - /home/build/project/tmp/screenshots
+  - /home/build/project/spec/dummy/tmp/screenshots
+before_install:
+  - sudo apt-get update && sudo apt-get install -y ca-certificates openjdk-17-jdk wget
+  - if [ ! -x /usr/bin/node ]; then sudo ln -sf "$(command -v node)" /usr/bin/node; fi
+  - wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+  - sudo apt-get install -y ./google-chrome-stable_current_amd64.deb
+  - rm -f google-chrome-stable_current_amd64.deb
 before_script:
   - npm install
   - cd spec/dummy && npm install
-script:
-  - npm run all-checks
+mem_limit: 16384m
+builds:
+  build_1:
+    name: Default checks
+    script:
+      - SYSTEM_TEST_DRIVER=selenium SYSTEM_TEST_APPIUM_DRIVERS= SYSTEM_TEST_APPIUM_CAPABILITIES= SYSTEM_TEST_APPIUM_SERVER_ARGS= npm run all-checks
+  build_2:
+    name: Appium Web (Chrome)
+    environment:
+      SYSTEM_TEST_HOST: dist
+      SYSTEM_TEST_DRIVER: appium
+      SYSTEM_TEST_APPIUM_DRIVERS: chromium
+      SYSTEM_TEST_APPIUM_TEST_ID_STRATEGY: css
+      SYSTEM_TEST_APPIUM_CAPABILITIES: '{"platformName":"linux","browserName":"chrome","appium:automationName":"Chromium","appium:autodownloadEnabled":true,"goog:chromeOptions":{"binary":"/usr/bin/google-chrome","args":["--headless=new","--no-sandbox","--disable-dev-shm-usage","--disable-gpu"]}}'
+    script:
+      - npx appium driver update chromium || npx appium driver install chromium
+      - npx node node_modules/appium-chromium-driver/scripts/install-chromedriver.mjs
+      - npm run test:appium:web
+  build_3:
+    name: Appium Android
+    devices:
+      - /dev/kvm:/dev/kvm
+    environment:
+      ANDROID_SDK_ROOT: /tmp/android-sdk
+      ANDROID_HOME: /tmp/android-sdk
+      ANDROID_SDK_HOME: /tmp/android-sdk-home
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+      GRADLE_USER_HOME: /tmp/gradle-home
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dorg.gradle.jvmargs=-Xmx3g -Dkotlin.daemon.jvm.options=-Xmx2g"
+      ANDROID_GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dorg.gradle.jvmargs=-Xmx3g -Dkotlin.daemon.jvm.options=-Xmx2g"
+      SYSTEM_TEST_HTTP_CONNECT_HOST: 10.0.2.2
+      SYSTEM_TEST_HOST: native
+      SYSTEM_TEST_NATIVE: "true"
+      SYSTEM_TEST_DRIVER: appium
+      SYSTEM_TEST_APPIUM_DRIVERS: uiautomator2
+      SYSTEM_TEST_APPIUM_TEST_ID_STRATEGY: id
+      SYSTEM_TEST_APPIUM_CAPABILITIES: '{"platformName":"Android","appium:automationName":"UiAutomator2","appium:deviceName":"Android Emulator","appium:autoGrantPermissions":true,"appium:appWaitActivity":"*","appium:adbExecTimeout":60000,"appium:app":"spec/dummy/android/app/build/outputs/apk/release/app-release.apk"}'
+    script:
+      - ANDROID_EMULATOR_STAGE=install ANDROID_NDK_VERSION=27.1.12297006 ANDROID_SDK_PACKAGES="build-tools;36.0.0,platforms;android-36,cmake;3.22.1" node scripts/setup-android-emulator.js
+      - ANDROID_EMULATOR_STAGE=start node scripts/setup-android-emulator.js
+      - npm run build:apk:dummy
+      - npx appium driver update uiautomator2 || npx appium driver install uiautomator2
+      - npm test

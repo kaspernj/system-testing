@@ -14,6 +14,8 @@ const shared = {
  */
 function isSystemTestEnabled() {
   let enabled = false
+  const envEnabled = process.env.EXPO_PUBLIC_SYSTEM_TEST === "true"
+  const envHost = process.env.EXPO_PUBLIC_SYSTEM_TEST_HOST
   const initialUrl = globalThis.location?.href
 
   if (initialUrl) {
@@ -23,6 +25,10 @@ function isSystemTestEnabled() {
     if (queryParams.systemTest == "true") {
       enabled = true
     }
+  }
+
+  if (envEnabled || envHost) {
+    enabled = true
   }
 
   return enabled

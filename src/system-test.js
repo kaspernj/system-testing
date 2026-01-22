@@ -1,19 +1,18 @@
 // @ts-check
 
-import {Builder, By, error as SeleniumError} from "selenium-webdriver"
-import chrome from "selenium-webdriver/chrome.js"
 import {digg} from "diggerize"
 import fs from "node:fs/promises"
-import logging from "selenium-webdriver/lib/logging.js"
 import moment from "moment"
 import {prettify} from "htmlfy"
 import Server from "scoundrel-remote-eval/build/server/index.js"
 import ServerWebSocket from "scoundrel-remote-eval/build/server/connections/web-socket/index.js"
 import SystemTestCommunicator from "./system-test-communicator.js"
 import SystemTestHttpServer from "./system-test-http-server.js"
-import {wait, waitFor} from "awaitery"
+import {waitFor} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
 import {WebSocketServer} from "ws"
+import SeleniumDriver from "./drivers/selenium-driver.js"
+import AppiumDriver from "./drivers/appium-driver.js"
 
 /**
  * @typedef {object} SystemTestArgs
@@ -21,9 +20,16 @@ import {WebSocketServer} from "ws"
  * @property {number} [port] Port for the app server.
  * @property {string} [httpHost] Hostname for the static HTTP server.
  * @property {number} [httpPort] Port for the static HTTP server.
+ * @property {string} [httpConnectHost] Hostname used by the driver to reach the HTTP server.
  * @property {boolean} [debug] Enable debug logging.
  * @property {(error: any) => boolean} [errorFilter] Filter for browser errors (return false to ignore).
  * @property {Record<string, any>} [urlArgs] Query params appended to the root path.
+ * @property {SystemTestDriverConfig} [driver] Driver configuration.
+ */
+/**
+ * @typedef {object} SystemTestDriverConfig
+ * @property {"selenium"|"appium"} [type] Driver implementation to use.
+ * @property {Record<string, any>} [options] Driver-specific options.
  */
 /**
  * @typedef {object} FindArgs
@@ -40,9 +46,6 @@ import {WebSocketServer} from "ws"
  * @property {boolean} [dismiss] Whether to dismiss the notification after it appears.
  */
 
-class ElementNotFoundError extends Error { }
-const {WebDriverError} = SeleniumError
-
 export default class SystemTest {
   static rootPath = "/blank?systemTest=true"
 
@@ -52,9 +55,12 @@ export default class SystemTest {
   /** @type {import("selenium-webdriver").WebDriver | undefined} */
   driver = undefined
 
+  /** @type {import("./drivers/webdriver-driver.js").default | undefined} */
+  driverAdapter = undefined
+
   _started = false
-  _driverTimeouts = 5000
-  _timeouts = 5000
+  /** @type {SystemTestDriverConfig | undefined} */
+  _driverConfig = undefined
   _httpHost = "localhost"
   _httpPort = 1984
   /** @type {(error: any) => boolean | undefined} */
@@ -174,7 +180,7 @@ export default class SystemTest {
       await resolvedCallback(systemTest)
       systemTest.debugLog("Run callback completed")
     } catch (error) {
-      systemTest.debugLog("Run error caught, taking screenshot")
+      systemTest.debugLog(`Run error caught, taking screenshot: ${error instanceof Error ? error.message : error}`)
       await systemTest.takeScreenshot()
 
       throw error
@@ -185,7 +191,7 @@ export default class SystemTest {
    * Creates a new SystemTest instance
    * @param {SystemTestArgs} [args]
    */
-  constructor({host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, debug = false, errorFilter, urlArgs, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
+  constructor({host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, httpConnectHost, debug = false, errorFilter, urlArgs, driver, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
     const restArgsKeys = Object.keys(restArgs)
 
     if (restArgsKeys.length > 0) {
@@ -196,10 +202,13 @@ export default class SystemTest {
     this._port = port
     this._httpHost = httpHost
     this._httpPort = httpPort
+    this._httpConnectHost = httpConnectHost
     this._debug = debug
     this._errorFilter = errorFilter
     this._urlArgs = urlArgs
     this._rootPath = this.buildRootPath()
+    this._driverConfig = driver
+    this.driverAdapter = this.createDriver(driver)
 
     /** @type {Record<number, object>} */
     this._responses = {}
@@ -217,11 +226,39 @@ export default class SystemTest {
 
   /** @returns {import("selenium-webdriver").WebDriver} */
   getDriver() {
-    if (!this) throw new Error("No this?")
-    if (!this.driver) throw new Error("Driver hasn't been initialized yet")
-    this.throwIfHttpServerError()
+    return this.getDriverAdapter().getWebDriver()
+  }
 
-    return this.driver
+  /** @returns {import("./drivers/webdriver-driver.js").default} */
+  getDriverAdapter() {
+    if (!this.driverAdapter) {
+      throw new Error("Driver hasn't been initialized yet")
+    }
+
+    return this.driverAdapter
+  }
+
+  /**
+   * @param {SystemTestDriverConfig} [driverConfig]
+   * @returns {import("./drivers/webdriver-driver.js").default}
+   */
+  createDriver(driverConfig = {}) {
+    const {type = "selenium", options, ...restArgs} = driverConfig
+    const restArgsKeys = Object.keys(restArgs)
+
+    if (restArgsKeys.length > 0) {
+      throw new Error(`Unknown driver args: ${restArgsKeys.join(", ")}`)
+    }
+
+    if (type === "selenium") {
+      return new SeleniumDriver({systemTest: this, options})
+    }
+
+    if (type === "appium") {
+      return new AppiumDriver({systemTest: this, options})
+    }
+
+    throw new Error(`Unsupported driver type: ${type}`)
   }
 
   /**
@@ -351,67 +388,7 @@ export default class SystemTest {
    * @returns {Promise<import("selenium-webdriver").WebElement[]>}
    */
   async all(selector, args = {}) {
-    const {visible = true, timeout, useBaseSelector = true, ...restArgs} = args
-    const restArgsKeys = Object.keys(restArgs)
-    let actualTimeout
-
-    if (timeout === undefined) {
-      actualTimeout = this._driverTimeouts
-    } else {
-      actualTimeout = timeout
-    }
-
-    if (restArgsKeys.length > 0) throw new Error(`Unknown arguments: ${restArgsKeys.join(", ")}`)
-
-    const actualSelector = useBaseSelector ? this.getSelector(selector) : selector
-    const startTime = Date.now()
-    const getTimeLeft = () => Math.max(actualTimeout - (Date.now() - startTime), 0)
-    const getElements = async () => {
-      const foundElements = await this.getDriver().findElements(By.css(actualSelector))
-
-      if (visible !== true && visible !== false) {
-        return foundElements
-      }
-
-      const filteredElements = []
-
-      for (const element of foundElements) {
-        const isDisplayed = await element.isDisplayed()
-
-        if (visible && !isDisplayed) continue
-        if (!visible && isDisplayed) continue
-
-        filteredElements.push(element)
-      }
-
-      return filteredElements
-    }
-    let elements = []
-
-    while (true) {
-      const timeLeft = actualTimeout == 0 ? 0 : getTimeLeft()
-
-      try {
-        if (timeLeft == 0) {
-          elements = await getElements()
-        } else {
-          await this.getDriver().wait(async () => {
-            elements = await getElements()
-
-            return elements.length > 0
-          }, timeLeft)
-        }
-
-        break
-      } catch (error) {
-        if (error instanceof SeleniumError.TimeoutError && getTimeLeft() > 0) {
-          continue
-        }
-
-        throw new Error(`Couldn't get elements with selector: ${actualSelector}: ${error instanceof Error ? error.message : error}`)
-      }
-    }
-    return elements
+    return await this.getDriverAdapter().all(selector, args)
   }
 
   /**
@@ -426,34 +403,7 @@ export default class SystemTest {
    * @returns {Promise<void>}
    */
   async click(elementOrIdentifier, args) {
-    let tries = 0
-
-    while (true) {
-      tries++
-
-      try {
-        const element = await this._findElement(elementOrIdentifier, args)
-        const actions = this.getDriver().actions({async: true})
-
-        await actions.move({origin: element}).click().perform()
-        break
-      } catch (error) {
-        if (error instanceof Error) {
-          if (error.constructor.name === "ElementNotInteractableError") {
-            if (tries >= 3) {
-              throw new Error(`Element ${elementOrIdentifier.constructor.name} click failed after ${tries} tries - ${error.constructor.name}: ${error.message}`)
-            } else {
-              await wait(50)
-            }
-          } else {
-            // Re-throw with un-corrupted stack trace
-            throw new Error(`Element ${elementOrIdentifier.constructor.name} click failed - ${error.constructor.name}: ${error.message}`)
-          }
-        } else {
-          throw new Error(`Element ${elementOrIdentifier.constructor.name} click failed - ${typeof error}: ${error}`)
-        }
-      }
-    }
+    await this.getDriverAdapter().click(elementOrIdentifier, args)
   }
 
   /**
@@ -463,34 +413,17 @@ export default class SystemTest {
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
   async find(selector, args = {}) {
-    const startTime = Date.now()
-    let elements = []
+    return await this.getDriverAdapter().find(selector, args)
+  }
 
-    try {
-      elements = await this.all(selector, args)
-    } catch (error) {
-      // Re-throw to recover stack trace
-      if (error instanceof Error) {
-        if (error.message.startsWith("Wait timed out after")) {
-          elements = []
-        }
-
-        throw new Error(`${error.constructor.name} - ${error.message} (selector: ${this.getSelector(selector)})`)
-      } else {
-        throw new Error(`${typeof error} - ${error} (selector: ${this.getSelector(selector)})`)
-      }
-    }
-
-    if (elements.length > 1) {
-      throw new Error(`More than 1 elements (${elements.length}) was found by CSS: ${this.getSelector(selector)}`)
-    }
-
-    if (!elements[0]) {
-      const elapsedSeconds = (Date.now() - startTime) / 1000
-      throw new ElementNotFoundError(`Element couldn't be found after ${elapsedSeconds.toFixed(2)}s by CSS: ${this.getSelector(selector)}`)
-    }
-
-    return elements[0]
+  /**
+   * Finds a single element by test ID
+   * @param {string} testId
+   * @param {FindArgs} [args]
+   * @returns {Promise<import("selenium-webdriver").WebElement>}
+   */
+  async findByTestId(testId, args) {
+    return await this.getDriverAdapter().findByTestId(testId, args)
   }
 
   /**
@@ -499,29 +432,8 @@ export default class SystemTest {
    * @param {FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
-  async findByTestID(testID, args) { return await this.find(`[data-testid='${testID}']`, args) }
-
-
-  /**
-   * @param {string|import("selenium-webdriver").WebElement|{selector: string} & FindArgs} elementOrIdentifier
-   * @param {FindArgs} [args]
-   * @returns {Promise<import("selenium-webdriver").WebElement>}
-   */
-  async _findElement(elementOrIdentifier, args) {
-    /** @type {import("selenium-webdriver").WebElement} */
-    let element
-
-    if (typeof elementOrIdentifier == "string") {
-      element = await this.find(elementOrIdentifier, args)
-    } else if (typeof elementOrIdentifier == "object" && elementOrIdentifier !== null && "selector" in elementOrIdentifier) {
-      const {selector, ...restArgs} = elementOrIdentifier
-
-      element = await this.find(selector, restArgs)
-    } else {
-      element = /** @type {import("selenium-webdriver").WebElement} */ (elementOrIdentifier)
-    }
-
-    return element
+  async findByTestID(testID, args) {
+    return await this.getDriverAdapter().findByTestID(testID, args)
   }
 
   /**
@@ -531,13 +443,7 @@ export default class SystemTest {
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
   async findNoWait(selector, args = {}) {
-    await this.driverSetTimeouts(0)
-
-    try {
-      return await this.find(selector, args)
-    } finally {
-      await this.restoreTimeouts()
-    }
+    return await this.getDriverAdapter().findNoWait(selector, args)
   }
 
   /**
@@ -545,32 +451,16 @@ export default class SystemTest {
    * @returns {Promise<string[]>}
    */
   async getBrowserLogs() {
-    const entries = await this.getDriver().manage().logs().get(logging.Type.BROWSER)
-    const browserLogs = []
-
-    for (const entry of entries) {
-      const messageMatch = entry.message.match(/^(.+) (\d+):(\d+) (.+)$/)
-      let message
-
-      if (messageMatch) {
-        message = messageMatch[4]
-      } else {
-        message = entry.message
-      }
-
-      browserLogs.push(`${entry.level.name}: ${message}`)
-    }
-
-    return browserLogs
+    return await this.getDriverAdapter().getBrowserLogs()
   }
 
   /** @returns {Promise<string>} */
   async getCurrentUrl() {
-    return await this.getDriver().getCurrentUrl()
+    return await this.getDriverAdapter().getCurrentUrl()
   }
 
   /** @returns {number} */
-  getTimeouts() { return this._timeouts }
+  getTimeouts() { return this.getDriverAdapter().getTimeouts() }
 
   /**
    * Interacts with an element by calling a method on it with the given arguments.
@@ -581,52 +471,7 @@ export default class SystemTest {
    * @returns {Promise<any>}
    */
   async interact(elementOrIdentifier, methodName, ...args) {
-    let tries = 0
-
-    while (true) {
-      tries++
-
-      const element = await this._findElement(elementOrIdentifier)
-
-      if (!element[methodName]) {
-        throw new Error(`${element.constructor.name} hasn't an attribute named: ${methodName}`)
-      } else if (typeof element[methodName] != "function") {
-        throw new Error(`${element.constructor.name}#${methodName} is not a function`)
-      }
-
-      try {
-        // Dont call with candidate, because that will bind the function wrong.
-        return await element[methodName](...args)
-      } catch (error) {
-        if (error instanceof Error) {
-          if (
-            error.constructor.name === "ElementNotInteractableError" ||
-            error.constructor.name === "ElementClickInterceptedError" ||
-            error.constructor.name === "StaleElementReferenceError"
-          ) {
-            // Retry finding the element and interacting with it
-            if (tries >= 3) {
-              let elementDescription
-
-              if (typeof elementOrIdentifier == "string") {
-                elementDescription = `CSS selector ${elementOrIdentifier}`
-              } else {
-                elementDescription = `${element.constructor.name}`
-              }
-
-              throw new Error(`${elementDescription} ${methodName} failed after ${tries} tries - ${error.constructor.name}: ${error.message}`)
-            } else {
-              await wait(50)
-            }
-          } else {
-            // Re-throw with un-corrupted stack trace
-            throw new Error(`${element.constructor.name} ${methodName} failed - ${error.constructor.name}: ${error.message}`)
-          }
-        } else {
-          throw new Error(`${element.constructor.name} ${methodName} failed - ${typeof error}: ${error}`)
-        }
-      }
-    }
+    return await this.getDriverAdapter().interact(elementOrIdentifier, methodName, ...args)
   }
 
   /**
@@ -660,61 +505,7 @@ export default class SystemTest {
    * @returns {Promise<void>}
    */
   async waitForNoSelector(selector, args = {}) {
-    const {useBaseSelector, ...restArgs} = args
-
-    if (Object.keys(restArgs).length > 0) {
-      throw new Error(`Unexpected args: ${Object.keys(restArgs).join(", ")}`)
-    }
-
-    const actualSelector = useBaseSelector ? this.getSelector(selector) : selector
-
-    await this.driverSetTimeouts(0)
-
-    try {
-      await this._withRethrownErrors(async () => {
-        await this.getDriver().wait(
-          async () => {
-            const elements = await this.getDriver().findElements(By.css(actualSelector))
-
-            // Not found at all
-            if (elements.length === 0) {
-              return true
-            }
-
-            // Found but not visible
-            try {
-              const isDisplayed = await elements[0].isDisplayed()
-
-              return !isDisplayed
-            } catch (error) {
-              if (
-                error instanceof Error &&
-                (error.constructor.name === "StaleElementReferenceError" || error.message.includes("stale element reference"))
-              ) {
-                return false
-              }
-
-              throw error
-            }
-          },
-          this.getTimeouts()
-        )
-      })
-    } finally {
-      await this.restoreTimeouts()
-    }
-  }
-
-  async _withRethrownErrors(callback) {
-    try {
-      return await callback()
-    } catch (error) {
-      if (error instanceof WebDriverError) {
-        throw new Error(`Selenium ${error.constructor.name}: ${error.message}`)
-      } else {
-        throw error
-      }
-    }
+    await this.getDriverAdapter().waitForNoSelector(selector, args)
   }
 
   /**
@@ -803,7 +594,7 @@ export default class SystemTest {
    * Gets the HTML of the current page
    * @returns {Promise<string>}
    */
-  async getHTML() { return await this.getDriver().getPageSource() }
+  async getHTML() { return await this.getDriverAdapter().getHTML() }
 
   /**
    * Starts the system test
@@ -811,11 +602,17 @@ export default class SystemTest {
    */
   async start() {
     this.debugLog("Start called")
-    if (process.env.SYSTEM_TEST_HOST == "expo-dev-server") {
+    const isNativeHost = process.env.SYSTEM_TEST_HOST === "native"
+
+    if (isNativeHost) {
+      this.currentUrl = "native://"
+      this.debugLog("Using native app host")
+    } else if (process.env.SYSTEM_TEST_HOST == "expo-dev-server") {
       this.currentUrl = `http://${this._host}:${this._port}`
       this.debugLog(`Using expo-dev-server at ${this.currentUrl}`)
     } else if (process.env.SYSTEM_TEST_HOST == "dist") {
-      this.currentUrl = `http://${this._httpHost}:${this._httpPort}`
+      const connectHost = this._httpConnectHost ?? this._httpHost
+      this.currentUrl = `http://${connectHost}:${this._httpPort}`
 
       this.debugLog(`Spawning HTTP server for dist on ${this._httpHost}:${this._httpPort}`)
       this.systemTestHttpServer = new SystemTestHttpServer({
@@ -831,25 +628,13 @@ export default class SystemTest {
       await this.systemTestHttpServer.assertReachable({timeoutMs: this.getTimeouts()})
       this.debugLog("HTTP server started")
     } else {
-      throw new Error("Please set SYSTEM_TEST_HOST to 'expo-dev-server' or 'dist'")
+      throw new Error("Please set SYSTEM_TEST_HOST to 'expo-dev-server', 'dist', or 'native'")
     }
 
-    const options = new chrome.Options()
-
-    options.addArguments("--disable-dev-shm-usage")
-    options.addArguments("--disable-gpu")
-    options.addArguments("--headless=new")
-    options.addArguments("--no-sandbox")
-    options.addArguments("--window-size=1920,1080")
-    this.debugLog("Chrome options configured")
-
-    this.driver = new Builder()
-      .forBrowser("chrome")
-      .setChromeOptions(options)
-      // @ts-expect-error
-      .setCapability("goog:loggingPrefs", {browser: "ALL"})
-      .build()
-    this.debugLog("WebDriver built")
+    this.driverAdapter.setBaseUrl(this.currentUrl)
+    this.debugLog("Starting driver")
+    await this.driverAdapter.start()
+    this.debugLog("Driver started")
 
     await this.setTimeouts(10000)
     this.debugLog("Timeouts set on driver")
@@ -859,19 +644,29 @@ export default class SystemTest {
     await this.startWebSocketServer()
     this.debugLog("WebSocket server started")
 
-    // Visit the root page and wait for Expo to be loaded and the app to appear
-    this.debugLog("Visiting root path")
-    const rootPath = this.getRootPath()
-    await this.driverVisit(rootPath)
-    this.debugLog(`Visited root path ${rootPath}`)
+    if (!isNativeHost) {
+      // Visit the root page and wait for Expo to be loaded and the app to appear
+      this.debugLog("Visiting root path")
+      const rootPath = this.getRootPath()
+      await this.driverVisit(rootPath)
+      this.debugLog(`Visited root path ${rootPath}`)
 
-    try {
-      await this.find("body > #root", {useBaseSelector: false})
-      await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true})
-      this.debugLog("Found root and systemTestingComponent")
-    } catch (error) {
-      await this.takeScreenshot()
-      throw error
+      try {
+        await this.find("body > #root", {useBaseSelector: false})
+        await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true})
+        this.debugLog("Found root and systemTestingComponent")
+      } catch (error) {
+        await this.takeScreenshot()
+        throw error
+      }
+    } else {
+      try {
+        await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true})
+        this.debugLog("Found systemTestingComponent for native app")
+      } catch (error) {
+        await this.takeScreenshot()
+        throw error
+      }
     }
 
     // Wait for client to connect
@@ -882,7 +677,9 @@ export default class SystemTest {
     this.debugLog("Client WebSocket connected")
 
     this._started = true
-    this.setBaseSelector("[data-testid='systemTestingComponent'][data-focussed='true']")
+    if (!isNativeHost) {
+      this.setBaseSelector("[data-testid='systemTestingComponent'][data-focussed='true']")
+    }
     this.debugLog("Start completed")
   }
 
@@ -927,11 +724,7 @@ export default class SystemTest {
    * @returns {Promise<void>}
    */
   async restoreTimeouts() {
-    if (!this.getTimeouts()) {
-      throw new Error("Timeouts haven't previously been set")
-    }
-
-    await this.driverSetTimeouts(this.getTimeouts())
+    await this.getDriverAdapter().restoreTimeouts()
   }
 
   /**
@@ -940,8 +733,7 @@ export default class SystemTest {
    * @returns {Promise<void>}
    */
   async driverSetTimeouts(newTimeout) {
-    this._driverTimeouts = newTimeout
-    await this.getDriver().manage().setTimeouts({implicit: newTimeout})
+    await this.getDriverAdapter().driverSetTimeouts(newTimeout)
   }
 
   /**
@@ -950,8 +742,7 @@ export default class SystemTest {
    * @returns {Promise<void>}
    */
   async setTimeouts(newTimeout) {
-    this._timeouts = newTimeout
-    await this.restoreTimeouts()
+    await this.getDriverAdapter().setTimeouts(newTimeout)
   }
 
   /**
@@ -1097,8 +888,8 @@ export default class SystemTest {
       this.ws = null
     }
     await this.closeWebSocketServer(this.clientWss, "client WebSocket server")
-    if (this.driver) {
-      await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while quitting WebDriver"}, async () => await this.driver.quit())
+    if (this.driverAdapter) {
+      await this.driverAdapter.stop()
     }
     if (this.systemTestHttpServer) {
       await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while closing HTTP server"}, async () => await this.systemTestHttpServer.close())
@@ -1116,6 +907,7 @@ export default class SystemTest {
     this._baseSelector = undefined
     this.currentUrl = undefined
     this.driver = undefined
+    this.driverAdapter = this.createDriver(this._driverConfig)
     this.ws = null
     this.clientWss = undefined
     this.scoundrelWss = undefined
@@ -1137,9 +929,7 @@ export default class SystemTest {
    * @returns {Promise<void>}
    */
   async driverVisit(path) {
-    const url = `${this.currentUrl}${path}`
-
-    await this.getDriver().get(url)
+    await this.getDriverAdapter().driverVisit(path)
   }
 
   /**
@@ -1154,7 +944,7 @@ export default class SystemTest {
     await fs.mkdir(path, {recursive: true})
 
     this.debugLog("Getting screenshot image content")
-    const imageContent = await this.getDriver().takeScreenshot()
+    const imageContent = await timeout({timeout: 5000, errorMessage: "timeout while taking screenshot"}, async () => await this.getDriverAdapter().takeScreenshot())
 
     this.debugLog("Generating date variables")
     const now = new Date()
@@ -1163,8 +953,8 @@ export default class SystemTest {
     const logsPath = `${path}/${moment(now).format("YYYY-MM-DD-HH-MM-SS")}.logs.txt`
 
     this.debugLog("Getting browser logs")
-    const logsText = await this.getBrowserLogs()
-    const html = await this.getHTML()
+    const logsText = await timeout({timeout: 5000, errorMessage: "timeout while reading browser logs"}, async () => await this.getBrowserLogs())
+    const html = await timeout({timeout: 5000, errorMessage: "timeout while reading page HTML"}, async () => await this.getHTML())
     const htmlPretty = prettify(html)
 
     this.debugLog("Writing files")
