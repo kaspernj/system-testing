@@ -30,7 +30,7 @@
     "prepare:dummy": "npm run build && rm -rf spec/dummy/node_modules/system-testing && mkdir -p spec/dummy/node_modules/system-testing && cp -r build package.json spec/dummy/node_modules/system-testing/",
     "build": "rm -rf build && npm run compile",
     "compile": "tsc",
-    "build:apk:dummy": "cd spec/dummy && EXPO_PUBLIC_SYSTEM_TEST=true EXPO_PUBLIC_SYSTEM_TEST_HOST=10.0.2.2 npx expo prebuild --platform android --no-install --non-interactive && cd android && echo \"sdk.dir=/tmp/android-sdk\" > local.properties && ANDROID_SDK_ROOT=/tmp/android-sdk ANDROID_HOME=/tmp/android-sdk ANDROID_SDK_HOME=/tmp/android-sdk-home GRADLE_USER_HOME=/tmp/gradle-home ./gradlew --no-daemon --stacktrace assembleRelease",
+    "build:apk:dummy": "npm run prepare:dummy && cd spec/dummy && EXPO_PUBLIC_SYSTEM_TEST=true EXPO_PUBLIC_SYSTEM_TEST_HOST=10.0.2.2 npx expo prebuild --platform android --no-install --non-interactive && cd android && echo \"sdk.dir=/tmp/android-sdk\" > local.properties && ANDROID_SDK_ROOT=/tmp/android-sdk ANDROID_HOME=/tmp/android-sdk ANDROID_SDK_HOME=/tmp/android-sdk-home GRADLE_USER_HOME=/tmp/gradle-home ./gradlew --no-daemon --stacktrace assembleRelease",
     "export:web": "npm run prepare:dummy && npm --prefix spec/dummy run export:web",
     "lint": "eslint --max-warnings 0",
     "prepublishOnly": "npm run build",
