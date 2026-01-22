@@ -127,3 +127,5 @@
 - Avoid duplicate web test IDs for the system test root marker.
 - Return Appium Android test IDs to the resource ID strategy now that the native marker owns native IDs.
 - Persist Peakflow system test screenshots as build artifacts.
+- Build the dummy Android APK in release mode so the bundle is embedded for Appium runs.
+- Use Android logcat for Appium native log capture instead of unsupported browser logs.

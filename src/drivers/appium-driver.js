@@ -83,6 +83,38 @@ export default class AppiumDriver extends WebDriverDriver {
   }
 
   /**
+   * @returns {Promise<string[]>}
+   */
+  async getBrowserLogs() {
+    const platformName = this.options.capabilities?.platformName
+    const browserName = this.options.capabilities?.browserName ?? this.options.browserName
+    const isAndroid = typeof platformName === "string" && platformName.toLowerCase() === "android"
+
+    if (isAndroid && !browserName) {
+      let entries
+
+      try {
+        entries = await this.getWebDriver().manage().logs().get("logcat")
+      } catch {
+        return []
+      }
+
+      const logcatLogs = []
+
+      for (const entry of entries) {
+        const messageMatch = entry.message.match(/^(.+) (\d+):(\d+) (.+)$/)
+        const message = messageMatch ? messageMatch[4] : entry.message
+
+        logcatLogs.push(`${entry.level.name}: ${message}`)
+      }
+
+      return logcatLogs
+    }
+
+    return await super.getBrowserLogs()
+  }
+
+  /**
    * Finds a single element by test ID.
    * @param {string} testId
    * @param {FindArgs} [args]
