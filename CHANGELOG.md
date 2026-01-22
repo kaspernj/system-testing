@@ -121,3 +121,4 @@
 - Default Appium native test IDs to accessibility IDs for Android runs.
 - Keep the system test root view from collapsing on Android and set nativeID for Appium.
 - Add a hidden root marker text node to make Appium test IDs discoverable.
+- Increase Appium Android ADB exec timeout to avoid emulator package lookup timeouts.
