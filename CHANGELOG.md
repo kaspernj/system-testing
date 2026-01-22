@@ -131,3 +131,4 @@
 - Use Android logcat for Appium native log capture instead of unsupported browser logs.
 - Normalize system test host resolution for web runs bound to 0.0.0.0.
 - Use the source `useSystemTest` hook in the dummy Expo app so release bundling can resolve it.
+- Restore the dummy Expo app to use the built `useSystemTest` hook for Metro resolution.
