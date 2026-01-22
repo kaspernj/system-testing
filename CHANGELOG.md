@@ -130,3 +130,4 @@
 - Build the dummy Android APK in release mode so the bundle is embedded for Appium runs.
 - Use Android logcat for Appium native log capture instead of unsupported browser logs.
 - Normalize system test host resolution for web runs bound to 0.0.0.0.
+- Use the source `useSystemTest` hook in the dummy Expo app so release bundling can resolve it.
