@@ -120,3 +120,4 @@
 - Install OpenJDK 17 and set JAVA_HOME for the Appium Android build (without overriding PATH).
 - Default Appium native test IDs to accessibility IDs for Android runs.
 - Keep the system test root view from collapsing on Android and set nativeID for Appium.
+- Add a hidden root marker text node to make Appium test IDs discoverable.
