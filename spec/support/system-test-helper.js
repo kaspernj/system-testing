@@ -118,7 +118,7 @@ export default class SystemTestHelper {
     const capabilities = parseJson(process.env.SYSTEM_TEST_APPIUM_CAPABILITIES, "SYSTEM_TEST_APPIUM_CAPABILITIES")
     const useDrivers = process.env.SYSTEM_TEST_APPIUM_DRIVERS ? process.env.SYSTEM_TEST_APPIUM_DRIVERS.split(",").map((driverName) => driverName.trim()).filter(Boolean) : undefined
     const testIdStrategy = process.env.SYSTEM_TEST_APPIUM_TEST_ID_STRATEGY
-      ?? (process.env.SYSTEM_TEST_NATIVE === "true" ? "accessibilityId" : "css")
+      ?? (process.env.SYSTEM_TEST_NATIVE === "true" ? "id" : "css")
     const serverUrl = process.env.SYSTEM_TEST_APPIUM_SERVER_URL
 
     return {
