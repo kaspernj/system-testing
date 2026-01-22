@@ -124,3 +124,4 @@
 - Increase Appium Android ADB exec timeout to avoid emulator package lookup timeouts.
 - Avoid marking the system test root view as accessible so the marker is discoverable.
 - Make the native root marker visible while remaining visually unobtrusive.
+- Avoid duplicate web test IDs for the system test root marker.

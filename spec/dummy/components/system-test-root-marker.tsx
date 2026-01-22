@@ -1,4 +1,4 @@
-import { StyleSheet, Text } from "react-native"
+import { Platform, StyleSheet, Text } from "react-native"
 
 const styles = StyleSheet.create({
   marker: {
@@ -14,13 +14,13 @@ const styles = StyleSheet.create({
 export function SystemTestRootMarker() {
   return (
     <Text
-      accessibilityLabel="systemTestingComponent"
+      accessibilityLabel={Platform.OS === "web" ? undefined : "systemTestingComponent"}
       accessibilityRole="text"
       accessible
       collapsable={false}
-      nativeID="systemTestingComponent"
+      nativeID={Platform.OS === "web" ? undefined : "systemTestingComponent"}
       style={styles.marker}
-      testID="systemTestingComponent"
+      testID={Platform.OS === "web" ? undefined : "systemTestingComponent"}
     >
       System testing root
     </Text>
