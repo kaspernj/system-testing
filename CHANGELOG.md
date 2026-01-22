@@ -122,3 +122,4 @@
 - Keep the system test root view from collapsing on Android and set nativeID for Appium.
 - Add a hidden root marker text node to make Appium test IDs discoverable.
 - Increase Appium Android ADB exec timeout to avoid emulator package lookup timeouts.
+- Allow hidden native root marker lookup when bootstrapping Appium runs.
