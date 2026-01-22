@@ -1,28 +1,26 @@
-import { Platform, StyleSheet, Text } from "react-native"
+import { Platform, StyleSheet, View } from "react-native"
 
 const styles = StyleSheet.create({
   marker: {
-    color: "transparent",
     height: 1,
+    left: 0,
+    opacity: 0,
     position: "absolute",
-    fontSize: 1,
-    lineHeight: 1,
+    top: 0,
     width: 1,
   },
 })
 
 export function SystemTestRootMarker() {
   return (
-    <Text
+    <View
       accessibilityLabel={Platform.OS === "web" ? undefined : "systemTestingComponent"}
-      accessibilityRole="text"
       accessible
       collapsable={false}
       nativeID={Platform.OS === "web" ? undefined : "systemTestingComponent"}
+      pointerEvents="none"
       style={styles.marker}
       testID={Platform.OS === "web" ? undefined : "systemTestingComponent"}
-    >
-      System testing root
-    </Text>
+    />
   )
 }
