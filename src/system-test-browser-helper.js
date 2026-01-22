@@ -151,7 +151,11 @@ export default class SystemTestBrowserHelper {
     const params = new URLSearchParams(search)
     const host = params.get("systemTestHost")
 
-    return host || defaultHost
+    const resolvedHost = host || defaultHost
+
+    if (resolvedHost === "0.0.0.0") return "127.0.0.1"
+
+    return resolvedHost
   }
 
   /**
