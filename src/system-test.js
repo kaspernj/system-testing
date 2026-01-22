@@ -661,7 +661,7 @@ export default class SystemTest {
       }
     } else {
       try {
-        await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: false})
+        await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true})
         this.debugLog("Found systemTestingComponent for native app")
       } catch (error) {
         await this.takeScreenshot()
