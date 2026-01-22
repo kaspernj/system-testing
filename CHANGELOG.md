@@ -126,3 +126,4 @@
 - Make the native root marker visible while remaining visually unobtrusive.
 - Avoid duplicate web test IDs for the system test root marker.
 - Return Appium Android test IDs to the resource ID strategy now that the native marker owns native IDs.
+- Persist Peakflow system test screenshots as build artifacts.
