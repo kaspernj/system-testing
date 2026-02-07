@@ -134,6 +134,26 @@ Notes:
 - If you need scoundrel remote evaluation, wait for `systemTestBrowserHelper` and register your classes there, as shown in the commented snippet above.
 - Add a root wrapper with `testID="systemTestingComponent"` (and optionally `data-focussed="true"`) around your app so the runner has a stable element to detect and scope selectors against.
 - From your tests, use `await systemTest.getScoundrelClient()` to obtain the browser Scoundrel client for remote evaluation.
+- `useSystemTest` calls `useRouter()` from `expo-router`. If you are not using Expo Router, install `expo-router` or provide your own guard to avoid navigation errors.
+
+### Root path and `blankText`
+
+`SystemTest.run()` visits `SystemTest.rootPath` (defaults to `/blank?systemTest=true`) and waits for an element with `testID="blankText"` inside the focused `systemTestingComponent`. If your app does not have a `/blank` route, set a custom root path and ensure the element exists on that screen.
+
+Example setup:
+
+```js
+import SystemTest from "system-testing/build/system-test.js"
+
+SystemTest.rootPath = "/?platform=web&systemTest=true"
+```
+
+```jsx
+<View testID="systemTestingComponent" dataSet={{focussed: "true"}}>
+  <Text testID="blankText">Blank</Text>
+  {children}
+</View>
+```
 
 ### Base selector and focused container
 
