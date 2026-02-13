@@ -933,6 +933,40 @@ export default class SystemTest {
   }
 
   /**
+   * Formats browser logs for console output and truncates overly long output.
+   * @param {string[]} logs
+   * @param {number} [maxLines]
+   * @returns {string[]}
+   */
+  formatBrowserLogsForConsole(logs, maxLines = 200) {
+    if (!Array.isArray(logs) || logs.length === 0) {
+      return ["(no browser logs)"]
+    }
+
+    if (logs.length <= maxLines) {
+      return logs
+    }
+
+    const keptLogs = logs.slice(logs.length - maxLines)
+    const hiddenCount = logs.length - maxLines
+
+    return [`(showing last ${maxLines} of ${logs.length} browser logs, ${hiddenCount} omitted)`, ...keptLogs]
+  }
+
+  /**
+   * Prints browser logs to stdout for CI visibility when tests fail.
+   * @param {string[]} logs
+   * @returns {void}
+   */
+  printBrowserLogsForFailure(logs) {
+    console.log("Browser logs:")
+
+    for (const line of this.formatBrowserLogsForConsole(logs)) {
+      console.log(line)
+    }
+  }
+
+  /**
    * Takes a screenshot, saves HTML and browser logs
    * @returns {Promise<void>}
    */
@@ -956,6 +990,7 @@ export default class SystemTest {
     const logsText = await timeout({timeout: 5000, errorMessage: "timeout while reading browser logs"}, async () => await this.getBrowserLogs())
     const html = await timeout({timeout: 5000, errorMessage: "timeout while reading page HTML"}, async () => await this.getHTML())
     const htmlPretty = prettify(html)
+    this.printBrowserLogsForFailure(logsText)
 
     this.debugLog("Writing files")
     await fs.writeFile(htmlPath, htmlPretty)
