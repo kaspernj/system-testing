@@ -652,19 +652,29 @@ export default class SystemTest {
       this.debugLog(`Visited root path ${rootPath}`)
 
       try {
+        this.debugLog("Finding root element body > #root")
         await this.find("body > #root", {useBaseSelector: false})
+        this.debugLog("Found root element body > #root")
+
+        this.debugLog("Finding systemTestingComponent")
         await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true})
+        this.debugLog("Found systemTestingComponent")
         this.debugLog("Found root and systemTestingComponent")
       } catch (error) {
+        this.debugLog("Error while finding root/systemTestingComponent, taking screenshot")
         await this.takeScreenshot()
+        this.debugLog("Screenshot captured after root/systemTestingComponent lookup failure")
         throw error
       }
     } else {
       try {
+        this.debugLog("Finding systemTestingComponent for native app")
         await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true})
         this.debugLog("Found systemTestingComponent for native app")
       } catch (error) {
+        this.debugLog("Error while finding native systemTestingComponent, taking screenshot")
         await this.takeScreenshot()
+        this.debugLog("Screenshot captured after native systemTestingComponent lookup failure")
         throw error
       }
     }
@@ -677,8 +687,11 @@ export default class SystemTest {
     this.debugLog("Client WebSocket connected")
 
     this._started = true
+    this.debugLog("Marked system test as started")
     if (!isNativeHost) {
+      this.debugLog("Setting base selector to focused systemTestingComponent")
       this.setBaseSelector("[data-testid='systemTestingComponent'][data-focussed='true']")
+      this.debugLog("Base selector set")
     }
     this.debugLog("Start completed")
   }
