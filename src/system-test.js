@@ -346,15 +346,26 @@ export default class SystemTest {
       throw new Error("Scoundrel server is not started")
     }
 
+    this.debugLog("getScoundrelClient: waiting for browser Scoundrel initialization")
     await timeout({timeout: timeoutMs, errorMessage: "Timed out waiting for Scoundrel to initialize"}, async () => {
       await this.getCommunicator().sendCommand({type: "waitForScoundrel"})
     })
+    this.debugLog("getScoundrelClient: browser reported Scoundrel initialized")
+
+    /**
+     * @param {any} client
+     * @returns {boolean}
+     */
+    const isOpenClient = (client) => client?.backend?.ws?.readyState === 1
 
     const existingClients = this.server.getClients?.()
+    const openExistingClients = existingClients?.filter(isOpenClient)
 
-    if (existingClients && existingClients.length > 0) {
-      return existingClients[0]
+    if (openExistingClients && openExistingClients.length > 0) {
+      this.debugLog(`getScoundrelClient: using existing open client (${openExistingClients.length} available)`)
+      return openExistingClients[openExistingClients.length - 1]
     }
+    this.debugLog(`getScoundrelClient: no open cached clients, waiting for new connection (cached total: ${existingClients?.length ?? 0})`)
 
     if (!this.server.events?.on) {
       throw new Error("Scoundrel server events are unavailable")
@@ -370,7 +381,9 @@ export default class SystemTest {
     try {
       return await timeout({timeout: timeoutMs, errorMessage: "Timed out waiting for Scoundrel client"}, async () => await new Promise((resolve) => {
         onNewClient = (client) => {
+          if (!isOpenClient(client)) return
           cleanupListener()
+          this.debugLog("getScoundrelClient: received new open client")
           resolve(client)
         }
 
@@ -652,19 +665,29 @@ export default class SystemTest {
       this.debugLog(`Visited root path ${rootPath}`)
 
       try {
+        this.debugLog("Finding root element body > #root")
         await this.find("body > #root", {useBaseSelector: false})
+        this.debugLog("Found root element body > #root")
+
+        this.debugLog("Finding systemTestingComponent")
         await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true})
+        this.debugLog("Found systemTestingComponent")
         this.debugLog("Found root and systemTestingComponent")
       } catch (error) {
+        this.debugLog("Error while finding root/systemTestingComponent, taking screenshot")
         await this.takeScreenshot()
+        this.debugLog("Screenshot captured after root/systemTestingComponent lookup failure")
         throw error
       }
     } else {
       try {
+        this.debugLog("Finding systemTestingComponent for native app")
         await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true})
         this.debugLog("Found systemTestingComponent for native app")
       } catch (error) {
+        this.debugLog("Error while finding native systemTestingComponent, taking screenshot")
         await this.takeScreenshot()
+        this.debugLog("Screenshot captured after native systemTestingComponent lookup failure")
         throw error
       }
     }
@@ -677,8 +700,11 @@ export default class SystemTest {
     this.debugLog("Client WebSocket connected")
 
     this._started = true
+    this.debugLog("Marked system test as started")
     if (!isNativeHost) {
+      this.debugLog("Setting base selector to focused systemTestingComponent")
       this.setBaseSelector("[data-testid='systemTestingComponent'][data-focussed='true']")
+      this.debugLog("Base selector set")
     }
     this.debugLog("Start completed")
   }
