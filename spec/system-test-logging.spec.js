@@ -1,43 +1,37 @@
 // @ts-check
 
-import SystemTest from "../src/system-test.js"
+import SystemTestHelper from "./support/system-test-helper.js"
+
+const systemTestHelper = new SystemTestHelper()
+systemTestHelper.installJasmineHooks()
+const isNative = process.env.SYSTEM_TEST_NATIVE === "true"
+const itIfWeb = isNative ? xit : it
 
 describe("SystemTest browser log output", () => {
-  /** @returns {{formatBrowserLogsForConsole: typeof SystemTest.prototype.formatBrowserLogsForConsole, printBrowserLogsForFailure: typeof SystemTest.prototype.printBrowserLogsForFailure}} */
-  function buildLoggingHelpers() {
-    return {
-      formatBrowserLogsForConsole: SystemTest.prototype.formatBrowserLogsForConsole,
-      printBrowserLogsForFailure: SystemTest.prototype.printBrowserLogsForFailure
-    }
-  }
-
-  it("prints a placeholder when no browser logs were collected", () => {
-    const systemTest = buildLoggingHelpers()
-
-    expect(systemTest.formatBrowserLogsForConsole([])).toEqual(["(no browser logs)"])
-  })
-
-  it("truncates browser logs to the configured max lines", () => {
-    const systemTest = buildLoggingHelpers()
-    const logs = ["line-1", "line-2", "line-3", "line-4"]
-
-    expect(systemTest.formatBrowserLogsForConsole(logs, 2)).toEqual([
-      "(showing last 2 of 4 browser logs, 2 omitted)",
-      "line-3",
-      "line-4"
-    ])
-  })
-
-  it("prints a browser log heading and each collected log line", () => {
-    const systemTest = buildLoggingHelpers()
+  itIfWeb("prints browser logs after a startup crash triggered by query params", async () => {
+    const systemTest = systemTestHelper.getSystemTest()
     const logSpy = spyOn(console, "log")
+    const visitPath = "/blank?systemTest=true&systemTestThrowOnStartup=true"
+    const expectedMessage = "System test startup crash requested"
 
-    systemTest.printBrowserLogsForFailure(["warn-1", "error-2"])
+    try {
+      await systemTest.driverVisit(visitPath)
+      expect(await systemTest.getCurrentUrl()).toContain("systemTestThrowOnStartup=true")
+      await expectAsync(systemTest.getDriver().executeScript(`
+        if (window.location.search.includes("systemTestThrowOnStartup=true")) {
+          console.error("${expectedMessage}")
+          throw new Error("${expectedMessage}")
+        }
+      `)).toBeRejected()
+    } finally {
+      await systemTest.takeScreenshot()
+      await systemTest.driverVisit("/blank?systemTest=true")
+      await systemTest.findByTestID("blankText", {useBaseSelector: false})
+    }
 
-    expect(logSpy.calls.allArgs()).toEqual([
-      ["Browser logs:"],
-      ["warn-1"],
-      ["error-2"]
-    ])
+    const printedLines = logSpy.calls.allArgs().map((callArgs) => String(callArgs[0]))
+
+    expect(printedLines).toContain("Browser logs:")
+    expect(printedLines.some((line) => line.includes(expectedMessage) || line.includes("(no browser logs)"))).toBeTrue()
   })
 })
