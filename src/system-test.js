@@ -751,7 +751,7 @@ export default class SystemTest {
    */
   async waitForClientWebSocket() {
     try {
-      await timeout({timeout: 30000}, () => new Promise((resolve, reject) => {
+      await timeout({timeout: 30000, errorMessage: "timeout while waiting for client WebSocket connection"}, () => new Promise((resolve, reject) => {
         if (this.ws) {
           resolve()
           return
