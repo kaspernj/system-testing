@@ -346,15 +346,26 @@ export default class SystemTest {
       throw new Error("Scoundrel server is not started")
     }
 
+    this.debugLog("getScoundrelClient: waiting for browser Scoundrel initialization")
     await timeout({timeout: timeoutMs, errorMessage: "Timed out waiting for Scoundrel to initialize"}, async () => {
       await this.getCommunicator().sendCommand({type: "waitForScoundrel"})
     })
+    this.debugLog("getScoundrelClient: browser reported Scoundrel initialized")
+
+    /**
+     * @param {any} client
+     * @returns {boolean}
+     */
+    const isOpenClient = (client) => client?.backend?.ws?.readyState === 1
 
     const existingClients = this.server.getClients?.()
+    const openExistingClients = existingClients?.filter(isOpenClient)
 
-    if (existingClients && existingClients.length > 0) {
-      return existingClients[0]
+    if (openExistingClients && openExistingClients.length > 0) {
+      this.debugLog(`getScoundrelClient: using existing open client (${openExistingClients.length} available)`)
+      return openExistingClients[openExistingClients.length - 1]
     }
+    this.debugLog(`getScoundrelClient: no open cached clients, waiting for new connection (cached total: ${existingClients?.length ?? 0})`)
 
     if (!this.server.events?.on) {
       throw new Error("Scoundrel server events are unavailable")
@@ -370,7 +381,9 @@ export default class SystemTest {
     try {
       return await timeout({timeout: timeoutMs, errorMessage: "Timed out waiting for Scoundrel client"}, async () => await new Promise((resolve) => {
         onNewClient = (client) => {
+          if (!isOpenClient(client)) return
           cleanupListener()
+          this.debugLog("getScoundrelClient: received new open client")
           resolve(client)
         }
 
