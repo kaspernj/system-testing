@@ -133,3 +133,4 @@
 - Use the source `useSystemTest` hook in the dummy Expo app so release bundling can resolve it.
 - Restore the dummy Expo app to use the built `useSystemTest` hook for Metro resolution.
 - Run `prepare:dummy` before building the dummy APK so Metro can resolve `system-testing` during bundling.
+- Print browser logs to stdout when failure screenshots are captured so CI failures include browser-side context.
