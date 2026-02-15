@@ -134,3 +134,6 @@
 - Restore the dummy Expo app to use the built `useSystemTest` hook for Metro resolution.
 - Run `prepare:dummy` before building the dummy APK so Metro can resolve `system-testing` during bundling.
 - Print browser logs to stdout when failure screenshots are captured so CI failures include browser-side context.
+- Remove `findByTestId` and standardize on `findByTestID` across the API and drivers.
+- Retry element lookups in `all()` when Selenium reports stale element references during visibility checks.
+- Add finder regression specs that verify `all()` retries when stale element errors are raised.

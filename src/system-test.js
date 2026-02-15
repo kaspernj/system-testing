@@ -418,16 +418,6 @@ export default class SystemTest {
 
   /**
    * Finds a single element by test ID
-   * @param {string} testId
-   * @param {FindArgs} [args]
-   * @returns {Promise<import("selenium-webdriver").WebElement>}
-   */
-  async findByTestId(testId, args) {
-    return await this.getDriverAdapter().findByTestId(testId, args)
-  }
-
-  /**
-   * Finds a single element by test ID
    * @param {string} testID
    * @param {FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}
