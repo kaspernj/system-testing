@@ -137,3 +137,4 @@
 - Remove `findByTestId` and standardize on `findByTestID` across the API and drivers.
 - Retry element lookups in `all()` when Selenium reports stale element references during visibility checks.
 - Add finder regression specs that verify `all()` retries when stale element errors are raised.
+- Add command timeouts to `visit()` and `dismissTo()` to avoid indefinite hangs when browser command responses stop.
