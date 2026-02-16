@@ -74,7 +74,7 @@
     "@types/selenium-webdriver": "^4.35.4",
     "appium-chromium-driver": "2.1.2",
     "appium-uiautomator2-driver": "6.7.11",
-    "eslint": "^9.39.1",
+    "eslint": "^10.0.0",
     "eslint-plugin-jsdoc": "^62.0.0",
     "expo-router": "^6.0.21",
     "globals": "^17.0.0",
