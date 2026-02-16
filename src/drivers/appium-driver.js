@@ -116,32 +116,22 @@ export default class AppiumDriver extends WebDriverDriver {
 
   /**
    * Finds a single element by test ID.
-   * @param {string} testId
-   * @param {FindArgs} [args]
-   * @returns {Promise<import("selenium-webdriver").WebElement>}
-   */
-  async findByTestId(testId, args) {
-    const testIdStrategy = this.options.testIdStrategy ?? "accessibilityId"
-
-    if (testIdStrategy === "css") {
-      const testIdAttribute = this.options.testIdAttribute ?? "data-testid"
-      return await this.find(`[${testIdAttribute}='${testId}']`, args)
-    }
-    if (testIdStrategy === "id") {
-      return await this.findById(testId, args)
-    }
-
-    return await this.findByAccessibilityId(testId, args)
-  }
-
-  /**
-   * Finds a single element by test ID.
    * @param {string} testID
    * @param {FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
   async findByTestID(testID, args) {
-    return await this.findByTestId(testID, args)
+    const testIdStrategy = this.options.testIdStrategy ?? "accessibilityId"
+
+    if (testIdStrategy === "css") {
+      const testIdAttribute = this.options.testIdAttribute ?? "data-testid"
+      return await this.find(`[${testIdAttribute}='${testID}']`, args)
+    }
+    if (testIdStrategy === "id") {
+      return await this.findById(testID, args)
+    }
+
+    return await this.findByAccessibilityId(testID, args)
   }
 
   /**

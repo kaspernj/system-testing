@@ -84,11 +84,11 @@ await SystemTest.run({
     }
   }
 }, async (systemTest) => {
-  await systemTest.findByTestId("loginScreen")
+  await systemTest.findByTestID("loginScreen")
 })
 ```
 
-If you already run an Appium server, provide `serverUrl` instead of `serverArgs`. By default, `findByTestId` uses the Appium `accessibility id` strategy. To use CSS instead (for web contexts), set `options.testIdStrategy` to `"css"` and optionally `options.testIdAttribute` (defaults to `"data-testid"`).
+If you already run an Appium server, provide `serverUrl` instead of `serverArgs`. By default, `findByTestID` uses the Appium `accessibility id` strategy. To use CSS instead (for web contexts), set `options.testIdStrategy` to `"css"` and optionally `options.testIdAttribute` (defaults to `"data-testid"`).
 
 ### Using `useSystemTest` in your Expo app
 
@@ -159,7 +159,7 @@ SystemTest.rootPath = "/?platform=web&systemTest=true"
 
 System tests scope selectors to the active screen by default. The app marks the active layout container with `data-focussed="true"` on the element with `data-testid="systemTestingComponent"`. In the dummy app, the root layout wraps the navigator and sets `data-focussed="true"` once so the base selector stays stable across screens.
 
-`SystemTest.find` and `SystemTest.findByTestId` (alias `findByTestID`) use a base selector that targets the focused container:
+`SystemTest.find` and `SystemTest.findByTestID` use a base selector that targets the focused container:
 
 ```css
 [data-testid='systemTestingComponent'][data-focussed='true']

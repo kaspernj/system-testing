@@ -249,7 +249,18 @@ export default class WebDriverDriver {
 
         break
       } catch (error) {
-        if (error instanceof SeleniumError.TimeoutError && getTimeLeft() > 0) {
+        let isStaleElementError = false
+
+        if (error instanceof SeleniumError.StaleElementReferenceError) {
+          isStaleElementError = true
+        } else if (error instanceof WebDriverError && error.message.toLowerCase().includes("stale element reference")) {
+          isStaleElementError = true
+        }
+
+        if (
+          (error instanceof SeleniumError.TimeoutError || isStaleElementError)
+          && getTimeLeft() > 0
+        ) {
           continue
         }
 
@@ -298,22 +309,12 @@ export default class WebDriverDriver {
 
   /**
    * Finds a single element by test ID
-   * @param {string} testId
-   * @param {FindArgs} [args]
-   * @returns {Promise<import("selenium-webdriver").WebElement>}
-   */
-  async findByTestId(testId, args) {
-    return await this.find(`[data-testid='${testId}']`, args)
-  }
-
-  /**
-   * Finds a single element by test ID
    * @param {string} testID
    * @param {FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
   async findByTestID(testID, args) {
-    return await this.findByTestId(testID, args)
+    return await this.find(`[data-testid='${testID}']`, args)
   }
 
   /**

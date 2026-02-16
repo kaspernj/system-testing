@@ -98,6 +98,60 @@ describeIfWeb("SystemTest finders", () => {
     })
   })
 
+  it("retries all when findElements raises a stale element reference error", async () => {
+    await SystemTest.run(async (runningSystemTest) => {
+      const driver = runningSystemTest.getDriver()
+      const originalFindElements = driver.findElements.bind(driver)
+      let findElementsCalls = 0
+
+      driver.findElements = async (...args) => {
+        findElementsCalls += 1
+
+        if (findElementsCalls === 1) {
+          throw new SeleniumError.StaleElementReferenceError("Simulated stale element reference")
+        }
+
+        return await originalFindElements(...args)
+      }
+
+      try {
+        const elements = await runningSystemTest.all("[data-testid='blankText']", {timeout: 2000, visible: true})
+
+        expect(elements.length).toEqual(1)
+        expect(findElementsCalls).toBeGreaterThan(1)
+      } finally {
+        driver.findElements = originalFindElements
+      }
+    })
+  })
+
+  it("retries all when a webdriver stale element message is raised", async () => {
+    await SystemTest.run(async (runningSystemTest) => {
+      const driver = runningSystemTest.getDriver()
+      const originalFindElements = driver.findElements.bind(driver)
+      let findElementsCalls = 0
+
+      driver.findElements = async (...args) => {
+        findElementsCalls += 1
+
+        if (findElementsCalls === 1) {
+          throw new SeleniumError.WebDriverError("stale element reference: simulated stale element")
+        }
+
+        return await originalFindElements(...args)
+      }
+
+      try {
+        const elements = await runningSystemTest.all("[data-testid='blankText']", {timeout: 2000, visible: true})
+
+        expect(elements.length).toEqual(1)
+        expect(findElementsCalls).toBeGreaterThan(1)
+      } finally {
+        driver.findElements = originalFindElements
+      }
+    })
+  })
+
   it("returns quickly when waitForNoSelector has no matches", async () => {
     await SystemTest.run(async (runningSystemTest) => {
       const originalTimeouts = runningSystemTest.getTimeouts()

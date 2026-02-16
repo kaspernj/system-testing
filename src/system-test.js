@@ -431,16 +431,6 @@ export default class SystemTest {
 
   /**
    * Finds a single element by test ID
-   * @param {string} testId
-   * @param {FindArgs} [args]
-   * @returns {Promise<import("selenium-webdriver").WebElement>}
-   */
-  async findByTestId(testId, args) {
-    return await this.getDriverAdapter().findByTestId(testId, args)
-  }
-
-  /**
-   * Finds a single element by test ID
    * @param {string} testID
    * @param {FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}
@@ -1035,7 +1025,10 @@ export default class SystemTest {
    * @returns {Promise<void>}
    */
   async visit(path) {
-    await this.getCommunicator().sendCommand({type: "visit", path})
+    await timeout(
+      {timeout: this.getTimeouts(), errorMessage: `timeout while visiting path: ${path}`},
+      async () => await this.getCommunicator().sendCommand({type: "visit", path})
+    )
   }
 
   /**
@@ -1044,7 +1037,10 @@ export default class SystemTest {
    * @returns {Promise<void>}
    */
   async dismissTo(path) {
-    await this.getCommunicator().sendCommand({type: "dismissTo", path})
+    await timeout(
+      {timeout: this.getTimeouts(), errorMessage: `timeout while dismissing to path: ${path}`},
+      async () => await this.getCommunicator().sendCommand({type: "dismissTo", path})
+    )
   }
 
   /**
