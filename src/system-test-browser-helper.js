@@ -176,6 +176,20 @@ export default class SystemTestBrowserHelper {
   getEvents() { return this.events }
 
   /**
+   * Emits a command event and throws when no listener handled it.
+   * @param {string} eventName
+   * @param {{path: string}} payload
+   * @returns {void}
+   */
+  emitCommandEvent(eventName, payload) {
+    const didEmit = this.events.emit(eventName, payload)
+
+    if (!didEmit) {
+      throw new Error(`No listener registered for command event: ${eventName} (${payload.path})`)
+    }
+  }
+
+  /**
    * @param {any[]} args
    * @returns {void}
    */
@@ -266,9 +280,11 @@ export default class SystemTestBrowserHelper {
       await this.waitForScoundrelStarted()
       return {result: "scoundrel-ready"}
     } else if (data.type == "visit") {
-      this.events.emit("navigate", {path: data.path})
+      this.emitCommandEvent("navigate", {path: data.path})
+      return {result: "visited"}
     } else if (data.type == "dismissTo") {
-      this.events.emit("dismissTo", {path: data.path})
+      this.emitCommandEvent("dismissTo", {path: data.path})
+      return {result: "dismissed"}
     } else {
       throw new Error(`Unknown command type for SystemTestBrowserHelper: ${data.type}`)
     }
