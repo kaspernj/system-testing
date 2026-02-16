@@ -139,3 +139,6 @@
 - Add finder regression specs that verify `all()` retries when stale element errors are raised.
 - Add command timeouts to `visit()` and `dismissTo()` to avoid indefinite hangs when browser command responses stop.
 - Return explicit errors for `visit`/`dismissTo` commands when no browser listeners are registered, instead of silently no-oping.
+- Regenerate lockfile metadata to keep Appium dependency subtrees consistent for package-lock-only validation.
+- Apply npm audit lockfile updates (package-lock-only) to refresh vulnerable Appium dependency chains without force upgrades.
+- Pin Appium packages to 3.1.2/2.1.2/6.7.11 to avoid install failures from newer transitive updates in CI.
