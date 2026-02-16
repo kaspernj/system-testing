@@ -6,7 +6,7 @@ import timeout from "awaitery/build/timeout.js"
 /**
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
- * @property {boolean} [visible] Whether to require elements to be visible.
+ * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 /**
