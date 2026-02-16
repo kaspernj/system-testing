@@ -140,3 +140,4 @@
 - Add command timeouts to `visit()` and `dismissTo()` to avoid indefinite hangs when browser command responses stop.
 - Return explicit errors for `visit`/`dismissTo` commands when no browser listeners are registered, instead of silently no-oping.
 - Regenerate lockfile metadata to keep Appium dependency subtrees consistent for package-lock-only validation.
+- Apply npm audit lockfile updates (package-lock-only) to refresh vulnerable Appium dependency chains without force upgrades.
