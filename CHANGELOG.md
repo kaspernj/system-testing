@@ -142,3 +142,4 @@
 - Regenerate lockfile metadata to keep Appium dependency subtrees consistent for package-lock-only validation.
 - Apply npm audit lockfile updates (package-lock-only) to refresh vulnerable Appium dependency chains without force upgrades.
 - Pin Appium packages to 3.1.2/2.1.2/6.7.11 to avoid install failures from newer transitive updates in CI.
+- Document and type `FindArgs.visible` as `boolean | null`, where `null` disables visibility filtering in find/all helpers.

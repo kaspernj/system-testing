@@ -181,7 +181,7 @@ Use `useBaseSelector: false` only for modal or overlay content. Keep the default
 Most selector helpers accept the same options:
 
 - `timeout` (number): override how long the lookup should wait.
-- `visible` (boolean): require elements to be visible (`true`) or hidden (`false`).
+- `visible` (boolean|null): require elements to be visible (`true`) or hidden (`false`), or disable visibility filtering with `null`.
 - `useBaseSelector` (boolean): scope the selector to the focused container.
 
 These options are supported by `find`, `findByTestID`, and `all`. `click` also accepts the same options when a selector string is used:
