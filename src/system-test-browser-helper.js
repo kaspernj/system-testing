@@ -13,6 +13,11 @@ const shared = {
 }
 
 export default class SystemTestBrowserHelper {
+  /** @returns {SystemTestBrowserHelper | null} */
+  static getCurrent() {
+    return shared.systemTestBrowserHelper
+  }
+
   static current() {
     if (!shared.systemTestBrowserHelper) {
       throw new Error("No current SystemTestBrowserHelper set")
@@ -123,9 +128,7 @@ export default class SystemTestBrowserHelper {
     this.communicator.sendCommand(data)
   }
 
-  /**
-   * @returns {void}
-   */
+  /** @returns {void} */
   connectWebSocket() {
     const host = this.getSystemTestHost()
     this.ws = new WebSocket(`ws://${host}:1985`)
@@ -135,9 +138,7 @@ export default class SystemTestBrowserHelper {
     this.ws.addEventListener("message", (event) => this.communicator.onMessage(event.data))
   }
 
-  /**
-   * @returns {string}
-   */
+  /** @returns {string} */
   getSystemTestHost() {
     const location = globalThis.location
     const defaultHost = location?.hostname || "localhost"
@@ -158,10 +159,12 @@ export default class SystemTestBrowserHelper {
     return resolvedHost
   }
 
-  /**
-   * @returns {void}
-   */
+  /** @returns {void} */
   enableOnBrowser() {
+    if (this._enabled) {
+      return
+    }
+
     this._enabled = true
     this.connectWebSocket()
     this.connectOnError()
@@ -306,9 +309,7 @@ export default class SystemTestBrowserHelper {
     this._onFirstInitializeCallback = callback
   }
 
-  /**
-   * @returns {void}
-   */
+  /** @returns {void} */
   overrideConsoleLog() {
     if (this.originalConsoleError || this.originalConsoleLog) {
       throw new Error("Console methods has already been overridden!")

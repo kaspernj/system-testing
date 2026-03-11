@@ -23,11 +23,11 @@ const {WebDriverError} = SeleniumError
 export default class WebDriverDriver {
   /**
    * @param {object} args
-   * @param {import("../system-test.js").default} args.systemTest
+   * @param {import("../browser.js").default} args.browser
    * @param {Record<string, any>} [args.options]
    */
-  constructor({systemTest, options = {}}) {
-    this.systemTest = systemTest
+  constructor({browser, options = {}}) {
+    this.browser = browser
     this.options = options
     this.baseUrl = undefined
     this.webDriver = undefined
@@ -60,7 +60,7 @@ export default class WebDriverDriver {
    */
   getWebDriver() {
     if (!this.webDriver) throw new Error("Driver hasn't been initialized yet")
-    this.systemTest.throwIfHttpServerError()
+    this.browser.throwIfHttpServerError()
 
     return this.webDriver
   }
@@ -71,7 +71,7 @@ export default class WebDriverDriver {
    */
   setWebDriver(webDriver) {
     this.webDriver = webDriver
-    this.systemTest.driver = webDriver
+    this.browser.driver = webDriver
   }
 
   /**
@@ -90,7 +90,7 @@ export default class WebDriverDriver {
     }
 
     this.webDriver = undefined
-    this.systemTest.driver = undefined
+    this.browser.driver = undefined
   }
 
   /**
@@ -127,7 +127,7 @@ export default class WebDriverDriver {
    * @returns {string}
    */
   getSelector(selector) {
-    return this.systemTest.getSelector(selector)
+    return this.browser.getSelector(selector)
   }
 
   /**
@@ -135,7 +135,8 @@ export default class WebDriverDriver {
    * @returns {Promise<void>}
    */
   async driverVisit(path) {
-    const url = `${this.getBaseUrl()}${path}`
+    const isAbsoluteUrl = /^[a-z]+:\/\//i.test(path)
+    const url = isAbsoluteUrl ? path : `${this.getBaseUrl()}${path}`
 
     await this.getWebDriver().get(url)
   }

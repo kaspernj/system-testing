@@ -1,9 +1,6 @@
 // @ts-check
 
 import {digg} from "diggerize"
-import fs from "node:fs/promises"
-import moment from "moment"
-import {prettify} from "htmlfy"
 import Server from "scoundrel-remote-eval/build/server/index.js"
 import ServerWebSocket from "scoundrel-remote-eval/build/server/connections/web-socket/index.js"
 import SystemTestCommunicator from "./system-test-communicator.js"
@@ -11,8 +8,7 @@ import SystemTestHttpServer from "./system-test-http-server.js"
 import {waitFor} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
 import {WebSocketServer} from "ws"
-import SeleniumDriver from "./drivers/selenium-driver.js"
-import AppiumDriver from "./drivers/appium-driver.js"
+import Browser from "./browser.js"
 
 /**
  * @typedef {object} SystemTestArgs
@@ -46,27 +42,17 @@ import AppiumDriver from "./drivers/appium-driver.js"
  * @property {boolean} [dismiss] Whether to dismiss the notification after it appears.
  */
 
-export default class SystemTest {
+export default class SystemTest extends Browser {
   static rootPath = "/blank?systemTest=true"
 
   /** @type {SystemTestCommunicator | undefined} */
   communicator = undefined
 
-  /** @type {import("selenium-webdriver").WebDriver | undefined} */
-  driver = undefined
-
-  /** @type {import("./drivers/webdriver-driver.js").default | undefined} */
-  driverAdapter = undefined
-
   _started = false
-  /** @type {SystemTestDriverConfig | undefined} */
-  _driverConfig = undefined
   _httpHost = "localhost"
   _httpPort = 1984
   /** @type {(error: any) => boolean | undefined} */
   _errorFilter = undefined
-  /** @type {Error | undefined} */
-  _httpServerError = undefined
   /** @type {WebSocketServer | undefined} */
   scoundrelWss = undefined
   /** @type {WebSocketServer | undefined} */
@@ -192,6 +178,8 @@ export default class SystemTest {
    * @param {SystemTestArgs} [args]
    */
   constructor({host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, httpConnectHost, debug = false, errorFilter, urlArgs, driver, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
+    super({debug, driver})
+
     const restArgsKeys = Object.keys(restArgs)
 
     if (restArgsKeys.length > 0) {
@@ -207,8 +195,6 @@ export default class SystemTest {
     this._errorFilter = errorFilter
     this._urlArgs = urlArgs
     this._rootPath = this.buildRootPath()
-    this._driverConfig = driver
-    this.driverAdapter = this.createDriver(driver)
 
     /** @type {Record<number, object>} */
     this._responses = {}
@@ -216,102 +202,7 @@ export default class SystemTest {
     this._sendCount = 0
     this.startScoundrel()
     this.communicator = new SystemTestCommunicator({onCommand: this.onCommandReceived})
-  }
-
-  /**
-   * Gets the base selector for scoping element searches
-   * @returns {string | undefined}
-   */
-  getBaseSelector() { return this._baseSelector }
-
-  /** @returns {import("selenium-webdriver").WebDriver} */
-  getDriver() {
-    return this.getDriverAdapter().getWebDriver()
-  }
-
-  /** @returns {import("./drivers/webdriver-driver.js").default} */
-  getDriverAdapter() {
-    if (!this.driverAdapter) {
-      throw new Error("Driver hasn't been initialized yet")
-    }
-
-    return this.driverAdapter
-  }
-
-  /**
-   * @param {SystemTestDriverConfig} [driverConfig]
-   * @returns {import("./drivers/webdriver-driver.js").default}
-   */
-  createDriver(driverConfig = {}) {
-    const {type = "selenium", options, ...restArgs} = driverConfig
-    const restArgsKeys = Object.keys(restArgs)
-
-    if (restArgsKeys.length > 0) {
-      throw new Error(`Unknown driver args: ${restArgsKeys.join(", ")}`)
-    }
-
-    if (type === "selenium") {
-      return new SeleniumDriver({systemTest: this, options})
-    }
-
-    if (type === "appium") {
-      return new AppiumDriver({systemTest: this, options})
-    }
-
-    throw new Error(`Unsupported driver type: ${type}`)
-  }
-
-  /**
-   * Sets the base selector for scoping element searches
-   * @param {string} baseSelector
-   */
-  setBaseSelector(baseSelector) { this._baseSelector = baseSelector }
-
-  /**
-   * Gets a selector scoped to the base selector
-   * @param {string} selector
-   * @returns {string}
-   */
-  getSelector(selector) {
-    return this.getBaseSelector() ? `${this.getBaseSelector()} ${selector}` : selector
-  }
-
-  /**
-   * Logs messages
-   * @param {any[]} args
-   * @returns {void}
-   */
-  debugError(...args) {
-    console.error("[SystemTest error]", ...args)
-  }
-
-  /**
-   * Logs messages when debugging is enabled
-   * @param {any[]} args
-   * @returns {void}
-   */
-  debugLog(...args) {
-    if (this._debug) {
-      console.log("[SystemTest debug]", ...args)
-    }
-  }
-
-  /** @returns {void} */
-  throwIfHttpServerError() {
-    if (this._httpServerError) {
-      throw new Error(`HTTP server error: ${this._httpServerError.message}`)
-    }
-  }
-
-  /**
-   * @param {Error} error
-   * @returns {void}
-   */
-  onHttpServerError = (error) => {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-
-    this._httpServerError = error instanceof Error ? error : new Error(errorMessage)
-    console.error(`HTTP server error: ${errorMessage}`)
+    this.setCommunicator(this.communicator)
   }
 
   /**
@@ -450,22 +341,6 @@ export default class SystemTest {
   }
 
   /**
-   * Gets browser logs
-   * @returns {Promise<string[]>}
-   */
-  async getBrowserLogs() {
-    return await this.getDriverAdapter().getBrowserLogs()
-  }
-
-  /** @returns {Promise<string>} */
-  async getCurrentUrl() {
-    return await this.getDriverAdapter().getCurrentUrl()
-  }
-
-  /** @returns {number} */
-  getTimeouts() { return this.getDriverAdapter().getTimeouts() }
-
-  /**
    * Interacts with an element by calling a method on it with the given arguments.
    * Retrying on ElementNotInteractableError, ElementClickInterceptedError, or StaleElementReferenceError.
    * @param {import("selenium-webdriver").WebElement|string|{selector: string} & FindArgs} elementOrIdentifier The element or a CSS selector to find the element.
@@ -592,12 +467,6 @@ export default class SystemTest {
    * @returns {boolean}
    */
   isStarted() { return this._started }
-
-  /**
-   * Gets the HTML of the current page
-   * @returns {Promise<string>}
-   */
-  async getHTML() { return await this.getDriverAdapter().getHTML() }
 
   /**
    * Starts the system test
@@ -733,32 +602,6 @@ export default class SystemTest {
     this.debugLog(`buildRootPath rootPath: ${rootPath}`)
 
     return rootPath
-  }
-
-  /**
-   * Restores previously set timeouts
-   * @returns {Promise<void>}
-   */
-  async restoreTimeouts() {
-    await this.getDriverAdapter().restoreTimeouts()
-  }
-
-  /**
-   * Sets driver timeouts
-   * @param {number} newTimeout
-   * @returns {Promise<void>}
-   */
-  async driverSetTimeouts(newTimeout) {
-    await this.getDriverAdapter().driverSetTimeouts(newTimeout)
-  }
-
-  /**
-   * Sets timeouts and stores the previous timeouts
-   * @param {number} newTimeout
-   * @returns {Promise<void>}
-   */
-  async setTimeouts(newTimeout) {
-    await this.getDriverAdapter().setTimeouts(newTimeout)
   }
 
   /**
@@ -934,113 +777,10 @@ export default class SystemTest {
     this.waitForClientWebSocketPromiseReject = undefined
     this.waitForClientWebSocketPromiseResolve = undefined
     this.communicator = new SystemTestCommunicator({onCommand: this.onCommandReceived})
+    this.setCommunicator(this.communicator)
 
     this.startScoundrel()
     await this.start()
-  }
-
-  /**
-   * Visits a path in the browser
-   * @param {string} path
-   * @returns {Promise<void>}
-   */
-  async driverVisit(path) {
-    await this.getDriverAdapter().driverVisit(path)
-  }
-
-  /**
-   * Formats browser logs for console output and truncates overly long output.
-   * @param {string[]} logs
-   * @param {number} [maxLines]
-   * @returns {string[]}
-   */
-  formatBrowserLogsForConsole(logs, maxLines = 200) {
-    if (!Array.isArray(logs) || logs.length === 0) {
-      return ["(no browser logs)"]
-    }
-
-    if (logs.length <= maxLines) {
-      return logs
-    }
-
-    const keptLogs = logs.slice(logs.length - maxLines)
-    const hiddenCount = logs.length - maxLines
-
-    return [`(showing last ${maxLines} of ${logs.length} browser logs, ${hiddenCount} omitted)`, ...keptLogs]
-  }
-
-  /**
-   * Prints browser logs to stdout for CI visibility when tests fail.
-   * @param {string[]} logs
-   * @returns {void}
-   */
-  printBrowserLogsForFailure(logs) {
-    console.log("Browser logs:")
-
-    for (const line of this.formatBrowserLogsForConsole(logs)) {
-      console.log(line)
-    }
-  }
-
-  /**
-   * Takes a screenshot, saves HTML and browser logs
-   * @returns {Promise<void>}
-   */
-  async takeScreenshot() {
-    this.debugLog("Getting path for screenshots")
-    const path = `${process.cwd()}/tmp/screenshots`
-
-    this.debugLog(`Creating dir with recursive: ${path}`)
-    await fs.mkdir(path, {recursive: true})
-
-    this.debugLog("Getting screenshot image content")
-    const imageContent = await timeout({timeout: 5000, errorMessage: "timeout while taking screenshot"}, async () => await this.getDriverAdapter().takeScreenshot())
-
-    this.debugLog("Generating date variables")
-    const now = new Date()
-    const screenshotPath = `${path}/${moment(now).format("YYYY-MM-DD-HH-MM-SS")}.png`
-    const htmlPath = `${path}/${moment(now).format("YYYY-MM-DD-HH-MM-SS")}.html`
-    const logsPath = `${path}/${moment(now).format("YYYY-MM-DD-HH-MM-SS")}.logs.txt`
-
-    this.debugLog("Getting browser logs")
-    const logsText = await timeout({timeout: 5000, errorMessage: "timeout while reading browser logs"}, async () => await this.getBrowserLogs())
-    const html = await timeout({timeout: 5000, errorMessage: "timeout while reading page HTML"}, async () => await this.getHTML())
-    const htmlPretty = prettify(html)
-    this.printBrowserLogsForFailure(logsText)
-
-    this.debugLog("Writing files")
-    await fs.writeFile(htmlPath, htmlPretty)
-    await fs.writeFile(logsPath, logsText.join("\n"))
-    await fs.writeFile(screenshotPath, imageContent, "base64")
-
-    console.log("Current URL:", await this.getCurrentUrl())
-    console.log("Logs:", logsPath)
-    console.log("Screenshot:", screenshotPath)
-    console.log("HTML:", htmlPath)
-  }
-
-  /**
-   * Visits a path in the browser
-   * @param {string} path
-   * @returns {Promise<void>}
-   */
-  async visit(path) {
-    await timeout(
-      {timeout: this.getTimeouts(), errorMessage: `timeout while visiting path: ${path}`},
-      async () => await this.getCommunicator().sendCommand({type: "visit", path})
-    )
-  }
-
-  /**
-   * Dismisses to a path in the browser
-   * @param {string} path
-   * @returns {Promise<void>}
-   */
-  async dismissTo(path) {
-    await timeout(
-      {timeout: this.getTimeouts(), errorMessage: `timeout while dismissing to path: ${path}`},
-      async () => await this.getCommunicator().sendCommand({type: "dismissTo", path})
-    )
   }
 
   /**

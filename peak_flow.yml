@@ -18,15 +18,7 @@ builds:
       - SYSTEM_TEST_DRIVER=selenium SYSTEM_TEST_APPIUM_DRIVERS= SYSTEM_TEST_APPIUM_CAPABILITIES= SYSTEM_TEST_APPIUM_SERVER_ARGS= npm run all-checks
   build_2:
     name: Appium Web (Chrome)
-    environment:
-      SYSTEM_TEST_HOST: dist
-      SYSTEM_TEST_DRIVER: appium
-      SYSTEM_TEST_APPIUM_DRIVERS: chromium
-      SYSTEM_TEST_APPIUM_TEST_ID_STRATEGY: css
-      SYSTEM_TEST_APPIUM_CAPABILITIES: '{"platformName":"linux","browserName":"chrome","appium:automationName":"Chromium","appium:autodownloadEnabled":true,"goog:chromeOptions":{"binary":"/usr/bin/google-chrome","args":["--headless=new","--no-sandbox","--disable-dev-shm-usage","--disable-gpu"]}}'
     script:
-      - npx appium driver update chromium || npx appium driver install chromium
-      - npx node node_modules/appium-chromium-driver/scripts/install-chromedriver.mjs
       - npm run test:appium:web
   build_3:
     name: Appium Android
