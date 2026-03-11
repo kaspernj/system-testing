@@ -7,6 +7,17 @@ import {fileURLToPath} from "node:url"
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 /**
+ * @param {string} message
+ * @param {unknown} cause
+ * @returns {Error & {cause: unknown}}
+ */
+function errorWithCause(message, cause) {
+  const error = /** @type {Error & {cause: unknown}} */ (new Error(message))
+  error.cause = cause
+  return error
+}
+
+/**
  * Ensures the dummy app's dist folder is served for system tests.
  */
 export default class DummyHttpServerEnvironment {
@@ -50,7 +61,7 @@ export default class DummyHttpServerEnvironment {
         throw new Error(`Expected dist path to be a directory: ${distPath}`)
       }
     } catch (error) {
-      throw new Error(`Missing dist folder for dummy app at ${distPath}: ${error instanceof Error ? error.message : error}`)
+      throw errorWithCause(`Missing dist folder for dummy app at ${distPath}: ${error instanceof Error ? error.message : error}`, error)
     }
   }
 }

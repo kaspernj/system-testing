@@ -4,6 +4,17 @@ import {wait} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
 
 /**
+ * @param {string} message
+ * @param {unknown} cause
+ * @returns {Error & {cause: unknown}}
+ */
+function errorWithCause(message, cause) {
+  const error = /** @type {Error & {cause: unknown}} */ (new Error(message))
+  error.cause = cause
+  return error
+}
+
+/**
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
@@ -265,7 +276,7 @@ export default class WebDriverDriver {
           continue
         }
 
-        throw new Error(`Couldn't get elements with selector: ${actualSelector}: ${error instanceof Error ? error.message : error}`)
+        throw errorWithCause(`Couldn't get elements with selector: ${actualSelector}: ${error instanceof Error ? error.message : error}`, error)
       }
     }
     return elements
@@ -279,21 +290,17 @@ export default class WebDriverDriver {
    */
   async find(selector, args = {}) {
     const startTime = Date.now()
-    let elements = []
+    /** @type {import("selenium-webdriver").WebElement[]} */
+    let elements
 
     try {
       elements = await this.all(selector, args)
     } catch (error) {
-      // Re-throw to recover stack trace
       if (error instanceof Error) {
-        if (error.message.startsWith("Wait timed out after")) {
-          elements = []
-        }
-
-        throw new Error(`${error.constructor.name} - ${error.message} (selector: ${this.getSelector(selector)})`)
-      } else {
-        throw new Error(`${typeof error} - ${error} (selector: ${this.getSelector(selector)})`)
+        throw errorWithCause(`${error.constructor.name} - ${error.message} (selector: ${this.getSelector(selector)})`, error)
       }
+
+      throw errorWithCause(`${typeof error} - ${error} (selector: ${this.getSelector(selector)})`, error)
     }
 
     if (elements.length > 1) {
@@ -378,16 +385,15 @@ export default class WebDriverDriver {
         if (error instanceof Error) {
           if (error.constructor.name === "ElementNotInteractableError") {
             if (tries >= 3) {
-              throw new Error(`Element ${elementOrIdentifier.constructor.name} click failed after ${tries} tries - ${error.constructor.name}: ${error.message}`)
+              throw errorWithCause(`Element ${elementOrIdentifier.constructor.name} click failed after ${tries} tries - ${error.constructor.name}: ${error.message}`, error)
             } else {
               await wait(50)
             }
           } else {
-            // Re-throw with un-corrupted stack trace
-            throw new Error(`Element ${elementOrIdentifier.constructor.name} click failed - ${error.constructor.name}: ${error.message}`)
+            throw errorWithCause(`Element ${elementOrIdentifier.constructor.name} click failed - ${error.constructor.name}: ${error.message}`, error)
           }
         } else {
-          throw new Error(`Element ${elementOrIdentifier.constructor.name} click failed - ${typeof error}: ${error}`)
+          throw errorWithCause(`Element ${elementOrIdentifier.constructor.name} click failed - ${typeof error}: ${error}`, error)
         }
       }
     }
@@ -435,16 +441,15 @@ export default class WebDriverDriver {
                 elementDescription = `${element.constructor.name}`
               }
 
-              throw new Error(`${elementDescription} ${methodName} failed after ${tries} tries - ${error.constructor.name}: ${error.message}`)
+              throw errorWithCause(`${elementDescription} ${methodName} failed after ${tries} tries - ${error.constructor.name}: ${error.message}`, error)
             } else {
               await wait(50)
             }
           } else {
-            // Re-throw with un-corrupted stack trace
-            throw new Error(`${element.constructor.name} ${methodName} failed - ${error.constructor.name}: ${error.message}`)
+            throw errorWithCause(`${element.constructor.name} ${methodName} failed - ${error.constructor.name}: ${error.message}`, error)
           }
         } else {
-          throw new Error(`${element.constructor.name} ${methodName} failed - ${typeof error}: ${error}`)
+          throw errorWithCause(`${element.constructor.name} ${methodName} failed - ${typeof error}: ${error}`, error)
         }
       }
     }
@@ -510,7 +515,7 @@ export default class WebDriverDriver {
       return await callback()
     } catch (error) {
       if (error instanceof WebDriverError) {
-        throw new Error(`Selenium ${error.constructor.name}: ${error.message}`)
+        throw errorWithCause(`Selenium ${error.constructor.name}: ${error.message}`, error)
       } else {
         throw error
       }

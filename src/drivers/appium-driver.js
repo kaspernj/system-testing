@@ -3,6 +3,17 @@ import timeout from "awaitery/build/timeout.js"
 import WebDriverDriver from "./webdriver-driver.js"
 
 /**
+ * @param {string} message
+ * @param {unknown} cause
+ * @returns {Error & {cause: unknown}}
+ */
+function errorWithCause(message, cause) {
+  const error = /** @type {Error & {cause: unknown}} */ (new Error(message))
+  error.cause = cause
+  return error
+}
+
+/**
  * @typedef {object} AppiumDriverOptions
  * @property {string} [serverUrl] Remote Appium server URL to connect to.
  * @property {Record<string, any>} [serverArgs] Options passed to the Appium server.
@@ -141,21 +152,17 @@ export default class AppiumDriver extends WebDriverDriver {
    */
   async findByAccessibilityId(testId, args = {}) {
     const startTime = Date.now()
-    let elements = []
+    /** @type {import("selenium-webdriver").WebElement[]} */
+    let elements
 
     try {
       elements = await this.allByAccessibilityId(testId, args)
     } catch (error) {
-      // Re-throw to recover stack trace
       if (error instanceof Error) {
-        if (error.message.startsWith("Wait timed out after")) {
-          elements = []
-        }
-
-        throw new Error(`${error.constructor.name} - ${error.message} (accessibility id: ${testId})`)
-      } else {
-        throw new Error(`${typeof error} - ${error} (accessibility id: ${testId})`)
+        throw errorWithCause(`${error.constructor.name} - ${error.message} (accessibility id: ${testId})`, error)
       }
+
+      throw errorWithCause(`${typeof error} - ${error} (accessibility id: ${testId})`, error)
     }
 
     if (elements.length > 1) {
@@ -232,7 +239,7 @@ export default class AppiumDriver extends WebDriverDriver {
           continue
         }
 
-        throw new Error(`Couldn't get elements with accessibility id: ${testId}: ${error instanceof Error ? error.message : error}`)
+        throw errorWithCause(`Couldn't get elements with accessibility id: ${testId}: ${error instanceof Error ? error.message : error}`, error)
       }
     }
 
@@ -246,21 +253,17 @@ export default class AppiumDriver extends WebDriverDriver {
    */
   async findById(testId, args = {}) {
     const startTime = Date.now()
-    let elements = []
+    /** @type {import("selenium-webdriver").WebElement[]} */
+    let elements
 
     try {
       elements = await this.allById(testId, args)
     } catch (error) {
-      // Re-throw to recover stack trace
       if (error instanceof Error) {
-        if (error.message.startsWith("Wait timed out after")) {
-          elements = []
-        }
-
-        throw new Error(`${error.constructor.name} - ${error.message} (id: ${testId})`)
-      } else {
-        throw new Error(`${typeof error} - ${error} (id: ${testId})`)
+        throw errorWithCause(`${error.constructor.name} - ${error.message} (id: ${testId})`, error)
       }
+
+      throw errorWithCause(`${typeof error} - ${error} (id: ${testId})`, error)
     }
 
     if (elements.length > 1) {
@@ -337,7 +340,7 @@ export default class AppiumDriver extends WebDriverDriver {
           continue
         }
 
-        throw new Error(`Couldn't get elements with id: ${testId}: ${error instanceof Error ? error.message : error}`)
+        throw errorWithCause(`Couldn't get elements with id: ${testId}: ${error instanceof Error ? error.message : error}`, error)
       }
     }
 

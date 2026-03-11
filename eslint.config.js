@@ -4,7 +4,7 @@ import globals from "globals"
 import { defineConfig, globalIgnores } from "eslint/config"
 
 export default defineConfig([
-  globalIgnores(["spec/dummy/dist/**", "spec/dummy/node_modules/**"]),
+  globalIgnores(["build/**", "spec/dummy/**"]),
   {
     files: ["**/*.{js,mjs,cjs}"],
     plugins: {js},
@@ -19,6 +19,7 @@ export default defineConfig([
   },
   jsdoc({
     config: "flat/recommended",
+    files: ["**/*.{js,mjs,cjs}"],
     rules: {
       "jsdoc/reject-any-type": "off",
       "jsdoc/require-param-description": "off",

@@ -13,6 +13,17 @@ const sharedState = globalThis.__systemTestHelperState ??= {
   dummyHttpServerEnvironment: new DummyHttpServerEnvironment()
 }
 
+/**
+ * @param {string} message
+ * @param {unknown} cause
+ * @returns {Error & {cause: unknown}}
+ */
+function errorWithCause(message, cause) {
+  const error = /** @type {Error & {cause: unknown}} */ (new Error(message))
+  error.cause = cause
+  return error
+}
+
 export default class SystemTestHelper {
   constructor({debug = process.env.SYSTEM_TEST_DEBUG === "true"} = {}) {
     this.debug = debug
@@ -110,7 +121,7 @@ export default class SystemTestHelper {
       try {
         return JSON.parse(value)
       } catch (error) {
-        throw new Error(`Invalid ${label} JSON: ${value}: ${error instanceof Error ? error.message : error}`)
+        throw errorWithCause(`Invalid ${label} JSON: ${value}: ${error instanceof Error ? error.message : error}`, error)
       }
     }
 
