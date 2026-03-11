@@ -8,6 +8,33 @@ Rails inspired system testing for Expo apps.
 npm install --save-dev system-testing
 ```
 
+## Choose the right layer
+
+This package has three main entry points:
+
+- `SystemTest`: full app-oriented system testing with selector helpers, app bootstrapping, WebSocket communication, screenshots, logs, and Scoundrel support.
+- `Browser`: lower-level driver session for opening URLs, taking screenshots, and reading HTML/logs without the rest of the system-test flow.
+- `useSystemTest*` hooks: browser-side integration that lets your app respond to `visit` / `dismissTo` commands from `SystemTest`.
+
+Use `SystemTest` if you are testing your app. Use `Browser` if you just want a Selenium/Appium-backed browser session.
+
+## Getting started
+
+1. Add one of the browser-side hooks to your app:
+   `useSystemTestExpo` for Expo Router, or `useSystemTest` / `useSystemTestReactNative` for your own navigation stack.
+2. Wrap your app in a root element with `testID="systemTestingComponent"`.
+3. Make sure your root test route renders an element with `testID="blankText"`, or change `SystemTest.rootPath`.
+4. Start tests with `SystemTest.run(...)` for app flows, or instantiate `Browser` directly for ordinary browsing/capture.
+
+Minimal app-side requirements:
+
+```jsx
+<View testID="systemTestingComponent" dataSet={{focussed: "true"}}>
+  <Text testID="blankText">Blank</Text>
+  {children}
+</View>
+```
+
 ## Usage
 
 ```js
@@ -90,9 +117,52 @@ await SystemTest.run({
 
 If you already run an Appium server, provide `serverUrl` instead of `serverArgs`. By default, `findByTestID` uses the Appium `accessibility id` strategy. To use CSS instead (for web contexts), set `options.testIdStrategy` to `"css"` and optionally `options.testIdAttribute` (defaults to `"data-testid"`).
 
-### Using `useSystemTest` in your Expo app
+### Generic browser usage
 
-`useSystemTest` wires your Expo app to the system-testing runner: it listens for WebSocket commands, initializes the browser helper, and lets tests navigate or reset state. Add it near the root layout of your Expo Router app (for example in `_layout.tsx` or a top-level provider component).
+`Browser` is the lower-level browser/session class behind `SystemTest`. Use it when you want driver-backed browsing, screenshots, logs, and HTML capture without the rest of the system-test bootstrapping.
+
+```js
+import {Browser} from "system-testing/build/index.js"
+
+const browser = new Browser()
+
+browser.getDriverAdapter().setBaseUrl("https://example.com")
+await browser.getDriverAdapter().start()
+await browser.setTimeouts(10000)
+
+await browser.visit("/")
+
+const html = await browser.getHTML()
+const logs = await browser.getBrowserLogs()
+const screenshot = await browser.takeScreenshot()
+
+await browser.stopDriver()
+```
+
+If `visit()`/`dismissTo()` should drive in-app navigation through the browser-side helper instead of direct URL loads, inject a communicator when constructing `Browser`. Without one, it falls back to direct driver navigation, which makes it usable for ordinary website browsing as well.
+
+Common `Browser` flow:
+
+1. Create the browser with the desired driver config.
+2. Set the base URL on the driver adapter.
+3. Start the driver and set timeouts.
+4. Call `visit()`.
+5. Read `getHTML()`, `getBrowserLogs()`, `getCurrentUrl()`, or `takeScreenshot()`.
+6. Call `stopDriver()` during teardown.
+
+Useful browser methods:
+
+- `visit(pathOrUrl)`: uses the helper communicator if present, otherwise loads directly through Selenium/Appium.
+- `dismissTo(pathOrUrl)`: same fallback behavior as `visit()`.
+- `getHTML()`: returns the current page source.
+- `getBrowserLogs()`: returns collected browser logs, or Appium logcat output for Android native runs.
+- `takeScreenshot()`: writes screenshot, HTML, and logs to disk and returns the artifact paths.
+
+If you want app-level navigation instead of direct URL loads, keep `Browser` for the driver/session side and use one of the `useSystemTest*` hooks in the app so the communicator has something to talk to.
+
+### Using `useSystemTestExpo` in your Expo app
+
+`useSystemTestExpo` wires your Expo app to the system-testing runner: it listens for WebSocket commands, initializes the browser helper, and lets tests navigate or reset state. Add it near the root layout of your Expo Router app (for example in `_layout.tsx` or a top-level provider component).
 
 To enable system tests in native builds, set `EXPO_PUBLIC_SYSTEM_TEST=true` at build time (and optionally `EXPO_PUBLIC_SYSTEM_TEST_HOST` to reach the test runner from a device/emulator). For native Appium runs, set `SYSTEM_TEST_HOST=native` in the test environment and point Appium at your APK.
 
@@ -100,10 +170,12 @@ Minimal example:
 
 ```jsx
 import {Stack} from "expo-router"
-import useSystemTest from "system-testing/build/use-system-test.js"
+import useSystemTestExpo from "system-testing/build/use-system-test-expo.js"
 
 export default function RootLayout() {
-  const {enabled, systemTestBrowserHelper} = useSystemTest({
+  const {enabled, systemTestBrowserHelper} = useSystemTestExpo({
+    // Optional: inject your own helper instance instead of using the shared default
+    // browserHelper: mySystemTestBrowserHelper,
     onFirstInitialize: () => {
       // One-time setup the first time the helper initializes
     },
@@ -129,12 +201,51 @@ export default function RootLayout() {
 
 Notes:
 - The hook auto-connects when the page is opened with `?systemTest=true` (as the runner does).
+- Pass `browserHelper` if you want to inject a prebuilt `SystemTestBrowserHelper`; otherwise the hook creates and enables a shared default instance.
 - `onFirstInitialize` runs only on the first `initialize` command; use it for one-time setup.
 - `onInitialize` is registered once when the helper is ready, but it runs on every `initialize` command (each `SystemTest.run`); use it to reset globals/session.
 - If you need scoundrel remote evaluation, wait for `systemTestBrowserHelper` and register your classes there, as shown in the commented snippet above.
 - Add a root wrapper with `testID="systemTestingComponent"` (and optionally `data-focussed="true"`) around your app so the runner has a stable element to detect and scope selectors against.
 - From your tests, use `await systemTest.getScoundrelClient()` to obtain the browser Scoundrel client for remote evaluation.
-- `useSystemTest` calls `useRouter()` from `expo-router`. If you are not using Expo Router, install `expo-router` or provide your own guard to avoid navigation errors.
+- `useSystemTestExpo` calls `useRouter()` from `expo-router`.
+
+### Using `useSystemTest` or `useSystemTestReactNative` without Expo Router
+
+`useSystemTest` is the generic runtime-agnostic hook. Provide `onNavigate` and `onDismissTo` callbacks for your own navigation stack. `useSystemTestReactNative` is a convenience wrapper around the same generic API for non-Expo React Native apps.
+
+Use these when:
+
+- you are not using Expo Router
+- you want to inject your own navigation behavior
+- you want to share the same app-side helper integration across different routing setups
+
+```js
+import useSystemTestReactNative from "system-testing/build/use-system-test-react-native.js"
+
+export default function App({navigation}) {
+  useSystemTestReactNative({
+    onDismissTo: ({path}) => {
+      navigation.reset({
+        index: 0,
+        routes: [{name: path}]
+      })
+    },
+    onNavigate: ({path}) => {
+      navigation.navigate(path)
+    }
+  })
+
+  return <Navigator />
+}
+```
+
+The generic hook options are:
+
+- `browserHelper`: inject an existing `SystemTestBrowserHelper` instance instead of using the shared default
+- `onFirstInitialize`: one-time setup callback
+- `onInitialize`: callback that runs on every `initialize` command
+- `onNavigate`: handler for `visit(...)`
+- `onDismissTo`: handler for `dismissTo(...)`
 
 ### Root path and `blankText`
 
@@ -208,4 +319,10 @@ This tears down the browser, servers, and sockets, then starts them again so sub
 
 ## Dummy Expo app
 
-A ready-to-run Expo Router dummy app that uses `system-testing` lives in `spec/dummy`. Build the web bundle with `npm run export:web` and execute the sample system test with `npm run test:system` from that folder.
+A ready-to-run Expo Router dummy app that uses `system-testing` lives in `spec/dummy`.
+
+Useful commands from the package root:
+
+- `npm run export:web`: build the dummy Expo app for web
+- `SYSTEM_TEST_HOST=dist npx jasmine spec/system-test.spec.js`: run the sample system specs against the exported bundle
+- `SYSTEM_TEST_HOST=dist npx jasmine spec/system-test-logging.spec.js`: run the browser-log capture spec

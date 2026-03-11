@@ -51,13 +51,16 @@
     "htmlfy": "^1.0.0",
     "mime": "^4.0.7",
     "moment": "^2.30.1",
+    "prop-types": "^15.8.1",
     "qs": "^6.14.1",
     "scoundrel-remote-eval": "^1.0.28",
+    "set-state-compare": "^1.0.72",
     "ws": "^8.18.3",
     "ya-use-event-emitter": "^0.1.2"
   },
   "peerDependencies": {
     "expo-router": ">= 1.0.0",
+    "react": ">= 18.3.0",
     "selenium-webdriver": ">= 4.34.0"
   },
   "peerDependenciesMeta": {

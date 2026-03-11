@@ -6,7 +6,7 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { SystemTestFocusedView } from '@/components/system-test-focused-view';
 import { SystemTestRootMarker } from '@/components/system-test-root-marker';
-import useSystemTest from "system-testing/build/use-system-test.js";
+import useSystemTestExpo from "system-testing/build/use-system-test-expo.js";
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -14,7 +14,7 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  useSystemTest();
+  useSystemTestExpo();
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

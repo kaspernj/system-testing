@@ -8,5 +8,6 @@
 - Run relevant checks for files that were changed or created.
 - When bumping package versions, update both `package.json` and `spec/dummy/package.json`.
 - Keep JSDoc `@typedef` blocks immediately after imports.
+- Keep single-tag JSDoc blocks on one line when they fit (for example `/** @returns {string | undefined} */`).
 - Keep `if`/`else if` conditions on one line when they fit within 160 characters.
 - Avoid putting condition logic inside assignment expressions; prefer explicit `if/else` branches.
