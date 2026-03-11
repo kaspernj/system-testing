@@ -82,7 +82,7 @@
     "appium-uiautomator2-driver": "6.7.11",
     "eslint": "^10.0.3",
     "eslint-plugin-jsdoc": "^62.7.1",
-    "expo-router": "^6.0.21",
+    "expo-router": "^55.0.5",
     "globals": "^17.0.0",
     "jasmine": "^6.0.0",
     "typescript": "^5.9.3"
