@@ -15,11 +15,11 @@ export default class BrowserCommandRunner {
   normalizeFindArgs(commandArgs) {
     const findArgs = {}
 
-    if ("timeout" in commandArgs) {
+    if ("timeout" in commandArgs && commandArgs.timeout !== undefined) {
       findArgs.timeout = Number(commandArgs.timeout)
     }
 
-    if ("visible" in commandArgs) {
+    if ("visible" in commandArgs && commandArgs.visible !== undefined) {
       if (commandArgs.visible === null || commandArgs.visible === "null") {
         findArgs.visible = null
       } else if (typeof commandArgs.visible === "boolean") {
@@ -29,7 +29,7 @@ export default class BrowserCommandRunner {
       }
     }
 
-    if ("useBaseSelector" in commandArgs) {
+    if ("useBaseSelector" in commandArgs && commandArgs.useBaseSelector !== undefined) {
       if (typeof commandArgs.useBaseSelector === "boolean") {
         findArgs.useBaseSelector = commandArgs.useBaseSelector
       } else {

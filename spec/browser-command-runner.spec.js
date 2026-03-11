@@ -59,4 +59,25 @@ describe("BrowserCommandRunner", () => {
     })
     expect(result).toEqual({result: "typed"})
   })
+
+  it("does not coerce missing optional finder args into falsey defaults", async () => {
+    const browser = {
+      find: async (selector, findArgs) => {
+        browser.call = {findArgs, selector}
+        return {
+          getTagName: async () => "div",
+          getText: async () => "Hello",
+          isDisplayed: async () => true
+        }
+      }
+    }
+    const runner = new BrowserCommandRunner({browser: /** @type {any} */ (browser)})
+
+    await runner.run("find", {selector: ".card"})
+
+    expect(browser.call).toEqual({
+      findArgs: {},
+      selector: ".card"
+    })
+  })
 })
