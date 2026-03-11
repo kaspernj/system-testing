@@ -1,4 +1,7 @@
 export {default as Browser} from "./browser.js"
+export {default as BrowserCommandClient} from "./browser-command-client.js"
+export {default as BrowserProcess} from "./browser-process.js"
+export {default as BrowserRegistry} from "./browser-registry.js"
 export {default as SystemTest} from "./system-test.js"
 export {default as SystemTestBrowserHelper} from "./system-test-browser-helper.js"
 export {default as useSystemTest} from "./use-system-test.js"

@@ -14,6 +14,7 @@ This package has three main entry points:
 
 - `SystemTest`: full app-oriented system testing with selector helpers, app bootstrapping, WebSocket communication, screenshots, logs, and Scoundrel support.
 - `Browser`: lower-level driver session for opening URLs, taking screenshots, and reading HTML/logs without the rest of the system-test flow.
+- `system-testing` CLI browser daemon: a long-running named browser process that can be controlled from CLI commands or WebSocket messages.
 - `useSystemTest*` hooks: browser-side integration that lets your app respond to `visit` / `dismissTo` commands from `SystemTest`.
 
 Use `SystemTest` if you are testing your app. Use `Browser` if you just want a Selenium/Appium-backed browser session.
@@ -159,6 +160,99 @@ Useful browser methods:
 - `takeScreenshot()`: writes screenshot, HTML, and logs to disk and returns the artifact paths.
 
 If you want app-level navigation instead of direct URL loads, keep `Browser` for the driver/session side and use one of the `useSystemTest*` hooks in the app so the communicator has something to talk to.
+
+### Browser daemon CLI
+
+If you want an external agent to drive a reusable browser process, start the browser daemon:
+
+```bash
+npx system-testing browser my-browser
+```
+
+Optional arguments:
+
+- `--port 1991`: use a fixed WebSocket port instead of an ephemeral one
+- `--base-url https://example.com`: set the browser base URL so relative `visit` paths work
+- `--driver selenium|appium`: choose the driver type
+- `--debug`: enable browser debug logging
+
+The process stays running until you stop it. On start it prints JSON with at least the browser `name`, `pid`, and `port`.
+
+List running browser daemons:
+
+```bash
+npx system-testing browser-list
+```
+
+This prints one line per browser with the name and port. Use `--json` if you want machine-readable output.
+
+Send commands from the CLI:
+
+```bash
+npx system-testing browser-command --name my-browser --visit=https://example.com/path
+npx system-testing browser-command --name my-browser --find-by-test-id saveButton
+npx system-testing browser-command --name my-browser --click='[data-testid="saveButton"]'
+npx system-testing browser-command --name my-browser --get-html
+npx system-testing browser-command --name my-browser --get-browser-logs
+npx system-testing browser-command --name my-browser --take-screenshot
+```
+
+If only one browser daemon is running, `browser-command` can omit `--name`. Results are printed as JSON so automation tools can parse them easily.
+
+Generic commands are also supported:
+
+```bash
+npx system-testing browser-command \
+  --name my-browser \
+  --command=interact \
+  --selector='[data-testid="emailInput"]' \
+  --method=sendKeys \
+  --arg='user@example.com'
+```
+
+The browser daemon is intended for agent-style development workflows where an AI or script needs to open the app, inspect HTML, locate elements, click controls, and read logs while validating layout or behavior changes.
+
+### Browser daemon WebSocket protocol
+
+The daemon also accepts WebSocket commands on its configured port. Send JSON payloads like:
+
+```json
+{"type":"browser-command","command":"visit","url":"https://example.com/path"}
+```
+
+Another example:
+
+```json
+{"type":"browser-command","command":"findByTestID","args":{"testID":"saveButton"}}
+```
+
+The server responds with JSON:
+
+```json
+{"ok":true,"requestId":"...","type":"browser-command-result","result":{"ok":true}}
+```
+
+If the command fails:
+
+```json
+{"ok":false,"requestId":"...","type":"browser-command-result","error":"..."}
+```
+
+Supported daemon commands currently include:
+
+- `visit`
+- `dismissTo`
+- `setBaseSelector`
+- `getCurrentUrl`
+- `getHTML`
+- `getBrowserLogs`
+- `takeScreenshot`
+- `find`
+- `findByTestID`
+- `click`
+- `waitForNoSelector`
+- `expectNoElement`
+- `interact`
 
 ### Using `useSystemTestExpo` in your Expo app
 

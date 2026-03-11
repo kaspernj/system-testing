@@ -186,6 +186,94 @@ export default class Browser {
     return await this.getDriverAdapter().getCurrentUrl()
   }
 
+  /**
+   * @param {string} selector
+   * @param {import("./system-test.js").FindArgs} [args]
+   * @returns {Promise<import("selenium-webdriver").WebElement[]>}
+   */
+  async all(selector, args = {}) {
+    return await this.getDriverAdapter().all(selector, args)
+  }
+
+  /**
+   * @param {string} selector
+   * @param {import("./system-test.js").FindArgs} [args]
+   * @returns {Promise<import("selenium-webdriver").WebElement>}
+   */
+  async find(selector, args = {}) {
+    return await this.getDriverAdapter().find(selector, args)
+  }
+
+  /**
+   * @param {string} testID
+   * @param {import("./system-test.js").FindArgs} [args]
+   * @returns {Promise<import("selenium-webdriver").WebElement>}
+   */
+  async findByTestID(testID, args) {
+    return await this.getDriverAdapter().findByTestID(testID, args)
+  }
+
+  /**
+   * @param {string} selector
+   * @param {import("./system-test.js").FindArgs} [args]
+   * @returns {Promise<import("selenium-webdriver").WebElement>}
+   */
+  async findNoWait(selector, args = {}) {
+    return await this.getDriverAdapter().findNoWait(selector, args)
+  }
+
+  /**
+   * @param {string | import("selenium-webdriver").WebElement} elementOrIdentifier
+   * @param {import("./system-test.js").FindArgs} [args]
+   * @returns {Promise<void>}
+   */
+  async click(elementOrIdentifier, args) {
+    await this.getDriverAdapter().click(elementOrIdentifier, args)
+  }
+
+  /**
+   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").FindArgs} elementOrIdentifier
+   * @param {string} methodName
+   * @param {...any} args
+   * @returns {Promise<any>}
+   */
+  async interact(elementOrIdentifier, methodName, ...args) {
+    return await this.getDriverAdapter().interact(elementOrIdentifier, methodName, ...args)
+  }
+
+  /**
+   * @param {string} selector
+   * @param {import("./system-test.js").WaitForNoSelectorArgs} [args]
+   * @returns {Promise<void>}
+   */
+  async waitForNoSelector(selector, args = {}) {
+    await this.getDriverAdapter().waitForNoSelector(selector, args)
+  }
+
+  /**
+   * @param {string} selector
+   * @param {import("./system-test.js").FindArgs} [args]
+   * @returns {Promise<void>}
+   */
+  async expectNoElement(selector, args = {}) {
+    let found = false
+
+    try {
+      await this.findNoWait(selector, args)
+      found = true
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("Element couldn't be found after ")) {
+        // Ignore
+      } else {
+        throw error
+      }
+    }
+
+    if (found) {
+      throw new Error(`Expected not to find: ${selector}`)
+    }
+  }
+
   /** @returns {Promise<string>} */
   async getHTML() {
     return await this.getDriverAdapter().getHTML()
