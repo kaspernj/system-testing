@@ -9,3 +9,4 @@
 - refactor `SystemTest` to build on the shared browser/session layer
 - move shared app-side hook behavior to `ShapeHook`-based system-test hook infrastructure
 - expand README setup docs for browser usage, hook wiring, daemon control, and first-run setup
+- make `npm run test:appium:web` install a matching Chrome for Testing `chromedriver` binary and run Appium Web with an explicit driver executable

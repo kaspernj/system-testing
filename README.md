@@ -118,6 +118,8 @@ await SystemTest.run({
 
 If you already run an Appium server, provide `serverUrl` instead of `serverArgs`. By default, `findByTestID` uses the Appium `accessibility id` strategy. To use CSS instead (for web contexts), set `options.testIdStrategy` to `"css"` and optionally `options.testIdAttribute` (defaults to `"data-testid"`).
 
+For local or CI web runs against Chrome, `npm run test:appium:web` now resolves and downloads a matching Chrome for Testing `chromedriver` binary before it starts Appium. That keeps the Appium web path reproducible even when the installed Chrome patch version changes.
+
 ### Generic browser usage
 
 `Browser` is the lower-level browser/session class behind `SystemTest`. Use it when you want driver-backed browsing, screenshots, logs, and HTML capture without the rest of the system-test bootstrapping.
