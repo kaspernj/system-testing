@@ -17,19 +17,45 @@ describe("cli helpers", () => {
     })
   })
 
+  it("resolves CLI timeout flags in seconds for convenience commands", () => {
+    expect(resolveBrowserCommand({timeout: "15", visit: "https://example.com"})).toEqual({
+      args: {
+        timeout: 15000,
+        url: "https://example.com"
+      },
+      command: "visit"
+    })
+
+    expect(resolveBrowserCommand({"find-by-test-id": "project-environment-instance-ports-screen", timeout: "15"})).toEqual({
+      args: {
+        testID: "project-environment-instance-ports-screen",
+        timeout: 15000,
+        useBaseSelector: undefined,
+        visible: undefined
+      },
+      command: "findByTestID"
+    })
+  })
+
   it("resolves generic command arguments", () => {
     expect(resolveBrowserCommand({
       arg: ["hello", "world"],
       command: "interact",
       method: "sendKeys",
-      selector: "[data-testid='field']"
+      selector: "[data-testid='field']",
+      timeout: "1500ms"
     })).toEqual({
       args: {
         args: ["hello", "world"],
         methodName: "sendKeys",
-        selector: "[data-testid='field']"
+        selector: "[data-testid='field']",
+        timeout: 1500
       },
       command: "interact"
     })
+  })
+
+  it("rejects invalid timeout flags", () => {
+    expect(() => resolveBrowserCommand({find: ".card", timeout: "soon"})).toThrowError("Invalid timeout flag: soon")
   })
 })

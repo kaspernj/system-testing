@@ -5,7 +5,12 @@ import BrowserCommandRunner from "../src/browser-command-runner.js"
 describe("BrowserCommandRunner", () => {
   it("routes visit and screenshot commands to the browser", async () => {
     const browser = {
+      getTimeouts: () => 5000,
+      setTimeouts: async (newTimeout) => {
+        browser.timeoutChanges.push(newTimeout)
+      },
       takeScreenshot: async () => ({screenshotPath: "/tmp/test.png"}),
+      timeoutChanges: [],
       visit: async (url) => {
         browser.visitedUrl = url
       }
@@ -14,7 +19,34 @@ describe("BrowserCommandRunner", () => {
 
     expect(await runner.run("visit", {url: "https://example.com"})).toEqual({ok: true})
     expect(browser.visitedUrl).toBe("https://example.com")
+    expect(browser.timeoutChanges).toEqual([])
     expect(await runner.run("takeScreenshot")).toEqual({screenshotPath: "/tmp/test.png"})
+  })
+
+  it("temporarily overrides browser timeouts for navigation commands", async () => {
+    const browser = {
+      dismissTo: async (path) => {
+        browser.dismissedPath = path
+      },
+      dismissedPath: undefined,
+      getTimeouts: () => 5000,
+      setTimeouts: async (newTimeout) => {
+        browser.timeoutChanges.push(newTimeout)
+      },
+      timeoutChanges: [],
+      visit: async (url) => {
+        browser.visitedUrl = url
+      },
+      visitedUrl: undefined
+    }
+    const runner = new BrowserCommandRunner({browser: /** @type {any} */ (browser)})
+
+    await runner.run("visit", {timeout: 15000, url: "https://example.com"})
+    await runner.run("dismissTo", {path: "/projects", timeout: "1200"})
+
+    expect(browser.visitedUrl).toBe("https://example.com")
+    expect(browser.dismissedPath).toBe("/projects")
+    expect(browser.timeoutChanges).toEqual([15000, 5000, 1200, 5000])
   })
 
   it("serializes element lookups", async () => {
@@ -79,5 +111,14 @@ describe("BrowserCommandRunner", () => {
       findArgs: {},
       selector: ".card"
     })
+  })
+
+  it("rejects invalid timeout overrides", async () => {
+    const browser = {
+      getTimeouts: () => 5000
+    }
+    const runner = new BrowserCommandRunner({browser: /** @type {any} */ (browser)})
+
+    await expectAsync(runner.run("visit", {timeout: "invalid", url: "https://example.com"})).toBeRejectedWithError("Invalid timeout: invalid")
   })
 })

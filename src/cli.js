@@ -11,7 +11,7 @@ function printHelp() {
   system-testing browser <name> [--port 1991] [--base-url https://example.com]
   system-testing browser-list
   system-testing browser-command [--name my-browser] [--port 1991] --visit=https://example.com
-  system-testing browser-command [--name my-browser] --find-by-test-id someID
+  system-testing browser-command [--name my-browser] --find-by-test-id someID [--timeout 15]
   system-testing browser-command [--name my-browser] --take-screenshot
 `)
 }

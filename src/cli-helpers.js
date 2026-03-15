@@ -48,23 +48,69 @@ export function parseArgv(argv) {
 }
 
 /**
+ * Parses a CLI timeout flag into milliseconds.
+ * Bare numeric values are treated as seconds for CLI ergonomics.
+ * @param {any} timeoutFlag
+ * @returns {number | undefined}
+ */
+function resolveCliTimeout(timeoutFlag) {
+  if (timeoutFlag === undefined) {
+    return undefined
+  }
+
+  if (typeof timeoutFlag === "number") {
+    return timeoutFlag * 1000
+  }
+
+  const timeoutString = String(timeoutFlag).trim()
+
+  if (/^\d+(\.\d+)?ms$/i.test(timeoutString)) {
+    return Number(timeoutString.slice(0, -2))
+  }
+
+  if (/^\d+(\.\d+)?s$/i.test(timeoutString)) {
+    return Number(timeoutString.slice(0, -1)) * 1000
+  }
+
+  if (/^\d+(\.\d+)?$/.test(timeoutString)) {
+    return Number(timeoutString) * 1000
+  }
+
+  throw new Error(`Invalid timeout flag: ${timeoutFlag}`)
+}
+
+/**
  * @param {Record<string, any>} flags
  * @returns {{command: string, args: Record<string, any>}}
  */
 export function resolveBrowserCommand(flags) {
+  const timeout = resolveCliTimeout(flags.timeout)
+
   if (flags.visit) {
-    return {args: {url: flags.visit}, command: "visit"}
+    const args = {url: flags.visit}
+
+    if (timeout !== undefined) {
+      args.timeout = timeout
+    }
+
+    return {args, command: "visit"}
   }
 
   if (flags["dismiss-to"]) {
-    return {args: {path: flags["dismiss-to"]}, command: "dismissTo"}
+    const args = {path: flags["dismiss-to"]}
+
+    if (timeout !== undefined) {
+      args.timeout = timeout
+    }
+
+    return {args, command: "dismissTo"}
   }
 
   if (flags["find-by-test-id"]) {
     return {
       args: {
         testID: flags["find-by-test-id"],
-        timeout: flags.timeout,
+        timeout,
         useBaseSelector: flags["use-base-selector"],
         visible: flags.visible
       },
@@ -76,7 +122,7 @@ export function resolveBrowserCommand(flags) {
     return {
       args: {
         selector: flags.find,
-        timeout: flags.timeout,
+        timeout,
         useBaseSelector: flags["use-base-selector"],
         visible: flags.visible
       },
@@ -88,7 +134,7 @@ export function resolveBrowserCommand(flags) {
     return {
       args: {
         selector: flags.click,
-        timeout: flags.timeout,
+        timeout,
         useBaseSelector: flags["use-base-selector"],
         visible: flags.visible
       },
@@ -100,6 +146,7 @@ export function resolveBrowserCommand(flags) {
     return {
       args: {
         selector: flags["wait-for-no-selector"],
+        timeout,
         useBaseSelector: flags["use-base-selector"]
       },
       command: "waitForNoSelector"
@@ -110,6 +157,7 @@ export function resolveBrowserCommand(flags) {
     return {
       args: {
         selector: flags["expect-no-element"],
+        timeout,
         useBaseSelector: flags["use-base-selector"]
       },
       command: "expectNoElement"
@@ -145,7 +193,7 @@ export function resolveBrowserCommand(flags) {
     if (flags["test-id"]) args.testID = flags["test-id"]
     if (flags.method) args.methodName = flags.method
     if (flags.arg) args.args = Array.isArray(flags.arg) ? flags.arg : [flags.arg]
-    if (flags.timeout) args.timeout = flags.timeout
+    if (timeout !== undefined) args.timeout = timeout
     if (flags.visible !== undefined) args.visible = flags.visible
     if (flags["use-base-selector"] !== undefined) args.useBaseSelector = flags["use-base-selector"]
 
