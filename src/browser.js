@@ -19,6 +19,10 @@ import AppiumDriver from "./drivers/appium-driver.js"
  * @property {"selenium"|"appium"} [type] Driver implementation to use.
  * @property {Record<string, any>} [options] Driver-specific options.
  */
+/**
+ * @typedef {object} BrowserNavigationArgs
+ * @property {number} [timeout] Override the timeout for this navigation command.
+ */
 
 /** Generic browser session wrapper around the configured driver. */
 export default class Browser {
@@ -280,6 +284,18 @@ export default class Browser {
   }
 
   /**
+   * @param {number | undefined} timeoutOverride
+   * @returns {number}
+   */
+  getCommandTimeout(timeoutOverride) {
+    if (timeoutOverride !== undefined) {
+      return timeoutOverride
+    }
+
+    return this.getTimeouts()
+  }
+
+  /**
    * @param {string} path
    * @returns {Promise<void>}
    */
@@ -290,15 +306,16 @@ export default class Browser {
   /**
    * @param {string} type
    * @param {string} path
+   * @param {BrowserNavigationArgs} [args]
    * @returns {Promise<void>}
    */
-  async sendBrowserCommand(type, path) {
+  async sendBrowserCommand(type, path, args = {}) {
     if (!this.communicator) {
       throw new Error("Communicator hasn't been initialized yet")
     }
 
     await timeout(
-      {timeout: this.getTimeouts(), errorMessage: `timeout while sending browser command ${type}: ${path}`},
+      {timeout: this.getCommandTimeout(args.timeout), errorMessage: `timeout while sending browser command ${type}: ${path}`},
       async () => await this.communicator.sendCommand({type, path})
     )
   }
@@ -306,14 +323,15 @@ export default class Browser {
   /**
    * Visits a path using the injected browser helper when available, otherwise navigates directly with the driver.
    * @param {string} path
+   * @param {BrowserNavigationArgs} [args]
    * @returns {Promise<void>}
    */
-  async visit(path) {
+  async visit(path, args = {}) {
     if (this.communicatorExists()) {
-      await this.sendBrowserCommand("visit", path)
+      await this.sendBrowserCommand("visit", path, args)
     } else {
       await timeout(
-        {timeout: this.getTimeouts(), errorMessage: `timeout while visiting path: ${path}`},
+        {timeout: this.getCommandTimeout(args.timeout), errorMessage: `timeout while visiting path: ${path}`},
         async () => await this.driverVisit(path)
       )
     }
@@ -322,14 +340,15 @@ export default class Browser {
   /**
    * Dismisses to a path via the injected browser helper when available, otherwise navigates directly with the driver.
    * @param {string} path
+   * @param {BrowserNavigationArgs} [args]
    * @returns {Promise<void>}
    */
-  async dismissTo(path) {
+  async dismissTo(path, args = {}) {
     if (this.communicatorExists()) {
-      await this.sendBrowserCommand("dismissTo", path)
+      await this.sendBrowserCommand("dismissTo", path, args)
     } else {
       await timeout(
-        {timeout: this.getTimeouts(), errorMessage: `timeout while dismissing to path: ${path}`},
+        {timeout: this.getCommandTimeout(args.timeout), errorMessage: `timeout while dismissing to path: ${path}`},
         async () => await this.driverVisit(path)
       )
     }

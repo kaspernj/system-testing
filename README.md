@@ -193,6 +193,7 @@ Send commands from the CLI:
 ```bash
 npx system-testing browser-command --name my-browser --visit=https://example.com/path
 npx system-testing browser-command --name my-browser --find-by-test-id saveButton
+npx system-testing browser-command --name my-browser --find-by-test-id saveButton --timeout 15
 npx system-testing browser-command --name my-browser --click='[data-testid="saveButton"]'
 npx system-testing browser-command --name my-browser --get-html
 npx system-testing browser-command --name my-browser --get-browser-logs
@@ -200,6 +201,8 @@ npx system-testing browser-command --name my-browser --take-screenshot
 ```
 
 If only one browser daemon is running, `browser-command` can omit `--name`. Results are printed as JSON so automation tools can parse them easily.
+
+CLI `--timeout` values are supported on navigation and selector-based commands. Bare numbers are interpreted as seconds, and explicit `ms` / `s` suffixes are also accepted.
 
 Generic commands are also supported:
 

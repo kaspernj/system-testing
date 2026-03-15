@@ -6,15 +6,35 @@ describe("BrowserCommandRunner", () => {
   it("routes visit and screenshot commands to the browser", async () => {
     const browser = {
       takeScreenshot: async () => ({screenshotPath: "/tmp/test.png"}),
-      visit: async (url) => {
-        browser.visitedUrl = url
+      visit: async (url, args) => {
+        browser.visitCall = {args, url}
       }
     }
     const runner = new BrowserCommandRunner({browser: /** @type {any} */ (browser)})
 
     expect(await runner.run("visit", {url: "https://example.com"})).toEqual({ok: true})
-    expect(browser.visitedUrl).toBe("https://example.com")
+    expect(browser.visitCall).toEqual({args: {}, url: "https://example.com"})
     expect(await runner.run("takeScreenshot")).toEqual({screenshotPath: "/tmp/test.png"})
+  })
+
+  it("passes timeout overrides directly to navigation commands", async () => {
+    const browser = {
+      dismissTo: async (path, args) => {
+        browser.dismissToCall = {args, path}
+      },
+      dismissToCall: undefined,
+      visit: async (url, args) => {
+        browser.visitCall = {args, url}
+      },
+      visitCall: undefined
+    }
+    const runner = new BrowserCommandRunner({browser: /** @type {any} */ (browser)})
+
+    await runner.run("visit", {timeout: 15000, url: "https://example.com"})
+    await runner.run("dismissTo", {path: "/projects", timeout: "1200"})
+
+    expect(browser.visitCall).toEqual({args: {timeout: 15000}, url: "https://example.com"})
+    expect(browser.dismissToCall).toEqual({args: {timeout: 1200}, path: "/projects"})
   })
 
   it("serializes element lookups", async () => {
@@ -79,5 +99,12 @@ describe("BrowserCommandRunner", () => {
       findArgs: {},
       selector: ".card"
     })
+  })
+
+  it("rejects invalid timeout overrides", async () => {
+    const browser = {}
+    const runner = new BrowserCommandRunner({browser: /** @type {any} */ (browser)})
+
+    await expectAsync(runner.run("visit", {timeout: "invalid", url: "https://example.com"})).toBeRejectedWithError("Invalid timeout: invalid")
   })
 })

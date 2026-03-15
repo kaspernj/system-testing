@@ -1,0 +1,1 @@
+- Add `browser-command --timeout` support across selector and navigation convenience flags, treating bare CLI values as seconds.

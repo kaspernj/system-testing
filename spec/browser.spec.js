@@ -22,6 +22,22 @@ describe("Browser", () => {
     expect(visitedPaths).toEqual(["https://example.com"])
   })
 
+  it("uses per-command timeout overrides for direct navigation", async () => {
+    const browser = new Browser()
+    const visitedPaths = []
+
+    browser.driverAdapter = /** @type {any} */ ({
+      driverVisit: async (visitedPath) => {
+        visitedPaths.push(visitedPath)
+      },
+      getTimeouts: () => 500
+    })
+
+    await browser.visit("https://example.com", {timeout: 1500})
+
+    expect(visitedPaths).toEqual(["https://example.com"])
+  })
+
   it("uses the injected communicator for helper-driven navigation", async () => {
     const sentCommands = []
     const browser = new Browser({
@@ -41,6 +57,32 @@ describe("Browser", () => {
 
     await browser.visit("/spa-route")
     await browser.dismissTo("/reset")
+
+    expect(sentCommands).toEqual([
+      {type: "visit", path: "/spa-route"},
+      {type: "dismissTo", path: "/reset"}
+    ])
+  })
+
+  it("uses per-command timeout overrides for helper-driven navigation", async () => {
+    const sentCommands = []
+    const browser = new Browser({
+      communicator: /** @type {any} */ ({
+        sendCommand: async (command) => {
+          sentCommands.push(command)
+        }
+      })
+    })
+
+    browser.driverAdapter = /** @type {any} */ ({
+      driverVisit: async () => {
+        throw new Error("driverVisit should not be called when communicator is injected")
+      },
+      getTimeouts: () => 500
+    })
+
+    await browser.visit("/spa-route", {timeout: 1500})
+    await browser.dismissTo("/reset", {timeout: 2500})
 
     expect(sentCommands).toEqual([
       {type: "visit", path: "/spa-route"},
