@@ -188,6 +188,14 @@ npx system-testing browser-list
 
 This prints one line per browser with the name and port. Use `--json` if you want machine-readable output.
 
+Stop a running browser daemon:
+
+```bash
+npx system-testing browser-stop --name my-browser
+```
+
+If only one browser daemon is running, `browser-stop` can omit `--name`.
+
 Send commands from the CLI:
 
 ```bash

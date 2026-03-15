@@ -10,6 +10,7 @@ function printHelp() {
   console.log(`Usage:
   system-testing browser <name> [--port 1991] [--base-url https://example.com]
   system-testing browser-list
+  system-testing browser-stop [--name my-browser]
   system-testing browser-command [--name my-browser] [--port 1991] --visit=https://example.com
   system-testing browser-command [--name my-browser] --find-by-test-id someID [--timeout 15]
   system-testing browser-command [--name my-browser] --take-screenshot
@@ -60,6 +61,15 @@ async function main(argv) {
     for (const entry of entries) {
       console.log(`${entry.name}\t${entry.port}\tpid=${entry.pid}`)
     }
+  } else if (mainCommand === "browser-stop") {
+    const stoppedEntry = await BrowserRegistry.stop(parsed.flags.name)
+
+    if (parsed.flags.json) {
+      console.log(JSON.stringify(stoppedEntry, null, 2))
+      return
+    }
+
+    console.log(`Stopped ${stoppedEntry.name}\tpid=${stoppedEntry.pid}`)
   } else if (mainCommand === "browser-command") {
     const client = new BrowserCommandClient({
       name: parsed.flags.name,

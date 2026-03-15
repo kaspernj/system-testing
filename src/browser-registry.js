@@ -1,6 +1,7 @@
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import wait from "awaitery/build/wait.js"
 
 const registryPath = path.join(os.tmpdir(), "system-testing-browser-registry.json")
 
@@ -81,6 +82,27 @@ export default class BrowserRegistry {
     }
 
     throw new Error(`Multiple browser processes are running (${entries.length}); pass --name`)
+  }
+
+  /**
+   * @param {string} [name]
+   * @returns {Promise<Record<string, any>>}
+   */
+  static async stop(name) {
+    const entry = await this.resolve(name)
+
+    process.kill(entry.pid, "SIGTERM")
+
+    for (let attemptNumber = 1; attemptNumber <= 40; attemptNumber += 1) {
+      if (!this.isProcessAlive(entry.pid)) {
+        await this.unregister(entry.name)
+        return entry
+      }
+
+      await wait(50)
+    }
+
+    throw new Error(`Timed out waiting for browser process ${entry.name} (${entry.pid}) to stop`)
   }
 
   /**
