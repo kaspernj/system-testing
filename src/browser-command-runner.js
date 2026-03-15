@@ -10,18 +10,28 @@ export default class BrowserCommandRunner {
 
   /**
    * @param {Record<string, any>} commandArgs
-   * @returns {Record<string, any>}
+   * @returns {{timeout?: number}}
    */
-  normalizeFindArgs(commandArgs) {
-    const findArgs = {}
+  normalizeTimeoutArgs(commandArgs) {
+    const normalizedArgs = {}
 
     if ("timeout" in commandArgs && commandArgs.timeout !== undefined) {
-      findArgs.timeout = Number(commandArgs.timeout)
+      normalizedArgs.timeout = Number(commandArgs.timeout)
 
-      if (Number.isNaN(findArgs.timeout)) {
+      if (Number.isNaN(normalizedArgs.timeout)) {
         throw new Error(`Invalid timeout: ${commandArgs.timeout}`)
       }
     }
+
+    return normalizedArgs
+  }
+
+  /**
+   * @param {Record<string, any>} commandArgs
+   * @returns {import("./system-test.js").FindArgs}
+   */
+  normalizeFindArgs(commandArgs) {
+    const findArgs = /** @type {import("./system-test.js").FindArgs} */ (this.normalizeTimeoutArgs(commandArgs))
 
     if ("visible" in commandArgs && commandArgs.visible !== undefined) {
       if (commandArgs.visible === null || commandArgs.visible === "null") {
@@ -69,7 +79,7 @@ export default class BrowserCommandRunner {
         throw new Error("visit requires path or url")
       }
 
-      await this.browser.visit(path, this.normalizeFindArgs(commandArgs))
+      await this.browser.visit(path, this.normalizeTimeoutArgs(commandArgs))
       return {ok: true}
     }
 
@@ -80,7 +90,7 @@ export default class BrowserCommandRunner {
         throw new Error("dismissTo requires path or url")
       }
 
-      await this.browser.dismissTo(path, this.normalizeFindArgs(commandArgs))
+      await this.browser.dismissTo(path, this.normalizeTimeoutArgs(commandArgs))
       return {ok: true}
     }
 
