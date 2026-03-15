@@ -17,6 +17,10 @@ export default class BrowserCommandRunner {
 
     if ("timeout" in commandArgs && commandArgs.timeout !== undefined) {
       findArgs.timeout = Number(commandArgs.timeout)
+
+      if (Number.isNaN(findArgs.timeout)) {
+        throw new Error(`Invalid timeout: ${commandArgs.timeout}`)
+      }
     }
 
     if ("visible" in commandArgs && commandArgs.visible !== undefined) {
@@ -38,34 +42,6 @@ export default class BrowserCommandRunner {
     }
 
     return findArgs
-  }
-
-  /**
-   * Runs a browser command with an optional temporary timeout override.
-   * @param {Record<string, any>} commandArgs
-   * @param {() => Promise<any>} callback
-   * @returns {Promise<any>}
-   */
-  async runWithOptionalTimeout(commandArgs, callback) {
-    if (!("timeout" in commandArgs) || commandArgs.timeout === undefined) {
-      return await callback()
-    }
-
-    const timeoutMs = Number(commandArgs.timeout)
-
-    if (Number.isNaN(timeoutMs)) {
-      throw new Error(`Invalid timeout: ${commandArgs.timeout}`)
-    }
-
-    const previousTimeout = this.browser.getTimeouts()
-
-    await this.browser.setTimeouts(timeoutMs)
-
-    try {
-      return await callback()
-    } finally {
-      await this.browser.setTimeouts(previousTimeout)
-    }
   }
 
   /**
@@ -93,7 +69,7 @@ export default class BrowserCommandRunner {
         throw new Error("visit requires path or url")
       }
 
-      await this.runWithOptionalTimeout(commandArgs, async () => await this.browser.visit(path))
+      await this.browser.visit(path, this.normalizeFindArgs(commandArgs))
       return {ok: true}
     }
 
@@ -104,7 +80,7 @@ export default class BrowserCommandRunner {
         throw new Error("dismissTo requires path or url")
       }
 
-      await this.runWithOptionalTimeout(commandArgs, async () => await this.browser.dismissTo(path))
+      await this.browser.dismissTo(path, this.normalizeFindArgs(commandArgs))
       return {ok: true}
     }
 
