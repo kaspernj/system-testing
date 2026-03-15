@@ -1,0 +1,1 @@
+Mark the `react` peer dependency as optional so CLI/browser-daemon consumers do not need to install React just to satisfy package metadata checks. React-based hook helpers still require React in the consuming app.

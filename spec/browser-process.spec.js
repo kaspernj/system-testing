@@ -20,4 +20,15 @@ describe("BrowserProcess", () => {
 
     await expectAsync(browserProcess.handlePayload({type: "other"})).toBeRejectedWithError("Unknown payload type: other")
   })
+
+  it("describes the daemon identity for registry verification", async () => {
+    const browserProcess = new BrowserProcess({browser: /** @type {any} */ ({}), name: "spec-browser"})
+    browserProcess.port = 6543
+
+    await expectAsync(browserProcess.handlePayload({command: "describe", type: "browser-daemon"})).toBeResolvedTo({
+      name: "spec-browser",
+      pid: process.pid,
+      port: 6543
+    })
+  })
 })

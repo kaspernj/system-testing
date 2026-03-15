@@ -1,0 +1,1 @@
+- Add a `browser-stop` CLI command so named browser daemons can be shut down without falling back to `pkill`.
