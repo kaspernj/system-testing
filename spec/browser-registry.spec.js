@@ -35,12 +35,36 @@ describe("BrowserRegistry", () => {
     })
 
     try {
+      spyOn(BrowserRegistry, "verifyEntry").and.resolveTo(true)
       await BrowserRegistry.register({name: "spec-stop-browser", pid: childProcess.pid, port: 6543})
 
       const stoppedEntry = await BrowserRegistry.stop("spec-stop-browser")
 
       expect(stoppedEntry.name).toBe("spec-stop-browser")
       expect(BrowserRegistry.isProcessAlive(childProcess.pid)).toBeFalse()
+      await expectAsync(BrowserRegistry.resolve("spec-stop-browser")).toBeRejectedWithError(
+        "No running browser process found with name: spec-stop-browser"
+      )
+    } finally {
+      if (BrowserRegistry.isProcessAlive(childProcess.pid)) {
+        childProcess.kill("SIGKILL")
+      }
+    }
+  })
+
+  it("treats unverifiable entries as stale instead of killing by pid", async () => {
+    const childProcess = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      stdio: "ignore"
+    })
+
+    try {
+      spyOn(BrowserRegistry, "verifyEntry").and.resolveTo(false)
+      await BrowserRegistry.register({name: "spec-stop-browser", pid: childProcess.pid, port: 6543})
+
+      await expectAsync(BrowserRegistry.stop("spec-stop-browser")).toBeRejectedWithError(
+        "Browser registry entry spec-stop-browser no longer matches a running browser daemon"
+      )
+      expect(BrowserRegistry.isProcessAlive(childProcess.pid)).toBeTrue()
       await expectAsync(BrowserRegistry.resolve("spec-stop-browser")).toBeRejectedWithError(
         "No running browser process found with name: spec-stop-browser"
       )

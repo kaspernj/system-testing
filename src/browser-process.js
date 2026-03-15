@@ -1,5 +1,6 @@
 import Browser from "./browser.js"
 import BrowserCommandRunner from "./browser-command-runner.js"
+import {browserDaemonStopTimeoutMs} from "./browser-daemon-constants.js"
 import BrowserRegistry from "./browser-registry.js"
 import {WebSocketServer} from "ws"
 
@@ -35,7 +36,7 @@ export default class BrowserProcess {
     }
 
     await this.browser.getDriverAdapter().start()
-    await this.browser.setTimeouts(10000)
+    await this.browser.setTimeouts(browserDaemonStopTimeoutMs)
 
     this.wss = new WebSocketServer({port: this.port})
     await new Promise((resolve) => {
@@ -121,6 +122,14 @@ export default class BrowserProcess {
    * @returns {Promise<any>}
    */
   async handlePayload(payload) {
+    if (payload.type === "browser-daemon") {
+      if (payload.command !== "describe") {
+        throw new Error(`Unknown browser daemon command: ${payload.command}`)
+      }
+
+      return {name: this.name, pid: process.pid, port: this.port}
+    }
+
     if (payload.type !== "browser-command") {
       throw new Error(`Unknown payload type: ${payload.type}`)
     }
