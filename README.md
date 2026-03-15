@@ -163,6 +163,8 @@ Useful browser methods:
 
 If you want app-level navigation instead of direct URL loads, keep `Browser` for the driver/session side and use one of the `useSystemTest*` hooks in the app so the communicator has something to talk to.
 
+`react` and `expo-router` are optional peer dependencies. Install them only in apps that import the React/Expo hook helpers; CLI/browser-daemon consumers should not need React just to use `system-testing`.
+
 ### Browser daemon CLI
 
 If you want an external agent to drive a reusable browser process, start the browser daemon:
