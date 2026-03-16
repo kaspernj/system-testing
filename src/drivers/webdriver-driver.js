@@ -15,6 +15,65 @@ function errorWithCause(message, cause) {
 }
 
 /**
+ * @param {unknown} element
+ * @returns {element is import("selenium-webdriver").WebElement}
+ */
+function isWebDriverElement(element) {
+  return Boolean(
+    element &&
+    typeof element === "object" &&
+    "getId" in element &&
+    typeof element.getId === "function"
+  )
+}
+
+/**
+ * @param {unknown} error
+ * @returns {string | undefined}
+ */
+function getErrorName(error) {
+  if (error instanceof Error) {
+    return error.constructor.name
+  }
+
+  return undefined
+}
+
+/**
+ * @param {unknown} error
+ * @returns {string | undefined}
+ */
+function getRetryableInteractErrorName(error) {
+  let currentError = error
+
+  while (currentError) {
+    const errorName = getErrorName(currentError)
+
+    if (errorName === "ElementNotInteractableError" || errorName === "ElementClickInterceptedError" || errorName === "StaleElementReferenceError") {
+      return errorName
+    }
+
+    if (!(currentError instanceof Error) || !("cause" in currentError)) {
+      return undefined
+    }
+
+    currentError = currentError.cause
+  }
+
+  return undefined
+}
+
+/**
+ * @param {...any} args
+ * @returns {string}
+ */
+function getSendKeysTextAppend(...args) {
+  return args
+    .map((arg) => String(arg).replace(/[\uE000-\uF8FF]/g, ""))
+    .join("")
+}
+
+/**
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
@@ -383,7 +442,9 @@ export default class WebDriverDriver {
         break
       } catch (error) {
         if (error instanceof Error) {
-          if (error.constructor.name === "ElementNotInteractableError") {
+          if (error.constructor.name === "ElementClickInterceptedError" || error.constructor.name === "StaleElementReferenceError") {
+            throw error
+          } else if (error.constructor.name === "ElementNotInteractableError") {
             if (tries >= 3) {
               throw errorWithCause(`Element ${elementOrIdentifier.constructor.name} click failed after ${tries} tries - ${error.constructor.name}: ${error.message}`, error)
             } else {
@@ -415,22 +476,34 @@ export default class WebDriverDriver {
 
       const element = await this._findElement(elementOrIdentifier)
 
-      if (!element[methodName]) {
-        throw new Error(`${element.constructor.name} hasn't an attribute named: ${methodName}`)
-      } else if (typeof element[methodName] != "function") {
-        throw new Error(`${element.constructor.name}#${methodName} is not a function`)
-      }
-
       try {
+        if (methodName === "sendKeys") {
+          return await this.interactSendKeysWithFallback(element, ...args)
+        } else if (methodName === "click") {
+          if (isWebDriverElement(element)) {
+            await this.click(element)
+
+            return undefined
+          }
+
+          return await /** @type {{click: (...clickArgs: any[]) => Promise<any>}} */ (element).click(...args)
+        } else if (methodName === "press") {
+          await this.interactPress(element)
+
+          return undefined
+        } else if (!element[methodName]) {
+          throw new Error(`${element.constructor.name} hasn't an attribute named: ${methodName}`)
+        } else if (typeof element[methodName] != "function") {
+          throw new Error(`${element.constructor.name}#${methodName} is not a function`)
+        }
+
         // Dont call with candidate, because that will bind the function wrong.
         return await element[methodName](...args)
       } catch (error) {
         if (error instanceof Error) {
-          if (
-            error.constructor.name === "ElementNotInteractableError" ||
-            error.constructor.name === "ElementClickInterceptedError" ||
-            error.constructor.name === "StaleElementReferenceError"
-          ) {
+          const retryableErrorName = getRetryableInteractErrorName(error)
+
+          if (retryableErrorName) {
             // Retry finding the element and interacting with it
             if (tries >= 3) {
               let elementDescription
@@ -441,7 +514,7 @@ export default class WebDriverDriver {
                 elementDescription = `${element.constructor.name}`
               }
 
-              throw errorWithCause(`${elementDescription} ${methodName} failed after ${tries} tries - ${error.constructor.name}: ${error.message}`, error)
+              throw errorWithCause(`${elementDescription} ${methodName} failed after ${tries} tries - ${retryableErrorName}: ${error.message}`, error)
             } else {
               await wait(50)
             }
@@ -453,6 +526,112 @@ export default class WebDriverDriver {
         }
       }
     }
+  }
+
+  /**
+   * @param {import("selenium-webdriver").WebElement} element
+   * @returns {Promise<string | undefined>}
+   */
+  async readInteractableValue(element) {
+    const valueProperty = await element.getAttribute("value")
+
+    if (typeof valueProperty == "string") {
+      return valueProperty
+    }
+
+    const textContent = await element.getText()
+
+    if (typeof textContent == "string") {
+      return textContent
+    }
+
+    return undefined
+  }
+
+  /**
+   * @param {import("selenium-webdriver").WebElement} element
+   * @param {...any} args
+   * @returns {Promise<unknown>}
+   */
+  async interactSendKeysWithFallback(element, ...args) {
+    const expectedAppend = getSendKeysTextAppend(...args)
+    const beforeValue = await this.readInteractableValue(element)
+    const sendKeysResult = await element.sendKeys(...args)
+
+    if (expectedAppend == "") {
+      return sendKeysResult
+    }
+
+    const afterValue = await this.readInteractableValue(element)
+
+    if (typeof beforeValue == "string" && typeof afterValue == "string" && afterValue !== beforeValue) {
+      return sendKeysResult
+    }
+
+    await this.getWebDriver().executeScript(`
+      const element = arguments[0]
+      const valueToAppend = String(arguments[1] ?? "")
+
+      if (typeof element.focus == "function") {
+        element.focus()
+      }
+
+      if (typeof element.value == "string") {
+        const prototype = Object.getPrototypeOf(element)
+        const descriptor = Object.getOwnPropertyDescriptor(prototype, "value") || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value") || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")
+        const previousValue = String(element.value)
+        const nextValue = String(element.value) + valueToAppend
+
+        if (descriptor && typeof descriptor.set == "function") {
+          descriptor.set.call(element, nextValue)
+        } else {
+          element.value = nextValue
+        }
+
+        if (element._valueTracker && typeof element._valueTracker.setValue == "function") {
+          element._valueTracker.setValue(previousValue)
+        }
+
+        element.dispatchEvent(new Event("input", {bubbles: true}))
+        element.dispatchEvent(new Event("change", {bubbles: true}))
+        return element.value
+      }
+
+      if (element.isContentEditable) {
+        element.textContent = String(element.textContent || "") + valueToAppend
+        element.dispatchEvent(new Event("input", {bubbles: true}))
+        return element.textContent
+      }
+
+      return null
+    `, element, expectedAppend)
+
+    return sendKeysResult
+  }
+
+  /**
+   * @param {import("selenium-webdriver").WebElement} element
+   * @returns {Promise<void>}
+   */
+  async interactPress(element) {
+    await this.getWebDriver().executeScript(`
+      const element = arguments[0]
+
+      if (typeof element.focus == "function") {
+        element.focus()
+      }
+
+      for (const eventName of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+        const mouseEvent = new MouseEvent(eventName, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          view: window
+        })
+
+        element.dispatchEvent(mouseEvent)
+      }
+    `, element)
   }
 
   /**
