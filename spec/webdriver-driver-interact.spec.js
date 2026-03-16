@@ -85,6 +85,36 @@ describe("WebDriverDriver interact", () => {
     expect(executeScriptSpy).not.toHaveBeenCalled()
   })
 
+  it("strips withFallback before selector lookup and preserves regular find args", async () => {
+    const executeScriptCalls = []
+    const element = {
+      getAttribute: async () => "",
+      getText: async () => "",
+      sendKeys: async () => null
+    }
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const findSpy = jasmine.createSpy("find").and.resolveTo(element)
+
+    driver.find = /** @type {any} */ (findSpy)
+    driver.setWebDriver(/** @type {any} */ ({
+      executeScript: async (...args) => {
+        executeScriptCalls.push(args)
+        return "pwd"
+      }
+    }))
+
+    await driver.interact({selector: "textarea[data-testid='project-environment-agent-input']", visible: false, withFallback: true}, "sendKeys", "pwd")
+
+    expect(findSpy).toHaveBeenCalledWith("textarea[data-testid='project-environment-agent-input']", {visible: false})
+    expect(executeScriptCalls.length).toBe(1)
+  })
+
   it("delegates interact click calls for webdriver elements to the driver click helper", async () => {
     const element = {
       getId: async () => "webdriver-element-id",

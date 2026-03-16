@@ -388,7 +388,7 @@ export default class WebDriverDriver {
   }
 
   /**
-   * @param {string|import("selenium-webdriver").WebElement|{selector: string} & FindArgs} elementOrIdentifier
+   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs & {withFallback?: boolean})} elementOrIdentifier
    * @param {FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
@@ -400,6 +400,8 @@ export default class WebDriverDriver {
       element = await this.find(elementOrIdentifier, args)
     } else if (typeof elementOrIdentifier == "object" && elementOrIdentifier !== null && "selector" in elementOrIdentifier) {
       const {selector, ...restArgs} = elementOrIdentifier
+
+      delete restArgs.withFallback
 
       element = await this.find(selector, restArgs)
     } else {
