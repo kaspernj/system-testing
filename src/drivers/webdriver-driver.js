@@ -415,13 +415,23 @@ export default class WebDriverDriver {
 
       const element = await this._findElement(elementOrIdentifier)
 
-      if (!element[methodName]) {
-        throw new Error(`${element.constructor.name} hasn't an attribute named: ${methodName}`)
-      } else if (typeof element[methodName] != "function") {
-        throw new Error(`${element.constructor.name}#${methodName} is not a function`)
-      }
-
       try {
+        if (methodName === "sendKeys") {
+          return await this.interactSendKeysWithFallback(element, ...args)
+        } else if (methodName === "click") {
+          await this.click(element)
+
+          return undefined
+        } else if (methodName === "press") {
+          await this.interactPress(element)
+
+          return undefined
+        } else if (!element[methodName]) {
+          throw new Error(`${element.constructor.name} hasn't an attribute named: ${methodName}`)
+        } else if (typeof element[methodName] != "function") {
+          throw new Error(`${element.constructor.name}#${methodName} is not a function`)
+        }
+
         // Dont call with candidate, because that will bind the function wrong.
         return await element[methodName](...args)
       } catch (error) {
@@ -453,6 +463,112 @@ export default class WebDriverDriver {
         }
       }
     }
+  }
+
+  /**
+   * @param {import("selenium-webdriver").WebElement} element
+   * @returns {Promise<string | undefined>}
+   */
+  async readInteractableValue(element) {
+    const valueProperty = await element.getAttribute("value")
+
+    if (typeof valueProperty == "string") {
+      return valueProperty
+    }
+
+    const textContent = await element.getText()
+
+    if (typeof textContent == "string") {
+      return textContent
+    }
+
+    return undefined
+  }
+
+  /**
+   * @param {import("selenium-webdriver").WebElement} element
+   * @param {...any} args
+   * @returns {Promise<unknown>}
+   */
+  async interactSendKeysWithFallback(element, ...args) {
+    const expectedAppend = args.map((arg) => String(arg)).join("")
+    const beforeValue = await this.readInteractableValue(element)
+    const sendKeysResult = await element.sendKeys(...args)
+
+    if (expectedAppend == "") {
+      return sendKeysResult
+    }
+
+    const afterValue = await this.readInteractableValue(element)
+
+    if (typeof beforeValue == "string" && typeof afterValue == "string" && afterValue !== beforeValue) {
+      return sendKeysResult
+    }
+
+    await this.getWebDriver().executeScript(`
+      const element = arguments[0]
+      const valueToAppend = String(arguments[1] ?? "")
+
+      if (typeof element.focus == "function") {
+        element.focus()
+      }
+
+      if (typeof element.value == "string") {
+        const prototype = Object.getPrototypeOf(element)
+        const descriptor = Object.getOwnPropertyDescriptor(prototype, "value") || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value") || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")
+        const previousValue = String(element.value)
+        const nextValue = String(element.value) + valueToAppend
+
+        if (descriptor && typeof descriptor.set == "function") {
+          descriptor.set.call(element, nextValue)
+        } else {
+          element.value = nextValue
+        }
+
+        if (element._valueTracker && typeof element._valueTracker.setValue == "function") {
+          element._valueTracker.setValue(previousValue)
+        }
+
+        element.dispatchEvent(new Event("input", {bubbles: true}))
+        element.dispatchEvent(new Event("change", {bubbles: true}))
+        return element.value
+      }
+
+      if (element.isContentEditable) {
+        element.textContent = String(element.textContent || "") + valueToAppend
+        element.dispatchEvent(new Event("input", {bubbles: true}))
+        return element.textContent
+      }
+
+      return null
+    `, element, expectedAppend)
+
+    return sendKeysResult
+  }
+
+  /**
+   * @param {import("selenium-webdriver").WebElement} element
+   * @returns {Promise<void>}
+   */
+  async interactPress(element) {
+    await this.getWebDriver().executeScript(`
+      const element = arguments[0]
+
+      if (typeof element.focus == "function") {
+        element.focus()
+      }
+
+      for (const eventName of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+        const mouseEvent = new MouseEvent(eventName, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          view: window
+        })
+
+        element.dispatchEvent(mouseEvent)
+      }
+    `, element)
   }
 
   /**
