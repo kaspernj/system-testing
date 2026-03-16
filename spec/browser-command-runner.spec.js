@@ -80,6 +80,24 @@ describe("BrowserCommandRunner", () => {
     expect(result).toEqual({result: "typed"})
   })
 
+  it("passes interact fallback flags through to the browser", async () => {
+    const browser = {
+      interact: async (selectorObject, methodName, ...args) => {
+        browser.call = {args, methodName, selectorObject}
+        return "typed"
+      }
+    }
+    const runner = new BrowserCommandRunner({browser: /** @type {any} */ (browser)})
+
+    await runner.run("interact", {args: ["hello"], methodName: "sendKeys", selector: "[data-testid='email']", withFallback: "true"})
+
+    expect(browser.call).toEqual({
+      args: ["hello"],
+      methodName: "sendKeys",
+      selectorObject: {selector: "[data-testid='email']", withFallback: true}
+    })
+  })
+
   it("does not coerce missing optional finder args into falsey defaults", async () => {
     const browser = {
       find: async (selector, findArgs) => {

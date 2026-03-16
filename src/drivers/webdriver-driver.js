@@ -80,6 +80,9 @@ function getSendKeysTextAppend(...args) {
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 /**
+ * @typedef {FindArgs & {withFallback?: boolean}} InteractArgs
+ */
+/**
  * @typedef {object} WaitForNoSelectorArgs
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
@@ -385,7 +388,7 @@ export default class WebDriverDriver {
   }
 
   /**
-   * @param {string|import("selenium-webdriver").WebElement|{selector: string} & FindArgs} elementOrIdentifier
+   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs & {withFallback?: boolean})} elementOrIdentifier
    * @param {FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
@@ -397,6 +400,8 @@ export default class WebDriverDriver {
       element = await this.find(elementOrIdentifier, args)
     } else if (typeof elementOrIdentifier == "object" && elementOrIdentifier !== null && "selector" in elementOrIdentifier) {
       const {selector, ...restArgs} = elementOrIdentifier
+
+      delete restArgs.withFallback
 
       element = await this.find(selector, restArgs)
     } else {
@@ -463,7 +468,7 @@ export default class WebDriverDriver {
   /**
    * Interacts with an element by calling a method on it with the given arguments.
    * Retrying on ElementNotInteractableError, ElementClickInterceptedError, or StaleElementReferenceError.
-   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & FindArgs} elementOrIdentifier The element or a CSS selector to find the element.
+   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & InteractArgs} elementOrIdentifier The element or a CSS selector to find the element.
    * @param {string} methodName The method name to call on the element.
    * @param {...any} args Arguments to pass to the method.
    * @returns {Promise<any>}
@@ -478,7 +483,11 @@ export default class WebDriverDriver {
 
       try {
         if (methodName === "sendKeys") {
-          return await this.interactSendKeysWithFallback(element, ...args)
+          if (typeof elementOrIdentifier === "object" && elementOrIdentifier && "withFallback" in elementOrIdentifier && elementOrIdentifier.withFallback) {
+            return await this.interactSendKeysWithFallback(element, ...args)
+          }
+
+          return await element.sendKeys(...args)
         } else if (methodName === "click") {
           if (isWebDriverElement(element)) {
             await this.click(element)

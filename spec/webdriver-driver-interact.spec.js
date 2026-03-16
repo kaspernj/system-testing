@@ -27,7 +27,7 @@ describe("WebDriverDriver interact", () => {
       }
     }))
 
-    await driver.interact({selector: "textarea[data-testid='project-environment-agent-input']"}, "sendKeys", "pwd")
+    await driver.interact({selector: "textarea[data-testid='project-environment-agent-input']", withFallback: true}, "sendKeys", "pwd")
 
     expect(executeScriptCalls.length).toBe(1)
     expect(executeScriptCalls[0][1]).toBe(element)
@@ -57,9 +57,62 @@ describe("WebDriverDriver interact", () => {
     driver._findElement = async () => /** @type {any} */ (element)
     driver.setWebDriver(/** @type {any} */ ({executeScript: executeScriptSpy}))
 
+    await driver.interact({selector: "textarea[data-testid='project-environment-agent-input']", withFallback: true}, "sendKeys", "pwd")
+
+    expect(executeScriptSpy).not.toHaveBeenCalled()
+  })
+
+  it("does not use the DOM value-setter fallback unless explicitly requested", async () => {
+    const element = {
+      getAttribute: async () => "",
+      getText: async () => "",
+      sendKeys: async () => null
+    }
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const executeScriptSpy = jasmine.createSpy("executeScript")
+
+    driver._findElement = async () => /** @type {any} */ (element)
+    driver.setWebDriver(/** @type {any} */ ({executeScript: executeScriptSpy}))
+
     await driver.interact({selector: "textarea[data-testid='project-environment-agent-input']"}, "sendKeys", "pwd")
 
     expect(executeScriptSpy).not.toHaveBeenCalled()
+  })
+
+  it("strips withFallback before selector lookup and preserves regular find args", async () => {
+    const executeScriptCalls = []
+    const element = {
+      getAttribute: async () => "",
+      getText: async () => "",
+      sendKeys: async () => null
+    }
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const findSpy = jasmine.createSpy("find").and.resolveTo(element)
+
+    driver.find = /** @type {any} */ (findSpy)
+    driver.setWebDriver(/** @type {any} */ ({
+      executeScript: async (...args) => {
+        executeScriptCalls.push(args)
+        return "pwd"
+      }
+    }))
+
+    await driver.interact({selector: "textarea[data-testid='project-environment-agent-input']", visible: false, withFallback: true}, "sendKeys", "pwd")
+
+    expect(findSpy).toHaveBeenCalledWith("textarea[data-testid='project-environment-agent-input']", {visible: false})
+    expect(executeScriptCalls.length).toBe(1)
   })
 
   it("delegates interact click calls for webdriver elements to the driver click helper", async () => {
@@ -161,7 +214,7 @@ describe("WebDriverDriver interact", () => {
       }
     }))
 
-    await driver.interact({selector: "textarea[data-testid='project-environment-agent-input']"}, "sendKeys", Key.ENTER)
+    await driver.interact({selector: "textarea[data-testid='project-environment-agent-input']", withFallback: true}, "sendKeys", Key.ENTER)
 
     expect(executeScriptCalls).toEqual([])
   })

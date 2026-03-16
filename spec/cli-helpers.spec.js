@@ -43,13 +43,15 @@ describe("cli helpers", () => {
       command: "interact",
       method: "sendKeys",
       selector: "[data-testid='field']",
-      timeout: "1500ms"
+      timeout: "1500ms",
+      "with-fallback": "true"
     })).toEqual({
       args: {
         args: ["hello", "world"],
         methodName: "sendKeys",
         selector: "[data-testid='field']",
-        timeout: 1500
+        timeout: 1500,
+        withFallback: "true"
       },
       command: "interact"
     })
