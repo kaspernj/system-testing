@@ -28,6 +28,52 @@ function isWebDriverElement(element) {
 }
 
 /**
+ * @param {unknown} error
+ * @returns {string | undefined}
+ */
+function getErrorName(error) {
+  if (error instanceof Error) {
+    return error.constructor.name
+  }
+
+  return undefined
+}
+
+/**
+ * @param {unknown} error
+ * @returns {string | undefined}
+ */
+function getRetryableInteractErrorName(error) {
+  let currentError = error
+
+  while (currentError) {
+    const errorName = getErrorName(currentError)
+
+    if (errorName === "ElementNotInteractableError" || errorName === "ElementClickInterceptedError" || errorName === "StaleElementReferenceError") {
+      return errorName
+    }
+
+    if (!(currentError instanceof Error) || !("cause" in currentError)) {
+      return undefined
+    }
+
+    currentError = currentError.cause
+  }
+
+  return undefined
+}
+
+/**
+ * @param {...any} args
+ * @returns {string}
+ */
+function getSendKeysTextAppend(...args) {
+  return args
+    .map((arg) => String(arg).replace(/[\uE000-\uF8FF]/g, ""))
+    .join("")
+}
+
+/**
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
@@ -396,7 +442,9 @@ export default class WebDriverDriver {
         break
       } catch (error) {
         if (error instanceof Error) {
-          if (error.constructor.name === "ElementNotInteractableError") {
+          if (error.constructor.name === "ElementClickInterceptedError" || error.constructor.name === "StaleElementReferenceError") {
+            throw error
+          } else if (error.constructor.name === "ElementNotInteractableError") {
             if (tries >= 3) {
               throw errorWithCause(`Element ${elementOrIdentifier.constructor.name} click failed after ${tries} tries - ${error.constructor.name}: ${error.message}`, error)
             } else {
@@ -453,11 +501,9 @@ export default class WebDriverDriver {
         return await element[methodName](...args)
       } catch (error) {
         if (error instanceof Error) {
-          if (
-            error.constructor.name === "ElementNotInteractableError" ||
-            error.constructor.name === "ElementClickInterceptedError" ||
-            error.constructor.name === "StaleElementReferenceError"
-          ) {
+          const retryableErrorName = getRetryableInteractErrorName(error)
+
+          if (retryableErrorName) {
             // Retry finding the element and interacting with it
             if (tries >= 3) {
               let elementDescription
@@ -468,7 +514,7 @@ export default class WebDriverDriver {
                 elementDescription = `${element.constructor.name}`
               }
 
-              throw errorWithCause(`${elementDescription} ${methodName} failed after ${tries} tries - ${error.constructor.name}: ${error.message}`, error)
+              throw errorWithCause(`${elementDescription} ${methodName} failed after ${tries} tries - ${retryableErrorName}: ${error.message}`, error)
             } else {
               await wait(50)
             }
@@ -508,7 +554,7 @@ export default class WebDriverDriver {
    * @returns {Promise<unknown>}
    */
   async interactSendKeysWithFallback(element, ...args) {
-    const expectedAppend = args.map((arg) => String(arg)).join("")
+    const expectedAppend = getSendKeysTextAppend(...args)
     const beforeValue = await this.readInteractableValue(element)
     const sendKeysResult = await element.sendKeys(...args)
 

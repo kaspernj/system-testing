@@ -1,5 +1,6 @@
 // @ts-check
 
+import {Key, error as SeleniumError} from "selenium-webdriver"
 import WebDriverDriver from "../src/drivers/webdriver-driver.js"
 
 describe("WebDriverDriver interact", () => {
@@ -105,6 +106,64 @@ describe("WebDriverDriver interact", () => {
     expect(clickSpy).not.toHaveBeenCalled()
     expect(element.click).toHaveBeenCalled()
     expect(result).toBe("clicked")
+  })
+
+  it("retries interact clicks when the webdriver click helper wraps a stale-element error", async () => {
+    const elements = [
+      {getId: async () => "stale-element"},
+      {getId: async () => "fresh-element"}
+    ]
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    let findElementCalls = 0
+    const clickSpy = jasmine.createSpy("click").and.callFake(async () => {
+      if (findElementCalls === 1) {
+        throw new Error("wrapped stale element", {cause: new SeleniumError.StaleElementReferenceError("element is stale")})
+      }
+
+      return undefined
+    })
+
+    driver._findElement = async () => /** @type {any} */ (elements[findElementCalls++])
+    driver.click = /** @type {any} */ (clickSpy)
+
+    await driver.interact({selector: "[data-testid='project-environment-agent-submit']"}, "click")
+
+    expect(findElementCalls).toBe(2)
+    expect(clickSpy.calls.count()).toBe(2)
+  })
+
+  it("does not append webdriver control keys in the DOM value-setter fallback", async () => {
+    const executeScriptCalls = []
+    const element = {
+      getAttribute: async () => "",
+      getText: async () => "",
+      sendKeys: async () => null
+    }
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver._findElement = async () => /** @type {any} */ (element)
+    driver.setWebDriver(/** @type {any} */ ({
+      executeScript: async (...args) => {
+        executeScriptCalls.push(args)
+        return null
+      }
+    }))
+
+    await driver.interact({selector: "textarea[data-testid='project-environment-agent-input']"}, "sendKeys", Key.ENTER)
+
+    expect(executeScriptCalls).toEqual([])
   })
 
   it("dispatches pointer and mouse events for interact press calls", async () => {
