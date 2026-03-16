@@ -15,6 +15,19 @@ function errorWithCause(message, cause) {
 }
 
 /**
+ * @param {unknown} element
+ * @returns {element is import("selenium-webdriver").WebElement}
+ */
+function isWebDriverElement(element) {
+  return Boolean(
+    element &&
+    typeof element === "object" &&
+    "getId" in element &&
+    typeof element.getId === "function"
+  )
+}
+
+/**
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
@@ -419,9 +432,13 @@ export default class WebDriverDriver {
         if (methodName === "sendKeys") {
           return await this.interactSendKeysWithFallback(element, ...args)
         } else if (methodName === "click") {
-          await this.click(element)
+          if (isWebDriverElement(element)) {
+            await this.click(element)
 
-          return undefined
+            return undefined
+          }
+
+          return await /** @type {{click: (...clickArgs: any[]) => Promise<any>}} */ (element).click(...args)
         } else if (methodName === "press") {
           await this.interactPress(element)
 
