@@ -222,8 +222,11 @@ npx system-testing browser-command \
   --command=interact \
   --selector='[data-testid="emailInput"]' \
   --method=sendKeys \
-  --arg='user@example.com'
+  --arg='user@example.com' \
+  --with-fallback=true
 ```
+
+`sendKeys` uses the driver's normal typing path by default. If you specifically need the DOM value-setter fallback for React Native Web inputs that do not update from ordinary typing in your environment, opt into it with `withFallback: true` in JS or `--with-fallback=true` in the CLI/browser-command transport.
 
 The browser daemon is intended for agent-style development workflows where an AI or script needs to open the app, inspect HTML, locate elements, click controls, and read logs while validating layout or behavior changes.
 

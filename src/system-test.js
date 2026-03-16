@@ -34,6 +34,9 @@ import Browser from "./browser.js"
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 /**
+ * @typedef {FindArgs & {withFallback?: boolean}} InteractArgs
+ */
+/**
  * @typedef {object} WaitForNoSelectorArgs
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
@@ -343,7 +346,7 @@ export default class SystemTest extends Browser {
   /**
    * Interacts with an element by calling a method on it with the given arguments.
    * Retrying on ElementNotInteractableError, ElementClickInterceptedError, or StaleElementReferenceError.
-   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & FindArgs} elementOrIdentifier The element or a CSS selector to find the element.
+   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & InteractArgs} elementOrIdentifier The element or a CSS selector to find the element.
    * @param {string} methodName The method name to call on the element.
    * @param {...any} args Arguments to pass to the method.
    * @returns {Promise<any>}

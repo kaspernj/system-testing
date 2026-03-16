@@ -236,7 +236,7 @@ export default class Browser {
   }
 
   /**
-   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").FindArgs} elementOrIdentifier
+   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
    * @param {string} methodName
    * @param {...any} args
    * @returns {Promise<any>}

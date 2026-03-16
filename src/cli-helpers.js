@@ -193,6 +193,7 @@ export function resolveBrowserCommand(flags) {
     if (flags["test-id"]) args.testID = flags["test-id"]
     if (flags.method) args.methodName = flags.method
     if (flags.arg) args.args = Array.isArray(flags.arg) ? flags.arg : [flags.arg]
+    if (flags["with-fallback"] !== undefined) args.withFallback = flags["with-fallback"]
     if (timeout !== undefined) args.timeout = timeout
     if (flags.visible !== undefined) args.visible = flags.visible
     if (flags["use-base-selector"] !== undefined) args.useBaseSelector = flags["use-base-selector"]

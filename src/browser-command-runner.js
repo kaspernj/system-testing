@@ -174,6 +174,7 @@ export default class BrowserCommandRunner {
       const selector = commandArgs.selector
       const methodName = commandArgs.methodName ?? commandArgs.method
       const methodArgs = Array.isArray(commandArgs.args) ? commandArgs.args : []
+      const interactArgs = /** @type {{selector: string} & import("./system-test.js").InteractArgs} */ ({selector, ...this.normalizeFindArgs(commandArgs)})
 
       if (!selector) {
         throw new Error("interact requires selector")
@@ -183,7 +184,15 @@ export default class BrowserCommandRunner {
         throw new Error("interact requires methodName")
       }
 
-      const result = await this.browser.interact({selector, ...this.normalizeFindArgs(commandArgs)}, methodName, ...methodArgs)
+      if ("withFallback" in commandArgs && commandArgs.withFallback !== undefined) {
+        if (typeof commandArgs.withFallback === "boolean") {
+          interactArgs.withFallback = commandArgs.withFallback
+        } else {
+          interactArgs.withFallback = commandArgs.withFallback === "true"
+        }
+      }
+
+      const result = await this.browser.interact(interactArgs, methodName, ...methodArgs)
 
       return {result}
     }
