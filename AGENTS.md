@@ -11,3 +11,5 @@
 - Keep single-tag JSDoc blocks on one line when they fit (for example `/** @returns {string | undefined} */`).
 - Keep `if`/`else if` conditions on one line when they fit within 160 characters.
 - Avoid putting condition logic inside assignment expressions; prefer explicit `if/else` branches.
+- In system tests, when the next step is `interact(...)`, prefer selector-based `interact("[data-testid='...']", ...)` calls over finding a throwaway element handle first so retry/error handling stays active.
+- In system tests, if a spec needs to replace an input via click-clear-sendKeys, add or use a shared package helper on `Browser`/`SystemTest` (for example `replaceInputValue(...)`) instead of open-coding that sequence in individual specs.

@@ -246,6 +246,18 @@ export default class Browser {
   }
 
   /**
+   * Replaces an input's current value through retryable browser interactions.
+   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
+   * @param {string} nextValue
+   * @returns {Promise<void>}
+   */
+  async replaceInputValue(elementOrIdentifier, nextValue) {
+    await this.interact(elementOrIdentifier, "click")
+    await this.interact(elementOrIdentifier, "clear")
+    await this.interact(elementOrIdentifier, "sendKeys", nextValue)
+  }
+
+  /**
    * @param {string} selector
    * @param {import("./system-test.js").WaitForNoSelectorArgs} [args]
    * @returns {Promise<void>}
