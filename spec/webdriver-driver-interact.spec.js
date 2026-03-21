@@ -219,6 +219,42 @@ describe("WebDriverDriver interact", () => {
     expect(executeScriptCalls).toEqual([])
   })
 
+  it("clears with the fallback setter before sending replacement text", async () => {
+    const executeScriptCalls = []
+    const element = {
+      value: "old",
+      getAttribute: async () => element.value,
+      getId: async () => "webdriver-element-id",
+      getText: async () => "",
+      sendKeys: async () => null
+    }
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const clickSpy = jasmine.createSpy("click").and.resolveTo(undefined)
+
+    driver._findElement = async () => /** @type {any} */ (element)
+    driver.click = /** @type {any} */ (clickSpy)
+    driver.setWebDriver(/** @type {any} */ ({
+      executeScript: async (...args) => {
+        executeScriptCalls.push(args)
+        element.value = args[2]
+        return args[2]
+      }
+    }))
+
+    await driver.replaceInputValue({selector: "textarea[data-testid='project-environment-agent-input']", withFallback: true}, "new")
+
+    expect(clickSpy).toHaveBeenCalledWith(element)
+    expect(executeScriptCalls.length).toBe(2)
+    expect(executeScriptCalls[0][2]).toBe("")
+    expect(executeScriptCalls[1][2]).toBe("new")
+  })
+
   it("dispatches pointer and mouse events for interact press calls", async () => {
     const element = {}
     const executeScriptSpy = jasmine.createSpy("executeScript").and.resolveTo(undefined)

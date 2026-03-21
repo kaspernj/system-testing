@@ -539,6 +539,71 @@ export default class WebDriverDriver {
 
   /**
    * @param {import("selenium-webdriver").WebElement} element
+   * @param {string} nextValue
+   * @returns {Promise<unknown>}
+   */
+  async interactSetValueWithFallback(element, nextValue) {
+    return await this.getWebDriver().executeScript(`
+      const element = arguments[0]
+      const nextValue = String(arguments[1] ?? "")
+
+      if (typeof element.focus == "function") {
+        element.focus()
+      }
+
+      if (typeof element.value == "string") {
+        const prototype = Object.getPrototypeOf(element)
+        const descriptor = Object.getOwnPropertyDescriptor(prototype, "value") || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value") || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")
+        const previousValue = String(element.value)
+
+        if (descriptor && typeof descriptor.set == "function") {
+          descriptor.set.call(element, nextValue)
+        } else {
+          element.value = nextValue
+        }
+
+        if (element._valueTracker && typeof element._valueTracker.setValue == "function") {
+          element._valueTracker.setValue(previousValue)
+        }
+
+        element.dispatchEvent(new Event("input", {bubbles: true}))
+        element.dispatchEvent(new Event("change", {bubbles: true}))
+        return element.value
+      }
+
+      if (element.isContentEditable) {
+        element.textContent = nextValue
+        element.dispatchEvent(new Event("input", {bubbles: true}))
+        return element.textContent
+      }
+
+      return null
+    `, element, nextValue)
+  }
+
+  /**
+   * Replaces an interactable input value while preserving sendKeys fallback semantics.
+   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & InteractArgs)} elementOrIdentifier
+   * @param {string} nextValue
+   * @returns {Promise<void>}
+   */
+  async replaceInputValue(elementOrIdentifier, nextValue) {
+    await this.interact(elementOrIdentifier, "click")
+
+    if (typeof elementOrIdentifier === "object" && elementOrIdentifier && "withFallback" in elementOrIdentifier && elementOrIdentifier.withFallback) {
+      const element = await this._findElement(elementOrIdentifier)
+      await this.interactSetValueWithFallback(element, "")
+    } else {
+      await this.interact(elementOrIdentifier, "clear")
+    }
+
+    if (nextValue !== "") {
+      await this.interact(elementOrIdentifier, "sendKeys", nextValue)
+    }
+  }
+
+  /**
+   * @param {import("selenium-webdriver").WebElement} element
    * @returns {Promise<string | undefined>}
    */
   async readInteractableValue(element) {
@@ -577,43 +642,7 @@ export default class WebDriverDriver {
       return sendKeysResult
     }
 
-    await this.getWebDriver().executeScript(`
-      const element = arguments[0]
-      const valueToAppend = String(arguments[1] ?? "")
-
-      if (typeof element.focus == "function") {
-        element.focus()
-      }
-
-      if (typeof element.value == "string") {
-        const prototype = Object.getPrototypeOf(element)
-        const descriptor = Object.getOwnPropertyDescriptor(prototype, "value") || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value") || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")
-        const previousValue = String(element.value)
-        const nextValue = String(element.value) + valueToAppend
-
-        if (descriptor && typeof descriptor.set == "function") {
-          descriptor.set.call(element, nextValue)
-        } else {
-          element.value = nextValue
-        }
-
-        if (element._valueTracker && typeof element._valueTracker.setValue == "function") {
-          element._valueTracker.setValue(previousValue)
-        }
-
-        element.dispatchEvent(new Event("input", {bubbles: true}))
-        element.dispatchEvent(new Event("change", {bubbles: true}))
-        return element.value
-      }
-
-      if (element.isContentEditable) {
-        element.textContent = String(element.textContent || "") + valueToAppend
-        element.dispatchEvent(new Event("input", {bubbles: true}))
-        return element.textContent
-      }
-
-      return null
-    `, element, expectedAppend)
+    await this.interactSetValueWithFallback(element, `${beforeValue || ""}${expectedAppend}`)
 
     return sendKeysResult
   }

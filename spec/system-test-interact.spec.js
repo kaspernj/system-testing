@@ -96,14 +96,10 @@ describe("SystemTest interact", () => {
 
   it("replaces input values through click-clear-sendKeys interactions", async () => {
     const systemTest = systemTestHelper.getSystemTest()
-    const interactSpy = spyOn(systemTest, "interact").and.resolveTo(undefined)
+    const replaceInputValueSpy = spyOn(systemTest.getDriverAdapter(), "replaceInputValue").and.resolveTo(undefined)
 
     await systemTest.replaceInputValue("#replace-target", "new value")
 
-    expect(interactSpy.calls.allArgs()).toEqual([
-      ["#replace-target", "click"],
-      ["#replace-target", "clear"],
-      ["#replace-target", "sendKeys", "new value"]
-    ])
+    expect(replaceInputValueSpy).toHaveBeenCalledWith("#replace-target", "new value")
   })
 })

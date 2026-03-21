@@ -252,9 +252,7 @@ export default class Browser {
    * @returns {Promise<void>}
    */
   async replaceInputValue(elementOrIdentifier, nextValue) {
-    await this.interact(elementOrIdentifier, "click")
-    await this.interact(elementOrIdentifier, "clear")
-    await this.interact(elementOrIdentifier, "sendKeys", nextValue)
+    await this.getDriverAdapter().replaceInputValue(elementOrIdentifier, nextValue)
   }
 
   /**
