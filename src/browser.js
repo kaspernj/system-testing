@@ -1,6 +1,7 @@
 // @ts-check
 
 import fs from "node:fs/promises"
+import {Key} from "selenium-webdriver"
 import moment from "moment"
 import {prettify} from "htmlfy"
 import timeout from "awaitery/build/timeout.js"
@@ -243,6 +244,37 @@ export default class Browser {
    */
   async interact(elementOrIdentifier, methodName, ...args) {
     return await this.getDriverAdapter().interact(elementOrIdentifier, methodName, ...args)
+  }
+
+  /**
+   * Clears an input and sends replacement keys through retryable browser interactions.
+   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
+   * @param {string} nextValue
+   * @returns {Promise<void>}
+   */
+  async clearAndSendKeys(elementOrIdentifier, nextValue) {
+    await this.interact(elementOrIdentifier, "click")
+    await this.interact(elementOrIdentifier, "sendKeys", Key.chord(Key.CONTROL, "a"), Key.BACK_SPACE, nextValue)
+  }
+
+  /**
+   * Scrolls an element into view.
+   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").FindArgs} elementOrIdentifier
+   * @param {import("./system-test.js").FindArgs} [args]
+   * @returns {Promise<void>}
+   */
+  async scrollIntoView(elementOrIdentifier, args) {
+    await this.getDriverAdapter().scrollIntoView(elementOrIdentifier, args)
+  }
+
+  /**
+   * Scrolls the element with the given test ID into view.
+   * @param {string} testID
+   * @param {import("./system-test.js").FindArgs} [args]
+   * @returns {Promise<void>}
+   */
+  async scrollTestIdIntoView(testID, args) {
+    await this.getDriverAdapter().scrollTestIdIntoView(testID, args)
   }
 
   /**

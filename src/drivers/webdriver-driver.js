@@ -69,8 +69,25 @@ function getRetryableInteractErrorName(error) {
  */
 function getSendKeysTextAppend(...args) {
   return args
-    .map((arg) => String(arg).replace(/[\uE000-\uF8FF]/g, ""))
+    .map((arg) => {
+      const stringArg = String(arg)
+
+      if (/[\uE009\uE03D]a\uE000/i.test(stringArg)) {
+        return ""
+      }
+
+      return stringArg.replace(/[\uE000-\uF8FF]/g, "")
+    })
     .join("")
+}
+
+/**
+ * @param {...any} args
+ * @returns {boolean}
+ */
+function getSendKeysUsesSelectAllAndDelete(...args) {
+  return args.some((arg) => /[\uE009\uE03D]a\uE000/i.test(String(arg))) &&
+    args.some((arg) => String(arg).includes("\uE003") || String(arg).includes("\uE017"))
 }
 
 /**
@@ -466,6 +483,36 @@ export default class WebDriverDriver {
   }
 
   /**
+   * @param {import("selenium-webdriver").WebElement} element
+   * @returns {Promise<void>}
+   */
+  async scrollElementIntoView(element) {
+    await this.getWebDriver().actions({async: true}).move({origin: element}).perform()
+  }
+
+  /**
+   * Scrolls an element into view.
+   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs & {withFallback?: boolean})} elementOrIdentifier
+   * @param {FindArgs} [args]
+   * @returns {Promise<void>}
+   */
+  async scrollIntoView(elementOrIdentifier, args) {
+    const element = await this._findElement(elementOrIdentifier, args)
+    await this.scrollElementIntoView(element)
+  }
+
+  /**
+   * Scrolls the element with the given test ID into view.
+   * @param {string} testID
+   * @param {FindArgs} [args]
+   * @returns {Promise<void>}
+   */
+  async scrollTestIdIntoView(testID, args) {
+    const element = await this.findByTestID(testID, args)
+    await this.scrollElementIntoView(element)
+  }
+
+  /**
    * Interacts with an element by calling a method on it with the given arguments.
    * Retrying on ElementNotInteractableError, ElementClickInterceptedError, or StaleElementReferenceError.
    * @param {import("selenium-webdriver").WebElement|string|{selector: string} & InteractArgs} elementOrIdentifier The element or a CSS selector to find the element.
@@ -566,20 +613,21 @@ export default class WebDriverDriver {
     const expectedAppend = getSendKeysTextAppend(...args)
     const beforeValue = await this.readInteractableValue(element)
     const sendKeysResult = await element.sendKeys(...args)
-
-    if (expectedAppend == "") {
-      return sendKeysResult
-    }
-
     const afterValue = await this.readInteractableValue(element)
 
     if (typeof beforeValue == "string" && typeof afterValue == "string" && afterValue !== beforeValue) {
       return sendKeysResult
     }
 
+    const nextValue = getSendKeysUsesSelectAllAndDelete(...args) ? expectedAppend : `${beforeValue || ""}${expectedAppend}`
+
+    if (typeof beforeValue == "string" && nextValue === beforeValue) {
+      return sendKeysResult
+    }
+
     await this.getWebDriver().executeScript(`
       const element = arguments[0]
-      const valueToAppend = String(arguments[1] ?? "")
+      const nextValue = String(arguments[1] ?? "")
 
       if (typeof element.focus == "function") {
         element.focus()
@@ -589,7 +637,6 @@ export default class WebDriverDriver {
         const prototype = Object.getPrototypeOf(element)
         const descriptor = Object.getOwnPropertyDescriptor(prototype, "value") || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value") || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")
         const previousValue = String(element.value)
-        const nextValue = String(element.value) + valueToAppend
 
         if (descriptor && typeof descriptor.set == "function") {
           descriptor.set.call(element, nextValue)
@@ -607,13 +654,13 @@ export default class WebDriverDriver {
       }
 
       if (element.isContentEditable) {
-        element.textContent = String(element.textContent || "") + valueToAppend
+        element.textContent = nextValue
         element.dispatchEvent(new Event("input", {bubbles: true}))
         return element.textContent
       }
 
       return null
-    `, element, expectedAppend)
+    `, element, nextValue)
 
     return sendKeysResult
   }
