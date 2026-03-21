@@ -95,13 +95,22 @@ describe("SystemTest interact", () => {
     })
   })
 
-  it("replaces input values through click-clear-sendKeys interactions", async () => {
+  it("clears and sends replacement keys through retryable interactions", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const interactSpy = spyOn(systemTest, "interact").and.resolveTo(undefined)
 
-    await systemTest.replaceInputValue("#replace-target", "new value")
+    await systemTest.clearAndSendKeys("#replace-target", "new value")
 
     expect(interactSpy.calls.argsFor(0)).toEqual(["#replace-target", "click"])
     expect(interactSpy.calls.argsFor(1)).toEqual(["#replace-target", "sendKeys", Key.chord(Key.CONTROL, "a"), Key.BACK_SPACE, "new value"])
+  })
+
+  it("delegates test ID scrolling to the driver adapter", async () => {
+    const systemTest = systemTestHelper.getSystemTest()
+    const scrollTestIdIntoViewSpy = spyOn(systemTest.getDriverAdapter(), "scrollTestIdIntoView").and.resolveTo(undefined)
+
+    await systemTest.scrollTestIdIntoView("scrollIntoViewTarget", {useBaseSelector: false})
+
+    expect(scrollTestIdIntoViewSpy).toHaveBeenCalledWith("scrollIntoViewTarget", {useBaseSelector: false})
   })
 })

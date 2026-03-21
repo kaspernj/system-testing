@@ -483,6 +483,36 @@ export default class WebDriverDriver {
   }
 
   /**
+   * @param {import("selenium-webdriver").WebElement} element
+   * @returns {Promise<void>}
+   */
+  async scrollElementIntoView(element) {
+    await this.getWebDriver().actions({async: true}).move({origin: element}).perform()
+  }
+
+  /**
+   * Scrolls an element into view.
+   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs & {withFallback?: boolean})} elementOrIdentifier
+   * @param {FindArgs} [args]
+   * @returns {Promise<void>}
+   */
+  async scrollIntoView(elementOrIdentifier, args) {
+    const element = await this._findElement(elementOrIdentifier, args)
+    await this.scrollElementIntoView(element)
+  }
+
+  /**
+   * Scrolls the element with the given test ID into view.
+   * @param {string} testID
+   * @param {FindArgs} [args]
+   * @returns {Promise<void>}
+   */
+  async scrollTestIdIntoView(testID, args) {
+    const element = await this.findByTestID(testID, args)
+    await this.scrollElementIntoView(element)
+  }
+
+  /**
    * Interacts with an element by calling a method on it with the given arguments.
    * Retrying on ElementNotInteractableError, ElementClickInterceptedError, or StaleElementReferenceError.
    * @param {import("selenium-webdriver").WebElement|string|{selector: string} & InteractArgs} elementOrIdentifier The element or a CSS selector to find the element.
