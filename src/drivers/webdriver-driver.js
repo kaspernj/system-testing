@@ -69,8 +69,25 @@ function getRetryableInteractErrorName(error) {
  */
 function getSendKeysTextAppend(...args) {
   return args
-    .map((arg) => String(arg).replace(/[\uE000-\uF8FF]/g, ""))
+    .map((arg) => {
+      const stringArg = String(arg)
+
+      if (/[\uE009\uE03D]a\uE000/i.test(stringArg)) {
+        return ""
+      }
+
+      return stringArg.replace(/[\uE000-\uF8FF]/g, "")
+    })
     .join("")
+}
+
+/**
+ * @param {...any} args
+ * @returns {boolean}
+ */
+function getSendKeysUsesSelectAllAndDelete(...args) {
+  return args.some((arg) => /[\uE009\uE03D]a\uE000/i.test(String(arg))) &&
+    args.some((arg) => String(arg).includes("\uE003") || String(arg).includes("\uE017"))
 }
 
 /**
@@ -539,11 +556,46 @@ export default class WebDriverDriver {
 
   /**
    * @param {import("selenium-webdriver").WebElement} element
-   * @param {string} nextValue
+   * @returns {Promise<string | undefined>}
+   */
+  async readInteractableValue(element) {
+    const valueProperty = await element.getAttribute("value")
+
+    if (typeof valueProperty == "string") {
+      return valueProperty
+    }
+
+    const textContent = await element.getText()
+
+    if (typeof textContent == "string") {
+      return textContent
+    }
+
+    return undefined
+  }
+
+  /**
+   * @param {import("selenium-webdriver").WebElement} element
+   * @param {...any} args
    * @returns {Promise<unknown>}
    */
-  async interactSetValueWithFallback(element, nextValue) {
-    return await this.getWebDriver().executeScript(`
+  async interactSendKeysWithFallback(element, ...args) {
+    const expectedAppend = getSendKeysTextAppend(...args)
+    const beforeValue = await this.readInteractableValue(element)
+    const sendKeysResult = await element.sendKeys(...args)
+    const afterValue = await this.readInteractableValue(element)
+
+    if (typeof beforeValue == "string" && typeof afterValue == "string" && afterValue !== beforeValue) {
+      return sendKeysResult
+    }
+
+    const nextValue = getSendKeysUsesSelectAllAndDelete(...args) ? expectedAppend : `${beforeValue || ""}${expectedAppend}`
+
+    if (typeof beforeValue == "string" && nextValue === beforeValue) {
+      return sendKeysResult
+    }
+
+    await this.getWebDriver().executeScript(`
       const element = arguments[0]
       const nextValue = String(arguments[1] ?? "")
 
@@ -579,70 +631,6 @@ export default class WebDriverDriver {
 
       return null
     `, element, nextValue)
-  }
-
-  /**
-   * Replaces an interactable input value while preserving sendKeys fallback semantics.
-   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & InteractArgs)} elementOrIdentifier
-   * @param {string} nextValue
-   * @returns {Promise<void>}
-   */
-  async replaceInputValue(elementOrIdentifier, nextValue) {
-    await this.interact(elementOrIdentifier, "click")
-
-    if (typeof elementOrIdentifier === "object" && elementOrIdentifier && "withFallback" in elementOrIdentifier && elementOrIdentifier.withFallback) {
-      const element = await this._findElement(elementOrIdentifier)
-      await this.interactSetValueWithFallback(element, "")
-    } else {
-      await this.interact(elementOrIdentifier, "clear")
-    }
-
-    if (nextValue !== "") {
-      await this.interact(elementOrIdentifier, "sendKeys", nextValue)
-    }
-  }
-
-  /**
-   * @param {import("selenium-webdriver").WebElement} element
-   * @returns {Promise<string | undefined>}
-   */
-  async readInteractableValue(element) {
-    const valueProperty = await element.getAttribute("value")
-
-    if (typeof valueProperty == "string") {
-      return valueProperty
-    }
-
-    const textContent = await element.getText()
-
-    if (typeof textContent == "string") {
-      return textContent
-    }
-
-    return undefined
-  }
-
-  /**
-   * @param {import("selenium-webdriver").WebElement} element
-   * @param {...any} args
-   * @returns {Promise<unknown>}
-   */
-  async interactSendKeysWithFallback(element, ...args) {
-    const expectedAppend = getSendKeysTextAppend(...args)
-    const beforeValue = await this.readInteractableValue(element)
-    const sendKeysResult = await element.sendKeys(...args)
-
-    if (expectedAppend == "") {
-      return sendKeysResult
-    }
-
-    const afterValue = await this.readInteractableValue(element)
-
-    if (typeof beforeValue == "string" && typeof afterValue == "string" && afterValue !== beforeValue) {
-      return sendKeysResult
-    }
-
-    await this.interactSetValueWithFallback(element, `${beforeValue || ""}${expectedAppend}`)
 
     return sendKeysResult
   }

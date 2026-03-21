@@ -219,7 +219,7 @@ describe("WebDriverDriver interact", () => {
     expect(executeScriptCalls).toEqual([])
   })
 
-  it("clears with the fallback setter before sending replacement text", async () => {
+  it("replaces the current value when sendKeys uses select-all and delete", async () => {
     const executeScriptCalls = []
     const element = {
       value: "old",
@@ -247,12 +247,17 @@ describe("WebDriverDriver interact", () => {
       }
     }))
 
-    await driver.replaceInputValue({selector: "textarea[data-testid='project-environment-agent-input']", withFallback: true}, "new")
+    await driver.interact(
+      {selector: "textarea[data-testid='project-environment-agent-input']", withFallback: true},
+      "sendKeys",
+      Key.chord(Key.CONTROL, "a"),
+      Key.BACK_SPACE,
+      "new"
+    )
 
-    expect(clickSpy).toHaveBeenCalledWith(element)
-    expect(executeScriptCalls.length).toBe(2)
-    expect(executeScriptCalls[0][2]).toBe("")
-    expect(executeScriptCalls[1][2]).toBe("new")
+    expect(clickSpy).not.toHaveBeenCalled()
+    expect(executeScriptCalls.length).toBe(1)
+    expect(executeScriptCalls[0][2]).toBe("new")
   })
 
   it("dispatches pointer and mouse events for interact press calls", async () => {

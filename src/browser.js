@@ -1,6 +1,7 @@
 // @ts-check
 
 import fs from "node:fs/promises"
+import {Key} from "selenium-webdriver"
 import moment from "moment"
 import {prettify} from "htmlfy"
 import timeout from "awaitery/build/timeout.js"
@@ -252,7 +253,8 @@ export default class Browser {
    * @returns {Promise<void>}
    */
   async replaceInputValue(elementOrIdentifier, nextValue) {
-    await this.getDriverAdapter().replaceInputValue(elementOrIdentifier, nextValue)
+    await this.interact(elementOrIdentifier, "click")
+    await this.interact(elementOrIdentifier, "sendKeys", Key.chord(Key.CONTROL, "a"), Key.BACK_SPACE, nextValue)
   }
 
   /**

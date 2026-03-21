@@ -1,5 +1,6 @@
 // @ts-check
 
+import {Key} from "selenium-webdriver"
 import SystemTest from "../src/system-test.js"
 import SystemTestHelper from "./support/system-test-helper.js"
 
@@ -96,10 +97,11 @@ describe("SystemTest interact", () => {
 
   it("replaces input values through click-clear-sendKeys interactions", async () => {
     const systemTest = systemTestHelper.getSystemTest()
-    const replaceInputValueSpy = spyOn(systemTest.getDriverAdapter(), "replaceInputValue").and.resolveTo(undefined)
+    const interactSpy = spyOn(systemTest, "interact").and.resolveTo(undefined)
 
     await systemTest.replaceInputValue("#replace-target", "new value")
 
-    expect(replaceInputValueSpy).toHaveBeenCalledWith("#replace-target", "new value")
+    expect(interactSpy.calls.argsFor(0)).toEqual(["#replace-target", "click"])
+    expect(interactSpy.calls.argsFor(1)).toEqual(["#replace-target", "sendKeys", Key.chord(Key.CONTROL, "a"), Key.BACK_SPACE, "new value"])
   })
 })
