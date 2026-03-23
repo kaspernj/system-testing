@@ -119,6 +119,27 @@ describe("BrowserCommandRunner", () => {
     })
   })
 
+  it("normalizes scrollTo finder args", async () => {
+    const browser = {
+      find: async (selector, findArgs) => {
+        browser.call = {findArgs, selector}
+        return {
+          getTagName: async () => "div",
+          getText: async () => "Hello",
+          isDisplayed: async () => true
+        }
+      }
+    }
+    const runner = new BrowserCommandRunner({browser: /** @type {any} */ (browser)})
+
+    await runner.run("find", {scrollTo: "true", selector: ".card"})
+
+    expect(browser.call).toEqual({
+      findArgs: {scrollTo: true},
+      selector: ".card"
+    })
+  })
+
   it("rejects invalid timeout overrides", async () => {
     const browser = {}
     const runner = new BrowserCommandRunner({browser: /** @type {any} */ (browser)})
