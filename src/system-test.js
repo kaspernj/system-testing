@@ -589,22 +589,30 @@ export default class SystemTest extends Browser {
    * @returns {string}
    */
   buildRootPath() {
-    if (!this._urlArgs) return SystemTest.rootPath
-
     const url = new URL(SystemTest.rootPath, "http://localhost")
     const appendParam = (key, value) => {
       if (value === undefined || value === null) return
       url.searchParams.append(key, String(value))
     }
 
-    if (this._urlArgs instanceof URLSearchParams) {
-      for (const [key, value] of this._urlArgs) {
-        appendParam(key, value)
+    if (this._urlArgs) {
+      if (this._urlArgs instanceof URLSearchParams) {
+        for (const [key, value] of this._urlArgs) {
+          appendParam(key, value)
+        }
+      } else {
+        for (const [key, value] of Object.entries(this._urlArgs)) {
+          appendParam(key, value)
+        }
       }
-    } else {
-      for (const [key, value] of Object.entries(this._urlArgs)) {
-        appendParam(key, value)
-      }
+    }
+
+    if (!url.searchParams.has("systemTestClientWsPort") && this._clientWsPort !== 1985) {
+      appendParam("systemTestClientWsPort", this._clientWsPort)
+    }
+
+    if (!url.searchParams.has("systemTestScoundrelPort") && this._scoundrelPort !== 8090) {
+      appendParam("systemTestScoundrelPort", this._scoundrelPort)
     }
 
     const rootPath =  `${url.pathname}${url.search}${url.hash}`
