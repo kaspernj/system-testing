@@ -57,6 +57,27 @@ describe("cli helpers", () => {
     })
   })
 
+  it("threads scrollTo through convenience and generic browser commands", () => {
+    expect(resolveBrowserCommand({"find-by-test-id": "saveButton", "scroll-to": "true"})).toEqual({
+      args: {
+        scrollTo: "true",
+        testID: "saveButton",
+        timeout: undefined,
+        useBaseSelector: undefined,
+        visible: undefined
+      },
+      command: "findByTestID"
+    })
+
+    expect(resolveBrowserCommand({command: "find", selector: ".card", "scroll-to": "true"})).toEqual({
+      args: {
+        scrollTo: "true",
+        selector: ".card"
+      },
+      command: "find"
+    })
+  })
+
   it("rejects invalid timeout flags", () => {
     expect(() => resolveBrowserCommand({find: ".card", timeout: "soon"})).toThrowError("Invalid timeout flag: soon")
   })

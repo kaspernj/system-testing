@@ -107,37 +107,55 @@ export function resolveBrowserCommand(flags) {
   }
 
   if (flags["find-by-test-id"]) {
+    const args = {
+      testID: flags["find-by-test-id"],
+      timeout,
+      useBaseSelector: flags["use-base-selector"],
+      visible: flags.visible
+    }
+
+    if (flags["scroll-to"] !== undefined) {
+      args.scrollTo = flags["scroll-to"]
+    }
+
     return {
-      args: {
-        testID: flags["find-by-test-id"],
-        timeout,
-        useBaseSelector: flags["use-base-selector"],
-        visible: flags.visible
-      },
+      args,
       command: "findByTestID"
     }
   }
 
   if (flags.find) {
+    const args = {
+      selector: flags.find,
+      timeout,
+      useBaseSelector: flags["use-base-selector"],
+      visible: flags.visible
+    }
+
+    if (flags["scroll-to"] !== undefined) {
+      args.scrollTo = flags["scroll-to"]
+    }
+
     return {
-      args: {
-        selector: flags.find,
-        timeout,
-        useBaseSelector: flags["use-base-selector"],
-        visible: flags.visible
-      },
+      args,
       command: "find"
     }
   }
 
   if (flags.click) {
+    const args = {
+      selector: flags.click,
+      timeout,
+      useBaseSelector: flags["use-base-selector"],
+      visible: flags.visible
+    }
+
+    if (flags["scroll-to"] !== undefined) {
+      args.scrollTo = flags["scroll-to"]
+    }
+
     return {
-      args: {
-        selector: flags.click,
-        timeout,
-        useBaseSelector: flags["use-base-selector"],
-        visible: flags.visible
-      },
+      args,
       command: "click"
     }
   }
@@ -195,6 +213,7 @@ export function resolveBrowserCommand(flags) {
     if (flags.arg) args.args = Array.isArray(flags.arg) ? flags.arg : [flags.arg]
     if (flags["with-fallback"] !== undefined) args.withFallback = flags["with-fallback"]
     if (timeout !== undefined) args.timeout = timeout
+    if (flags["scroll-to"] !== undefined) args.scrollTo = flags["scroll-to"]
     if (flags.visible !== undefined) args.visible = flags.visible
     if (flags["use-base-selector"] !== undefined) args.useBaseSelector = flags["use-base-selector"]
 

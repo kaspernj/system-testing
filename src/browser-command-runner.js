@@ -51,6 +51,14 @@ export default class BrowserCommandRunner {
       }
     }
 
+    if ("scrollTo" in commandArgs && commandArgs.scrollTo !== undefined) {
+      if (typeof commandArgs.scrollTo === "boolean") {
+        findArgs.scrollTo = commandArgs.scrollTo
+      } else {
+        findArgs.scrollTo = commandArgs.scrollTo === "true"
+      }
+    }
+
     return findArgs
   }
 

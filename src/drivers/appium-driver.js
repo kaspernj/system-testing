@@ -27,6 +27,7 @@ function errorWithCause(message, cause) {
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
+ * @property {boolean} [scrollTo] Whether to scroll found elements into view before returning them.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 
@@ -183,7 +184,7 @@ export default class AppiumDriver extends WebDriverDriver {
    * @returns {Promise<import("selenium-webdriver").WebElement[]>}
    */
   async allByAccessibilityId(testId, args = {}) {
-    const {visible = true, timeout, ...restArgs} = args
+    const {scrollTo = false, visible = true, timeout, ...restArgs} = args
     const restArgsKeys = Object.keys(restArgs).filter((key) => key !== "useBaseSelector")
     let actualTimeout
 
@@ -243,6 +244,12 @@ export default class AppiumDriver extends WebDriverDriver {
       }
     }
 
+    if (scrollTo) {
+      for (const element of elements) {
+        await this.scrollElementIntoView(element)
+      }
+    }
+
     return elements
   }
 
@@ -284,7 +291,7 @@ export default class AppiumDriver extends WebDriverDriver {
    * @returns {Promise<import("selenium-webdriver").WebElement[]>}
    */
   async allById(testId, args = {}) {
-    const {visible = true, timeout, ...restArgs} = args
+    const {scrollTo = false, visible = true, timeout, ...restArgs} = args
     const restArgsKeys = Object.keys(restArgs).filter((key) => key !== "useBaseSelector")
     let actualTimeout
 
@@ -341,6 +348,12 @@ export default class AppiumDriver extends WebDriverDriver {
         }
 
         throw errorWithCause(`Couldn't get elements with id: ${testId}: ${error instanceof Error ? error.message : error}`, error)
+      }
+    }
+
+    if (scrollTo) {
+      for (const element of elements) {
+        await this.scrollElementIntoView(element)
       }
     }
 
