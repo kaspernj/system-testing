@@ -1,3 +1,5 @@
+import fs from "node:fs/promises"
+import path from "node:path"
 import {Builder, By} from "selenium-webdriver"
 import timeout from "awaitery/build/timeout.js"
 import WebDriverDriver from "./webdriver-driver.js"
@@ -11,6 +13,42 @@ function errorWithCause(message, cause) {
   const error = /** @type {Error & {cause: unknown}} */ (new Error(message))
   error.cause = cause
   return error
+}
+
+/**
+ * Ensures Chrome Appium capabilities use a caller-owned user-data directory.
+ * This avoids repeated sessions leaking temp profiles under `/tmp` in CI.
+ * @param {object} args
+ * @param {string} [args.browserName]
+ * @param {Record<string, any>} args.capabilities
+ * @param {string} [args.tempRootDir]
+ * @returns {Promise<string | undefined>}
+ */
+export async function ensureChromeUserDataDirCapability({browserName, capabilities, tempRootDir = path.join(process.cwd(), "tmp", "appium-chrome-user-data")}) {
+  const resolvedBrowserName = capabilities.browserName ?? browserName
+
+  if (typeof resolvedBrowserName !== "string" || resolvedBrowserName.toLowerCase() !== "chrome") {
+    return undefined
+  }
+
+  const chromeOptions = capabilities["goog:chromeOptions"]
+  const args = Array.isArray(chromeOptions?.args) ? [...chromeOptions.args] : []
+
+  if (args.some((arg) => typeof arg === "string" && arg.startsWith("--user-data-dir="))) {
+    return undefined
+  }
+
+  await fs.mkdir(tempRootDir, {recursive: true})
+
+  const userDataDir = await fs.mkdtemp(path.join(tempRootDir, "profile-"))
+
+  args.push(`--user-data-dir=${userDataDir}`)
+  capabilities["goog:chromeOptions"] = {
+    ...(chromeOptions ?? {}),
+    args
+  }
+
+  return userDataDir
 }
 
 /**
@@ -35,6 +73,9 @@ function errorWithCause(message, cause) {
  * Appium driver backed by the Appium server package.
  */
 export default class AppiumDriver extends WebDriverDriver {
+  /** @type {string | undefined} */
+  chromeUserDataDir = undefined
+
   /**
    * @returns {Promise<void>}
    */
@@ -68,15 +109,25 @@ export default class AppiumDriver extends WebDriverDriver {
       capabilities.browserName = ""
     }
 
+    this.chromeUserDataDir = await ensureChromeUserDataDirCapability({
+      browserName: this.options.browserName,
+      capabilities
+    })
+
     const builder = new Builder().usingServer(this.serverUrl)
 
     if (Object.keys(capabilities).length > 0) {
       builder.withCapabilities(capabilities)
     }
 
-    const webDriver = await builder.build()
+    try {
+      const webDriver = await builder.build()
 
-    this.setWebDriver(webDriver)
+      this.setWebDriver(webDriver)
+    } catch (error) {
+      await this.cleanupChromeUserDataDir()
+      throw error
+    }
   }
 
   /**
@@ -91,7 +142,18 @@ export default class AppiumDriver extends WebDriverDriver {
       }
 
       this.appiumServer = undefined
+      await this.cleanupChromeUserDataDir()
     }
+  }
+
+  /** @returns {Promise<void>} */
+  async cleanupChromeUserDataDir() {
+    if (!this.chromeUserDataDir) return
+
+    const chromeUserDataDir = this.chromeUserDataDir
+
+    this.chromeUserDataDir = undefined
+    await fs.rm(chromeUserDataDir, {recursive: true, force: true})
   }
 
   /**
