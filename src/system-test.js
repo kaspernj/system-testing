@@ -341,6 +341,16 @@ export default class SystemTest extends Browser {
   }
 
   /**
+   * Checks whether an element with the given test ID is currently rendered.
+   * @param {string} testID
+   * @param {FindArgs} [args]
+   * @returns {Promise<boolean>}
+   */
+  async hasTestID(testID, args) {
+    return await this.getDriverAdapter().hasTestID(testID, args)
+  }
+
+  /**
    * Finds a single element by CSS selector without waiting
    * @param {string} selector
    * @param {FindArgs} [args]

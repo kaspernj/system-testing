@@ -209,6 +209,25 @@ export default class AppiumDriver extends WebDriverDriver {
   }
 
   /**
+   * Checks whether an element with the given test ID is currently rendered.
+   * @param {string} testID
+   * @param {FindArgs} [args]
+   * @returns {Promise<boolean>}
+   */
+  async hasTestID(testID, args) {
+    try {
+      await this.findByTestID(testID, {...args, timeout: 0})
+      return true
+    } catch (error) {
+      if (error instanceof Error) {
+        return false
+      }
+
+      throw error
+    }
+  }
+
+  /**
    * @param {string} testId
    * @param {FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}

@@ -412,6 +412,25 @@ export default class WebDriverDriver {
   }
 
   /**
+   * Checks whether an element with the given test ID is currently rendered.
+   * @param {string} testID
+   * @param {FindArgs} [args]
+   * @returns {Promise<boolean>}
+   */
+  async hasTestID(testID, args) {
+    try {
+      await this.findByTestID(testID, {...args, timeout: 0})
+      return true
+    } catch (error) {
+      if (error instanceof Error) {
+        return false
+      }
+
+      throw error
+    }
+  }
+
+  /**
    * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs & {withFallback?: boolean})} elementOrIdentifier
    * @param {FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}
