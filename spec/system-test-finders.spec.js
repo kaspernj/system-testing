@@ -172,6 +172,22 @@ describeIfWeb("SystemTest finders", () => {
     })
   })
 
+  it("hasTestID returns true for an existing element", async () => {
+    await SystemTest.run(async (runningSystemTest) => {
+      const result = await runningSystemTest.hasTestID("blankText", {useBaseSelector: false})
+
+      expect(result).toBe(true)
+    })
+  })
+
+  it("hasTestID returns false for a missing element", async () => {
+    await SystemTest.run(async (runningSystemTest) => {
+      const result = await runningSystemTest.hasTestID("doesNotExist", {useBaseSelector: false})
+
+      expect(result).toBe(false)
+    })
+  })
+
   it("can scroll found elements into view before returning them", async () => {
     await SystemTest.run(async (runningSystemTest) => {
       const driverAdapter = runningSystemTest.getDriverAdapter()
