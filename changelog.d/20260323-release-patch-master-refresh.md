@@ -1,0 +1,1 @@
+- Update `npm run release:patch` to fetch `origin`, check out `master`, and merge `origin/master` before bumping and publishing a patch release.

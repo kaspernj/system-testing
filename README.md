@@ -8,6 +8,16 @@ Rails inspired system testing for Expo apps.
 npm install --save-dev system-testing
 ```
 
+## Releasing
+
+Run patch releases with:
+
+```bash
+npm run release:patch
+```
+
+The release script now fetches `origin`, checks out local `master`, and merges `origin/master` before it bumps the package version and publishes, so releases start from the newest upstream `master`.
+
 ## Choose the right layer
 
 This package has three main entry points:

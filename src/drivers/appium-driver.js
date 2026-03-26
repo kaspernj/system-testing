@@ -1,3 +1,5 @@
+import fs from "node:fs/promises"
+import path from "node:path"
 import {Builder, By} from "selenium-webdriver"
 import timeout from "awaitery/build/timeout.js"
 import WebDriverDriver from "./webdriver-driver.js"
@@ -14,6 +16,42 @@ function errorWithCause(message, cause) {
 }
 
 /**
+ * Ensures Chrome Appium capabilities use a caller-owned user-data directory.
+ * This avoids repeated sessions leaking temp profiles under `/tmp` in CI.
+ * @param {object} args
+ * @param {string} [args.browserName]
+ * @param {Record<string, any>} args.capabilities
+ * @param {string} [args.tempRootDir]
+ * @returns {Promise<string | undefined>}
+ */
+export async function ensureChromeUserDataDirCapability({browserName, capabilities, tempRootDir = path.join(process.cwd(), "tmp", "appium-chrome-user-data")}) {
+  const resolvedBrowserName = capabilities.browserName ?? browserName
+
+  if (typeof resolvedBrowserName !== "string" || resolvedBrowserName.toLowerCase() !== "chrome") {
+    return undefined
+  }
+
+  const chromeOptions = capabilities["goog:chromeOptions"]
+  const args = Array.isArray(chromeOptions?.args) ? [...chromeOptions.args] : []
+
+  if (args.some((arg) => typeof arg === "string" && arg.startsWith("--user-data-dir="))) {
+    return undefined
+  }
+
+  await fs.mkdir(tempRootDir, {recursive: true})
+
+  const userDataDir = await fs.mkdtemp(path.join(tempRootDir, "profile-"))
+
+  args.push(`--user-data-dir=${userDataDir}`)
+  capabilities["goog:chromeOptions"] = {
+    ...(chromeOptions ?? {}),
+    args
+  }
+
+  return userDataDir
+}
+
+/**
  * @typedef {object} AppiumDriverOptions
  * @property {string} [serverUrl] Remote Appium server URL to connect to.
  * @property {Record<string, any>} [serverArgs] Options passed to the Appium server.
@@ -27,6 +65,7 @@ function errorWithCause(message, cause) {
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
+ * @property {boolean} [scrollTo] Whether to scroll found elements into view before returning them.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 
@@ -34,6 +73,9 @@ function errorWithCause(message, cause) {
  * Appium driver backed by the Appium server package.
  */
 export default class AppiumDriver extends WebDriverDriver {
+  /** @type {string | undefined} */
+  chromeUserDataDir = undefined
+
   /**
    * @returns {Promise<void>}
    */
@@ -67,15 +109,25 @@ export default class AppiumDriver extends WebDriverDriver {
       capabilities.browserName = ""
     }
 
+    this.chromeUserDataDir = await ensureChromeUserDataDirCapability({
+      browserName: this.options.browserName,
+      capabilities
+    })
+
     const builder = new Builder().usingServer(this.serverUrl)
 
     if (Object.keys(capabilities).length > 0) {
       builder.withCapabilities(capabilities)
     }
 
-    const webDriver = await builder.build()
+    try {
+      const webDriver = await builder.build()
 
-    this.setWebDriver(webDriver)
+      this.setWebDriver(webDriver)
+    } catch (error) {
+      await this.cleanupChromeUserDataDir()
+      throw error
+    }
   }
 
   /**
@@ -90,7 +142,18 @@ export default class AppiumDriver extends WebDriverDriver {
       }
 
       this.appiumServer = undefined
+      await this.cleanupChromeUserDataDir()
     }
+  }
+
+  /** @returns {Promise<void>} */
+  async cleanupChromeUserDataDir() {
+    if (!this.chromeUserDataDir) return
+
+    const chromeUserDataDir = this.chromeUserDataDir
+
+    this.chromeUserDataDir = undefined
+    await fs.rm(chromeUserDataDir, {recursive: true, force: true})
   }
 
   /**
@@ -146,6 +209,25 @@ export default class AppiumDriver extends WebDriverDriver {
   }
 
   /**
+   * Checks whether an element with the given test ID is currently rendered.
+   * @param {string} testID
+   * @param {FindArgs} [args]
+   * @returns {Promise<boolean>}
+   */
+  async hasTestID(testID, args) {
+    try {
+      await this.findByTestID(testID, {...args, timeout: 0})
+      return true
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("Element couldn't be found after ")) {
+        return false
+      }
+
+      throw error
+    }
+  }
+
+  /**
    * @param {string} testId
    * @param {FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}
@@ -183,7 +265,7 @@ export default class AppiumDriver extends WebDriverDriver {
    * @returns {Promise<import("selenium-webdriver").WebElement[]>}
    */
   async allByAccessibilityId(testId, args = {}) {
-    const {visible = true, timeout, ...restArgs} = args
+    const {scrollTo = false, visible = true, timeout, ...restArgs} = args
     const restArgsKeys = Object.keys(restArgs).filter((key) => key !== "useBaseSelector")
     let actualTimeout
 
@@ -243,6 +325,12 @@ export default class AppiumDriver extends WebDriverDriver {
       }
     }
 
+    if (scrollTo) {
+      for (const element of elements) {
+        await this.scrollElementIntoView(element)
+      }
+    }
+
     return elements
   }
 
@@ -284,7 +372,7 @@ export default class AppiumDriver extends WebDriverDriver {
    * @returns {Promise<import("selenium-webdriver").WebElement[]>}
    */
   async allById(testId, args = {}) {
-    const {visible = true, timeout, ...restArgs} = args
+    const {scrollTo = false, visible = true, timeout, ...restArgs} = args
     const restArgsKeys = Object.keys(restArgs).filter((key) => key !== "useBaseSelector")
     let actualTimeout
 
@@ -341,6 +429,12 @@ export default class AppiumDriver extends WebDriverDriver {
         }
 
         throw errorWithCause(`Couldn't get elements with id: ${testId}: ${error instanceof Error ? error.message : error}`, error)
+      }
+    }
+
+    if (scrollTo) {
+      for (const element of elements) {
+        await this.scrollElementIntoView(element)
       }
     }
 

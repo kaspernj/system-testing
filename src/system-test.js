@@ -19,6 +19,8 @@ import Browser from "./browser.js"
  * @property {string} [httpConnectHost] Hostname used by the driver to reach the HTTP server.
  * @property {boolean} [debug] Enable debug logging.
  * @property {(error: any) => boolean} [errorFilter] Filter for browser errors (return false to ignore).
+ * @property {number} [clientWsPort] Port for the browser-command WebSocket server.
+ * @property {number} [scoundrelPort] Port for the Scoundrel WebSocket server.
  * @property {Record<string, any>} [urlArgs] Query params appended to the root path.
  * @property {SystemTestDriverConfig} [driver] Driver configuration.
  */
@@ -31,6 +33,7 @@ import Browser from "./browser.js"
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
+ * @property {boolean} [scrollTo] Whether to scroll found elements into view before returning them.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 /**
@@ -52,10 +55,12 @@ export default class SystemTest extends Browser {
   communicator = undefined
 
   _started = false
+  _clientWsPort = 1985
   _httpHost = "localhost"
   _httpPort = 1984
   /** @type {(error: any) => boolean | undefined} */
   _errorFilter = undefined
+  _scoundrelPort = 8090
   /** @type {WebSocketServer | undefined} */
   scoundrelWss = undefined
   /** @type {WebSocketServer | undefined} */
@@ -180,7 +185,7 @@ export default class SystemTest extends Browser {
    * Creates a new SystemTest instance
    * @param {SystemTestArgs} [args]
    */
-  constructor({host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, httpConnectHost, debug = false, errorFilter, urlArgs, driver, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
+  constructor({clientWsPort = 1985, host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, httpConnectHost, debug = false, errorFilter, scoundrelPort = 8090, urlArgs, driver, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
     super({debug, driver})
 
     const restArgsKeys = Object.keys(restArgs)
@@ -191,11 +196,13 @@ export default class SystemTest extends Browser {
 
     this._host = host
     this._port = port
+    this._clientWsPort = clientWsPort
     this._httpHost = httpHost
     this._httpPort = httpPort
     this._httpConnectHost = httpConnectHost
     this._debug = debug
     this._errorFilter = errorFilter
+    this._scoundrelPort = scoundrelPort
     this._urlArgs = urlArgs
     this._rootPath = this.buildRootPath()
 
@@ -215,7 +222,7 @@ export default class SystemTest extends Browser {
   startScoundrel() {
     if (this.scoundrelWss) throw new Error("Scoundrel server already started")
 
-    this.scoundrelWss = new WebSocketServer({port: 8090})
+    this.scoundrelWss = new WebSocketServer({port: this._scoundrelPort})
     this.serverWebSocket = new ServerWebSocket(this.scoundrelWss)
     this.server = new Server(this.serverWebSocket)
   }
@@ -331,6 +338,16 @@ export default class SystemTest extends Browser {
    */
   async findByTestID(testID, args) {
     return await this.getDriverAdapter().findByTestID(testID, args)
+  }
+
+  /**
+   * Checks whether an element with the given test ID is currently rendered.
+   * @param {string} testID
+   * @param {FindArgs} [args]
+   * @returns {Promise<boolean>}
+   */
+  async hasTestID(testID, args) {
+    return await this.getDriverAdapter().hasTestID(testID, args)
   }
 
   /**
@@ -582,22 +599,30 @@ export default class SystemTest extends Browser {
    * @returns {string}
    */
   buildRootPath() {
-    if (!this._urlArgs) return SystemTest.rootPath
-
     const url = new URL(SystemTest.rootPath, "http://localhost")
     const appendParam = (key, value) => {
       if (value === undefined || value === null) return
       url.searchParams.append(key, String(value))
     }
 
-    if (this._urlArgs instanceof URLSearchParams) {
-      for (const [key, value] of this._urlArgs) {
-        appendParam(key, value)
+    if (this._urlArgs) {
+      if (this._urlArgs instanceof URLSearchParams) {
+        for (const [key, value] of this._urlArgs) {
+          appendParam(key, value)
+        }
+      } else {
+        for (const [key, value] of Object.entries(this._urlArgs)) {
+          appendParam(key, value)
+        }
       }
-    } else {
-      for (const [key, value] of Object.entries(this._urlArgs)) {
-        appendParam(key, value)
-      }
+    }
+
+    if (!url.searchParams.has("systemTestClientWsPort") && this._clientWsPort !== 1985) {
+      appendParam("systemTestClientWsPort", this._clientWsPort)
+    }
+
+    if (!url.searchParams.has("systemTestScoundrelPort") && this._scoundrelPort !== 8090) {
+      appendParam("systemTestScoundrelPort", this._scoundrelPort)
     }
 
     const rootPath =  `${url.pathname}${url.search}${url.hash}`
@@ -634,7 +659,7 @@ export default class SystemTest extends Browser {
    * @returns {void}
    */
   startWebSocketServer() {
-    this.clientWss = new WebSocketServer({port: 1985})
+    this.clientWss = new WebSocketServer({port: this._clientWsPort})
     this.clientWss.on("connection", this.onWebSocketConnection)
     this.clientWss.on("close", this.onWebSocketClose)
     this.clientWss.on("error", (error) => {

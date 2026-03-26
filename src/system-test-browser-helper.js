@@ -13,6 +13,30 @@ const shared = {
 }
 
 export default class SystemTestBrowserHelper {
+  /**
+   * @param {string} parameterName
+   * @param {number} fallback
+   * @returns {number}
+   */
+  getSystemTestPort(parameterName, fallback) {
+    const location = globalThis.location
+    const search = location?.search
+
+    if (!search) {
+      return fallback
+    }
+
+    const value = new URLSearchParams(search).get(parameterName)
+
+    if (!value) {
+      return fallback
+    }
+
+    const parsed = Number(value)
+
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
+  }
+
   /** @returns {SystemTestBrowserHelper | null} */
   static getCurrent() {
     return shared.systemTestBrowserHelper
@@ -39,7 +63,9 @@ export default class SystemTestBrowserHelper {
 
   async startScoundrel() {
     const host = this.getSystemTestHost()
-    this.scoundrelWs = new WebSocket(`ws://${host}:8090`)
+    const scoundrelPort = this.getSystemTestPort("systemTestScoundrelPort", 8090)
+
+    this.scoundrelWs = new WebSocket(`ws://${host}:${scoundrelPort}`)
 
     // @ts-expect-error
     this.scoundrelClientWebSocket = new ClientWebSocket(this.scoundrelWs)
@@ -131,7 +157,9 @@ export default class SystemTestBrowserHelper {
   /** @returns {void} */
   connectWebSocket() {
     const host = this.getSystemTestHost()
-    this.ws = new WebSocket(`ws://${host}:1985`)
+    const clientWsPort = this.getSystemTestPort("systemTestClientWsPort", 1985)
+
+    this.ws = new WebSocket(`ws://${host}:${clientWsPort}`)
     this.communicator.ws = this.ws
     this.ws.addEventListener("error", digg(this, "communicator", "onError"))
     this.ws.addEventListener("open", digg(this, "communicator", "onOpen"))

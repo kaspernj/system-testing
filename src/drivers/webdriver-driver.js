@@ -94,6 +94,7 @@ function getSendKeysUsesSelectAllAndDelete(...args) {
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
+ * @property {boolean} [scrollTo] Whether to scroll found elements into view before returning them.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 /**
@@ -287,7 +288,7 @@ export default class WebDriverDriver {
    * @returns {Promise<import("selenium-webdriver").WebElement[]>}
    */
   async all(selector, args = {}) {
-    const {visible = true, timeout, useBaseSelector = true, ...restArgs} = args
+    const {scrollTo = false, visible = true, timeout, useBaseSelector = true, ...restArgs} = args
     const restArgsKeys = Object.keys(restArgs)
     let actualTimeout
 
@@ -358,6 +359,12 @@ export default class WebDriverDriver {
         throw errorWithCause(`Couldn't get elements with selector: ${actualSelector}: ${error instanceof Error ? error.message : error}`, error)
       }
     }
+    if (scrollTo) {
+      for (const element of elements) {
+        await this.scrollElementIntoView(element)
+      }
+    }
+
     return elements
   }
 
@@ -402,6 +409,25 @@ export default class WebDriverDriver {
    */
   async findByTestID(testID, args) {
     return await this.find(`[data-testid='${testID}']`, args)
+  }
+
+  /**
+   * Checks whether an element with the given test ID is currently rendered.
+   * @param {string} testID
+   * @param {FindArgs} [args]
+   * @returns {Promise<boolean>}
+   */
+  async hasTestID(testID, args) {
+    try {
+      await this.findByTestID(testID, {...args, timeout: 0})
+      return true
+    } catch (error) {
+      if (error instanceof ElementNotFoundError) {
+        return false
+      }
+
+      throw error
+    }
   }
 
   /**
