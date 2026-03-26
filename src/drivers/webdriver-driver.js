@@ -422,7 +422,7 @@ export default class WebDriverDriver {
       await this.findByTestID(testID, {...args, timeout: 0})
       return true
     } catch (error) {
-      if (error instanceof Error) {
+      if (error instanceof ElementNotFoundError) {
         return false
       }
 

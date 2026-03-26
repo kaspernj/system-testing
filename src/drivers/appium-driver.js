@@ -219,7 +219,7 @@ export default class AppiumDriver extends WebDriverDriver {
       await this.findByTestID(testID, {...args, timeout: 0})
       return true
     } catch (error) {
-      if (error instanceof Error) {
+      if (error instanceof Error && error.message.startsWith("Element couldn't be found after ")) {
         return false
       }
 
