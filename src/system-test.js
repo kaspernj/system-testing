@@ -153,6 +153,10 @@ export default class SystemTest extends Browser {
       throw new Error("SystemTest.run requires a callback")
     }
 
+    systemTest.debugLog("Resetting browser cookies before initialize")
+    await systemTest.deleteAllCookies()
+    systemTest.debugLog("Browser cookies cleared")
+
     systemTest.debugLog("Run started - send initialize")
     await timeout({timeout: 10_000, errorMessage: "Sending intialize to useSystemTest() timed out"}, async () => {
       await systemTest.getCommunicator().sendCommand({type: "initialize"})
