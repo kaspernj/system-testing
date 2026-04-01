@@ -335,6 +335,11 @@ export default class Browser {
     await this.getDriverAdapter().driverVisit(path)
   }
 
+  /** @returns {Promise<void>} */
+  async deleteAllCookies() {
+    await this.getDriverAdapter().deleteAllCookies()
+  }
+
   /**
    * @param {string} type
    * @param {string} path

@@ -38,6 +38,21 @@ describe("Browser", () => {
     expect(visitedPaths).toEqual(["https://example.com"])
   })
 
+  it("deletes all cookies through the driver adapter", async () => {
+    const browser = new Browser()
+    let deleteAllCookiesCalls = 0
+
+    browser.driverAdapter = /** @type {any} */ ({
+      deleteAllCookies: async () => {
+        deleteAllCookiesCalls += 1
+      }
+    })
+
+    await browser.deleteAllCookies()
+
+    expect(deleteAllCookiesCalls).toEqual(1)
+  })
+
   it("uses the injected communicator for helper-driven navigation", async () => {
     const sentCommands = []
     const browser = new Browser({

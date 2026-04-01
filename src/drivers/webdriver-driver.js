@@ -232,6 +232,14 @@ export default class WebDriverDriver {
     await this.getWebDriver().get(url)
   }
 
+  /**
+   * Deletes all cookies for the current browser session.
+   * @returns {Promise<void>}
+   */
+  async deleteAllCookies() {
+    await this.getWebDriver().manage().deleteAllCookies()
+  }
+
   /** @returns {Promise<string>} */
   async getCurrentUrl() {
     try {
