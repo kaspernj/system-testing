@@ -7,6 +7,7 @@ const systemTestHelper = new SystemTestHelper()
 systemTestHelper.installJasmineHooks()
 const isNative = process.env.SYSTEM_TEST_NATIVE === "true"
 const itIfWeb = isNative ? xit : it
+const leakedCookieName = "system-testing-leaked-cookie"
 
 describe("System test", () => {
   it("shows the welcome text on the front page", async () => {
@@ -49,6 +50,24 @@ describe("System test", () => {
     await systemTest.findByTestID("blankText")
     await systemTest.visit("/")
     await systemTest.findByTestID("welcomeText")
+  })
+
+  itIfWeb("can leave a cookie behind inside one spec", async () => {
+    await SystemTest.run(async (runningSystemTest) => {
+      await runningSystemTest.getDriver().executeScript(`document.cookie = "${leakedCookieName}=present; path=/"`)
+
+      const cookieString = await runningSystemTest.getDriver().executeScript("return document.cookie")
+
+      expect(cookieString).toContain(`${leakedCookieName}=present`)
+    })
+  })
+
+  itIfWeb("clears browser cookies before the next spec runs", async () => {
+    await SystemTest.run(async (runningSystemTest) => {
+      const cookieString = await runningSystemTest.getDriver().executeScript("return document.cookie")
+
+      expect(cookieString).not.toContain(`${leakedCookieName}=present`)
+    })
   })
 
   itIfWeb("dismisses only the matching notification message", async () => {
