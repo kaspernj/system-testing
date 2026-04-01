@@ -532,6 +532,17 @@ export default class SystemTest extends Browser {
     }
 
     this.getDriverAdapter().setBaseUrl(this.currentUrl)
+
+    // Start the client WebSocket server before the driver for native hosts,
+    // because the native app launches immediately on driver start and its
+    // useSystemTestExpo hook connects to the WebSocket as soon as it renders.
+    // If the server isn't listening yet, the connection fails with no retry.
+    if (isNativeHost) {
+      this.debugLog("Starting WebSocket server (before driver for native)")
+      await this.startWebSocketServer()
+      this.debugLog("WebSocket server started")
+    }
+
     this.debugLog("Starting driver")
     await this.getDriverAdapter().start()
     this.debugLog("Driver started")
@@ -539,10 +550,12 @@ export default class SystemTest extends Browser {
     await this.setTimeouts(10000)
     this.debugLog("Timeouts set on driver")
 
-    // Web socket server to communicate with browser
-    this.debugLog("Starting WebSocket server")
-    await this.startWebSocketServer()
-    this.debugLog("WebSocket server started")
+    if (!isNativeHost) {
+      // Web socket server to communicate with browser
+      this.debugLog("Starting WebSocket server")
+      await this.startWebSocketServer()
+      this.debugLog("WebSocket server started")
+    }
 
     if (!isNativeHost) {
       // Visit the root page and wait for Expo to be loaded and the app to appear
