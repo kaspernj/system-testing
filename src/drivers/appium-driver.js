@@ -138,7 +138,7 @@ export default class AppiumDriver extends WebDriverDriver {
       await super.stop()
     } finally {
       if (this.appiumServer?.close) {
-        await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while closing Appium server"}, async () => await this.appiumServer.close())
+        await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while closing Appium server"}, async () => await /** @type {NonNullable<typeof this.appiumServer>} */ (this.appiumServer).close())
       }
 
       this.appiumServer = undefined
@@ -299,6 +299,7 @@ export default class AppiumDriver extends WebDriverDriver {
 
       return filteredElements
     }
+    /** @type {import("selenium-webdriver").WebElement[]} */
     let elements = []
 
     while (true) {
@@ -406,6 +407,7 @@ export default class AppiumDriver extends WebDriverDriver {
 
       return filteredElements
     }
+    /** @type {import("selenium-webdriver").WebElement[]} */
     let elements = []
 
     while (true) {
