@@ -569,7 +569,7 @@ export default class SystemTest extends Browser {
     } else {
       try {
         this.debugLog("Finding systemTestingComponent for native app")
-        await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true})
+        await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: null})
         this.debugLog("Found systemTestingComponent for native app")
       } catch (error) {
         this.debugLog("Error while finding native systemTestingComponent, taking screenshot")

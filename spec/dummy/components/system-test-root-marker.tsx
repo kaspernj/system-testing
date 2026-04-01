@@ -4,7 +4,7 @@ const styles = StyleSheet.create({
   marker: {
     height: 1,
     left: 0,
-    opacity: 0,
+    opacity: 0.01,
     position: "absolute",
     top: 0,
     width: 1,
@@ -17,6 +17,7 @@ export function SystemTestRootMarker() {
       accessibilityLabel={Platform.OS === "web" ? undefined : "systemTestingComponent"}
       accessible
       collapsable={false}
+      importantForAccessibility="yes"
       nativeID={Platform.OS === "web" ? undefined : "systemTestingComponent"}
       pointerEvents="none"
       style={styles.marker}
