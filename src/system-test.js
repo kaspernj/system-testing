@@ -676,11 +676,14 @@ export default class SystemTest extends Browser {
   }
 
   /**
-   * Starts the web socket server
-   * @returns {void}
+   * Starts the web socket server and waits for it to be ready.
+   * @returns {Promise<void>}
    */
-  startWebSocketServer() {
+  async startWebSocketServer() {
     this.clientWss = new WebSocketServer({port: this._clientWsPort})
+    await new Promise((resolve) => {
+      /** @type {NonNullable<typeof this.clientWss>} */ (this.clientWss).once("listening", resolve)
+    })
     this.clientWss.on("connection", this.onWebSocketConnection)
     this.clientWss.on("close", this.onWebSocketClose)
     this.clientWss.on("error", (error) => {

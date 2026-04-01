@@ -13,6 +13,20 @@ const shared = {
 }
 
 export default class SystemTestBrowserHelper {
+  /** @type {string | undefined} */
+  static _defaultHost = undefined
+
+  /**
+   * Sets the default host for all browser helpers. Use this to override the
+   * auto-detected host when EXPO_PUBLIC_* env vars cannot be inlined (e.g.,
+   * code in node_modules is not processed by babel-preset-expo).
+   * @param {string} host
+   * @returns {void}
+   */
+  static setDefaultHost(host) {
+    SystemTestBrowserHelper._defaultHost = host
+  }
+
   /**
    * @param {string} parameterName
    * @param {number} fallback
@@ -174,6 +188,8 @@ export default class SystemTestBrowserHelper {
     const envHost = process.env.EXPO_PUBLIC_SYSTEM_TEST_HOST
 
     if (envHost) return envHost
+
+    if (SystemTestBrowserHelper._defaultHost) return SystemTestBrowserHelper._defaultHost
 
     if (!search) return defaultHost
 
