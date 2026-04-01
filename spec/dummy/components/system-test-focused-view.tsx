@@ -5,6 +5,8 @@ type SystemTestFocusedViewProps = ViewProps & {
   focussed?: boolean;
 };
 
+const isNative = Platform.OS !== 'web';
+
 export function SystemTestFocusedView({
   children,
   style,
@@ -17,8 +19,9 @@ export function SystemTestFocusedView({
   return (
     <View
       {...rest}
+      accessibilityLabel={isNative ? 'systemTestingComponent' : undefined}
       style={[{ flex: 1 }, style]}
-      testID={Platform.OS === 'web' ? 'systemTestingComponent' : undefined}
+      testID="systemTestingComponent"
       nativeID={Platform.OS === 'web' ? 'systemTestingComponent' : undefined}
       collapsable={false}
       // @ts-ignore dataSet is supported at runtime for React Native Web
