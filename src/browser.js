@@ -353,7 +353,7 @@ export default class Browser {
 
     await timeout(
       {timeout: this.getCommandTimeout(args.timeout), errorMessage: `timeout while sending browser command ${type}: ${path}`},
-      async () => await this.communicator.sendCommand({type, path})
+      async () => await /** @type {NonNullable<typeof this.communicator>} */ (this.communicator).sendCommand({type, path})
     )
   }
 

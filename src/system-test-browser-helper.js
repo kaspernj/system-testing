@@ -287,8 +287,8 @@ export default class SystemTestBrowserHelper {
   }
 
   /**
-   * @param {{data: {path: string, type: string}}} args
-   * @returns {Promise<{result: string} | void>}
+   * @param {{data: Record<string, any>}} args
+   * @returns {Promise<any>}
    */
   onCommand = async ({data}) => {
     if (data.type == "initialize") {

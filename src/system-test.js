@@ -48,6 +48,9 @@ import Browser from "./browser.js"
  * @property {boolean} [dismiss] Whether to dismiss the notification after it appears.
  */
 
+/** @type {Record<string, any>} */
+const globalAny = globalThis
+
 export default class SystemTest extends Browser {
   static rootPath = "/blank?systemTest=true"
 
@@ -58,7 +61,7 @@ export default class SystemTest extends Browser {
   _clientWsPort = 1985
   _httpHost = "localhost"
   _httpPort = 1984
-  /** @type {(error: any) => boolean | undefined} */
+  /** @type {((error: any) => boolean) | undefined} */
   _errorFilter = undefined
   _scoundrelPort = 8090
   /** @type {WebSocketServer | undefined} */
@@ -72,11 +75,11 @@ export default class SystemTest extends Browser {
    * @returns {SystemTest}
    */
   static current(args = {}) {
-    if (!globalThis.systemTest) {
-      globalThis.systemTest = new SystemTest(args)
+    if (!globalAny.systemTest) {
+      globalAny.systemTest = new SystemTest(args)
     }
 
-    return globalThis.systemTest
+    return globalAny.systemTest
   }
 
   /** @returns {SystemTestCommunicator} */
@@ -236,7 +239,7 @@ export default class SystemTest extends Browser {
    */
   async stopScoundrel() {
     if (this.server?.close) {
-      await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while waiting for Scoundrel to stop"}, async () => await this.server.close())
+      await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while waiting for Scoundrel to stop"}, async () => await /** @type {NonNullable<typeof this.server>} */ (this.server).close())
     }
     await this.closeWebSocketServer(this.scoundrelWss, "Scoundrel WebSocket server")
   }
@@ -276,6 +279,7 @@ export default class SystemTest extends Browser {
       throw new Error("Scoundrel server events are unavailable")
     }
 
+    /** @type {((client: any) => void) | undefined} */
     let onNewClient
     const cleanupListener = () => {
       if (onNewClient) {
@@ -285,14 +289,14 @@ export default class SystemTest extends Browser {
 
     try {
       return await timeout({timeout: timeoutMs, errorMessage: "Timed out waiting for Scoundrel client"}, async () => await new Promise((resolve) => {
-        onNewClient = (client) => {
+        onNewClient = (/** @type {any} */ client) => {
           if (!isOpenClient(client)) return
           cleanupListener()
           this.debugLog("getScoundrelClient: received new open client")
           resolve(client)
         }
 
-        this.server.events.on("newClient", onNewClient)
+        this.server?.events.on("newClient", onNewClient)
       }))
     } finally {
       cleanupListener()
@@ -527,9 +531,9 @@ export default class SystemTest extends Browser {
       throw new Error("Please set SYSTEM_TEST_HOST to 'expo-dev-server', 'dist', or 'native'")
     }
 
-    this.driverAdapter.setBaseUrl(this.currentUrl)
+    this.getDriverAdapter().setBaseUrl(this.currentUrl)
     this.debugLog("Starting driver")
-    await this.driverAdapter.start()
+    await this.getDriverAdapter().start()
     this.debugLog("Driver started")
 
     await this.setTimeouts(10000)
@@ -604,7 +608,7 @@ export default class SystemTest extends Browser {
    */
   buildRootPath() {
     const url = new URL(SystemTest.rootPath, "http://localhost")
-    const appendParam = (key, value) => {
+    const appendParam = (/** @type {string} */ key, /** @type {any} */ value) => {
       if (value === undefined || value === null) return
       url.searchParams.append(key, String(value))
     }
@@ -644,7 +648,7 @@ export default class SystemTest extends Browser {
     try {
       await timeout({timeout: 30000, errorMessage: "timeout while waiting for client WebSocket connection"}, () => new Promise((resolve, reject) => {
         if (this.ws) {
-          resolve()
+          resolve(undefined)
           return
         }
 
@@ -688,7 +692,7 @@ export default class SystemTest extends Browser {
 
   /**
    * Handles a command received from the browser
-   * @param {{data: {message: string, backtrace?: string, type: string, value: any[]}}} args
+   * @param {{data: Record<string, any>}} args
    * @returns {Promise<any>}
    */
   onCommandReceived = async ({data}) => {
@@ -731,7 +735,7 @@ export default class SystemTest extends Browser {
     this.ws.on("message", digg(this, "communicator", "onMessage"))
 
     if (this.waitForClientWebSocketPromiseResolve) {
-      this.waitForClientWebSocketPromiseResolve()
+      this.waitForClientWebSocketPromiseResolve(undefined)
       delete this.waitForClientWebSocketPromiseResolve
       delete this.waitForClientWebSocketPromiseReject
     }
@@ -751,9 +755,7 @@ export default class SystemTest extends Browser {
 
   /**
    * Handles an error reported from the browser
-   * @param {object} data
-   * @param {string} data.message
-   * @param {string} [data.backtrace]
+   * @param {Record<string, any>} data
    * @returns {void}
    */
   handleError(data) {
@@ -783,7 +785,8 @@ export default class SystemTest extends Browser {
       await this.driverAdapter.stop()
     }
     if (this.systemTestHttpServer) {
-      await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while closing HTTP server"}, async () => await this.systemTestHttpServer.close())
+      const httpServer = this.systemTestHttpServer
+      await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while closing HTTP server"}, async () => await httpServer.close())
     }
   }
 
@@ -825,27 +828,27 @@ export default class SystemTest extends Browser {
 
     await timeout({timeout: this.getTimeouts(), errorMessage: `timeout while closing ${label}`}, async () => await new Promise((resolve, reject) => {
       let settled = false
-      const terminateClient = (client) => {
+      const terminateClient = (/** @type {any} */ client) => {
         try {
           client.terminate()
         } catch {
           // Ignore termination errors
         }
       }
-      const settle = (callback, arg) => {
+      const settle = (/** @type {(value: any) => void} */ callback, /** @type {any} */ arg) => {
         if (settled) return
         settled = true
         callback(arg)
       }
 
-      wss.once("close", () => settle(resolve))
+      wss.once("close", () => settle(resolve, undefined))
       wss.once("error", (error) => settle(reject, error))
       if (wss.clients && wss.clients.size > 0) {
         wss.clients.forEach(terminateClient)
       }
       wss.close((error) => {
         if (error) settle(reject, error)
-        else settle(resolve)
+        else settle(resolve, undefined)
       })
     }))
   }

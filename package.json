@@ -88,6 +88,6 @@
     "expo-router": "^55.0.5",
     "globals": "^17.0.0",
     "jasmine": "^6.0.0",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.2"
   }
 }

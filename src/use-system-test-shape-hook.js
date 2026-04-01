@@ -3,6 +3,7 @@ import {useEffect} from "react"
 import SystemTestBrowserHelper from "./system-test-browser-helper.js"
 
 const shared = {
+  /** @type {SystemTestBrowserHelper | null} */
   defaultSystemTestBrowserHelper: null
 }
 
