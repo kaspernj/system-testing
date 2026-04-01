@@ -44,13 +44,15 @@ export default class SystemTestHttpServer {
       this._connections.clear()
     }
 
+    const httpServer = this.httpServer
+
     await new Promise((resolve, reject) => {
-      this.httpServer.close((error) => {
+      httpServer.close((error) => {
         if (error) {
           reject(error)
         } else {
           this._started = false
-          resolve()
+          resolve(undefined)
         }
       })
     })
@@ -162,6 +164,7 @@ export default class SystemTestHttpServer {
       try {
         await new Promise((resolve, reject) => {
           const request = http.get(url, (response) => {
+            /** @type {Buffer[]} */
             const chunks = []
 
             response.on("data", (chunk) => chunks.push(chunk))

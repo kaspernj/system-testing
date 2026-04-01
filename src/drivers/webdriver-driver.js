@@ -177,7 +177,7 @@ export default class WebDriverDriver {
    */
   async stop() {
     if (this.webDriver) {
-      await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while quitting WebDriver"}, async () => await this.webDriver.quit())
+      await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while quitting WebDriver"}, async () => await /** @type {NonNullable<typeof this.webDriver>} */ (this.webDriver).quit())
     }
 
     this.webDriver = undefined
@@ -230,6 +230,14 @@ export default class WebDriverDriver {
     const url = isAbsoluteUrl ? path : `${this.getBaseUrl()}${path}`
 
     await this.getWebDriver().get(url)
+  }
+
+  /**
+   * Deletes all cookies for the current browser session.
+   * @returns {Promise<void>}
+   */
+  async deleteAllCookies() {
+    await this.getWebDriver().manage().deleteAllCookies()
   }
 
   /** @returns {Promise<string>} */
@@ -323,6 +331,7 @@ export default class WebDriverDriver {
 
       return filteredElements
     }
+    /** @type {import("selenium-webdriver").WebElement[]} */
     let elements = []
 
     while (true) {
@@ -573,14 +582,14 @@ export default class WebDriverDriver {
           await this.interactPress(element)
 
           return undefined
-        } else if (!element[methodName]) {
+        } else if (!(/** @type {any} */ (element))[methodName]) {
           throw new Error(`${element.constructor.name} hasn't an attribute named: ${methodName}`)
-        } else if (typeof element[methodName] != "function") {
+        } else if (typeof (/** @type {any} */ (element))[methodName] != "function") {
           throw new Error(`${element.constructor.name}#${methodName} is not a function`)
         }
 
         // Dont call with candidate, because that will bind the function wrong.
-        return await element[methodName](...args)
+        return await (/** @type {any} */ (element))[methodName](...args)
       } catch (error) {
         if (error instanceof Error) {
           const retryableErrorName = getRetryableInteractErrorName(error)

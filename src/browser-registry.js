@@ -136,7 +136,7 @@ export default class BrowserRegistry {
     return await new Promise((resolve) => {
       let settled = false
 
-      const finish = (result) => {
+      const finish = (/** @type {any} */ result) => {
         if (settled) {
           return
         }

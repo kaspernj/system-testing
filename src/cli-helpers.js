@@ -3,8 +3,9 @@
  * @returns {{_: string[], flags: Record<string, any>}}
  */
 export function parseArgv(argv) {
+  /** @type {{_: string[], flags: Record<string, any>}} */
   const result = {_: [], flags: {}}
-  const setFlag = (key, value) => {
+  const setFlag = (/** @type {string} */ key, /** @type {any} */ value) => {
     if (!(key in result.flags)) {
       result.flags[key] = value
       return
@@ -87,6 +88,7 @@ export function resolveBrowserCommand(flags) {
   const timeout = resolveCliTimeout(flags.timeout)
 
   if (flags.visit) {
+    /** @type {Record<string, any>} */
     const args = {url: flags.visit}
 
     if (timeout !== undefined) {
@@ -97,6 +99,7 @@ export function resolveBrowserCommand(flags) {
   }
 
   if (flags["dismiss-to"]) {
+    /** @type {Record<string, any>} */
     const args = {path: flags["dismiss-to"]}
 
     if (timeout !== undefined) {
@@ -107,6 +110,7 @@ export function resolveBrowserCommand(flags) {
   }
 
   if (flags["find-by-test-id"]) {
+    /** @type {Record<string, any>} */
     const args = {
       testID: flags["find-by-test-id"],
       timeout,
@@ -125,6 +129,7 @@ export function resolveBrowserCommand(flags) {
   }
 
   if (flags.find) {
+    /** @type {Record<string, any>} */
     const args = {
       selector: flags.find,
       timeout,
@@ -143,6 +148,7 @@ export function resolveBrowserCommand(flags) {
   }
 
   if (flags.click) {
+    /** @type {Record<string, any>} */
     const args = {
       selector: flags.click,
       timeout,

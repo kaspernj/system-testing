@@ -14,7 +14,7 @@ export default class SystemTestCommunicator {
 
   /**
    * @param {object} args
-   * @param {(args: Record<string, any>) => Promise<{result: string} | void>} args.onCommand
+   * @param {(args: {data: Record<string, any>}) => Promise<any>} args.onCommand
    * @param {object} [args.parent]
    */
   constructor({onCommand, parent}) {

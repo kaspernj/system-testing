@@ -335,6 +335,11 @@ export default class Browser {
     await this.getDriverAdapter().driverVisit(path)
   }
 
+  /** @returns {Promise<void>} */
+  async deleteAllCookies() {
+    await this.getDriverAdapter().deleteAllCookies()
+  }
+
   /**
    * @param {string} type
    * @param {string} path
@@ -348,7 +353,7 @@ export default class Browser {
 
     await timeout(
       {timeout: this.getCommandTimeout(args.timeout), errorMessage: `timeout while sending browser command ${type}: ${path}`},
-      async () => await this.communicator.sendCommand({type, path})
+      async () => await /** @type {NonNullable<typeof this.communicator>} */ (this.communicator).sendCommand({type, path})
     )
   }
 

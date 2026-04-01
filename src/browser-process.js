@@ -40,7 +40,7 @@ export default class BrowserProcess {
 
     this.wss = new WebSocketServer({port: this.port})
     await new Promise((resolve) => {
-      this.wss.once("listening", resolve)
+      /** @type {NonNullable<typeof this.wss>} */ (this.wss).once("listening", resolve)
     })
 
     const address = this.wss.address()
@@ -79,8 +79,10 @@ export default class BrowserProcess {
     await BrowserRegistry.unregister(this.name)
 
     if (this.wss) {
+      const wss = this.wss
+
       await new Promise((resolve, reject) => {
-        this.wss.close((error) => {
+        wss.close((error) => {
           if (error) {
             reject(error)
           } else {
