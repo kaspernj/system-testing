@@ -1,26 +1,9 @@
-import { Platform, StyleSheet, View } from "react-native"
-
-const styles = StyleSheet.create({
-  marker: {
-    height: 1,
-    left: 0,
-    opacity: 0,
-    position: "absolute",
-    top: 0,
-    width: 1,
-  },
-})
-
+/**
+ * Retained as a no-op for backwards compatibility.
+ * On native, the accessibility label for systemTestingComponent is now set
+ * directly on SystemTestFocusedView (a real visible container) so that
+ * UiAutomator2 can reliably find it in the accessibility tree.
+ */
 export function SystemTestRootMarker() {
-  return (
-    <View
-      accessibilityLabel={Platform.OS === "web" ? undefined : "systemTestingComponent"}
-      accessible
-      collapsable={false}
-      nativeID={Platform.OS === "web" ? undefined : "systemTestingComponent"}
-      pointerEvents="none"
-      style={styles.marker}
-      testID={Platform.OS === "web" ? undefined : "systemTestingComponent"}
-    />
-  )
+  return null
 }

@@ -12,9 +12,12 @@ export const unstable_settings = {
   anchor: '(tabs)',
 };
 
+const systemTestEnabled = process.env.EXPO_PUBLIC_SYSTEM_TEST === 'true' || undefined
+const systemTestHost = process.env.EXPO_PUBLIC_SYSTEM_TEST_HOST || undefined
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  useSystemTestExpo();
+  useSystemTestExpo({enabled: systemTestEnabled, host: systemTestHost});
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

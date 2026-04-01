@@ -532,6 +532,17 @@ export default class SystemTest extends Browser {
     }
 
     this.getDriverAdapter().setBaseUrl(this.currentUrl)
+
+    // Start the client WebSocket server before the driver for native hosts,
+    // because the native app launches immediately on driver start and its
+    // useSystemTestExpo hook connects to the WebSocket as soon as it renders.
+    // If the server isn't listening yet, the connection fails with no retry.
+    if (isNativeHost) {
+      this.debugLog("Starting WebSocket server (before driver for native)")
+      await this.startWebSocketServer()
+      this.debugLog("WebSocket server started")
+    }
+
     this.debugLog("Starting driver")
     await this.getDriverAdapter().start()
     this.debugLog("Driver started")
@@ -539,10 +550,12 @@ export default class SystemTest extends Browser {
     await this.setTimeouts(10000)
     this.debugLog("Timeouts set on driver")
 
-    // Web socket server to communicate with browser
-    this.debugLog("Starting WebSocket server")
-    await this.startWebSocketServer()
-    this.debugLog("WebSocket server started")
+    if (!isNativeHost) {
+      // Web socket server to communicate with browser
+      this.debugLog("Starting WebSocket server")
+      await this.startWebSocketServer()
+      this.debugLog("WebSocket server started")
+    }
 
     if (!isNativeHost) {
       // Visit the root page and wait for Expo to be loaded and the app to appear
@@ -569,7 +582,7 @@ export default class SystemTest extends Browser {
     } else {
       try {
         this.debugLog("Finding systemTestingComponent for native app")
-        await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true})
+        await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: null})
         this.debugLog("Found systemTestingComponent for native app")
       } catch (error) {
         this.debugLog("Error while finding native systemTestingComponent, taking screenshot")
@@ -663,11 +676,14 @@ export default class SystemTest extends Browser {
   }
 
   /**
-   * Starts the web socket server
-   * @returns {void}
+   * Starts the web socket server and waits for it to be ready.
+   * @returns {Promise<void>}
    */
-  startWebSocketServer() {
+  async startWebSocketServer() {
     this.clientWss = new WebSocketServer({port: this._clientWsPort})
+    await new Promise((resolve) => {
+      /** @type {NonNullable<typeof this.clientWss>} */ (this.clientWss).once("listening", resolve)
+    })
     this.clientWss.on("connection", this.onWebSocketConnection)
     this.clientWss.on("close", this.onWebSocketClose)
     this.clientWss.on("error", (error) => {

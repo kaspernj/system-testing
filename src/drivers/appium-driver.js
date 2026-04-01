@@ -157,6 +157,19 @@ export default class AppiumDriver extends WebDriverDriver {
   }
 
   /**
+   * Deletes all cookies. Skipped for native app contexts where cookie
+   * management is not supported by UiAutomator2.
+   * @returns {Promise<void>}
+   */
+  async deleteAllCookies() {
+    const browserName = this.options.capabilities?.browserName ?? this.options.browserName
+
+    if (!browserName) return
+
+    await super.deleteAllCookies()
+  }
+
+  /**
    * @returns {Promise<string[]>}
    */
   async getBrowserLogs() {
@@ -289,7 +302,7 @@ export default class AppiumDriver extends WebDriverDriver {
       const filteredElements = []
 
       for (const element of foundElements) {
-        const isDisplayed = await element.isDisplayed()
+        const isDisplayed = await this.isElementDisplayed(element)
 
         if (visible && !isDisplayed) continue
         if (!visible && isDisplayed) continue
@@ -333,6 +346,22 @@ export default class AppiumDriver extends WebDriverDriver {
     }
 
     return elements
+  }
+
+  /**
+   * Checks if an element is displayed. For native app contexts, always
+   * returns true because Selenium's isDisplayed() JS atom is not supported
+   * by UiAutomator2 in native mode, and elements found by UiAutomator2's
+   * accessibility id / id search are already in the rendered view hierarchy.
+   * @param {import("selenium-webdriver").WebElement} element
+   * @returns {Promise<boolean>}
+   */
+  async isElementDisplayed(element) {
+    const browserName = this.options.capabilities?.browserName ?? this.options.browserName
+
+    if (!browserName) return true
+
+    return await element.isDisplayed()
   }
 
   /**
@@ -397,7 +426,7 @@ export default class AppiumDriver extends WebDriverDriver {
       const filteredElements = []
 
       for (const element of foundElements) {
-        const isDisplayed = await element.isDisplayed()
+        const isDisplayed = await this.isElementDisplayed(element)
 
         if (visible && !isDisplayed) continue
         if (!visible && isDisplayed) continue

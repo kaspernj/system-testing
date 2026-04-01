@@ -126,7 +126,7 @@ await SystemTest.run({
 })
 ```
 
-If you already run an Appium server, provide `serverUrl` instead of `serverArgs`. By default, `findByTestID` uses the Appium `accessibility id` strategy. To use CSS instead (for web contexts), set `options.testIdStrategy` to `"css"` and optionally `options.testIdAttribute` (defaults to `"data-testid"`).
+If you already run an Appium server, provide `serverUrl` instead of `serverArgs`. By default, `findByTestID` uses the Appium `accessibility id` strategy, which matches the `content-desc` attribute on Android (set by React Native's `accessibilityLabel` prop). To use CSS instead (for web contexts), set `options.testIdStrategy` to `"css"` and optionally `options.testIdAttribute` (defaults to `"data-testid"`). Note: the `"id"` strategy does not work for native Android apps because UiAutomator2 expects a fully qualified resource ID with the package prefix, which React Native does not produce.
 
 For local or CI web runs against Chrome, `npm run test:appium:web` now resolves and downloads a matching Chrome for Testing `chromedriver` binary before it starts Appium. That keeps the Appium web path reproducible even when the installed Chrome patch version changes.
 
