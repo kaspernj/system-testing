@@ -82,7 +82,7 @@
     "@types/react": "^19.2.7",
     "@types/selenium-webdriver": "^4.35.4",
     "appium-chromium-driver": "^2.1.6",
-    "appium-uiautomator2-driver": "^6.9.3",
+    "appium-uiautomator2-driver": "^7.1.0",
     "eslint": "^10.1.0",
     "eslint-plugin-jsdoc": "^62.7.1",
     "expo-router": "^55.0.5",
