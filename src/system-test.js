@@ -160,17 +160,25 @@ export default class SystemTest extends Browser {
     await systemTest.deleteAllCookies()
     systemTest.debugLog("Browser cookies cleared")
 
-    systemTest.debugLog("Run started - send initialize")
-    await timeout({timeout: 10_000, errorMessage: "Sending intialize to useSystemTest() timed out"}, async () => {
-      await systemTest.getCommunicator().sendCommand({type: "initialize"})
-    })
-
     systemTest.debugLog("getRootPath")
     const rootPath = systemTest.getRootPath()
 
     systemTest.debugLog(`Visit rootPath with dismissTo: ${rootPath}`)
     await systemTest.dismissTo(rootPath)
     systemTest.debugLog(`Dismissed to root path ${rootPath}`)
+
+    if (!systemTest.ws || systemTest.ws.readyState !== 1) {
+      systemTest.debugLog("WebSocket not connected after dismissTo, waiting for reconnection")
+      systemTest.ws = null
+      systemTest.getCommunicator().ws = null
+      await systemTest.waitForClientWebSocket()
+      systemTest.debugLog("Client websocket reconnected")
+    }
+
+    systemTest.debugLog("Run started - send initialize")
+    await timeout({timeout: 10_000, errorMessage: "Sending intialize to useSystemTest() timed out"}, async () => {
+      await systemTest.getCommunicator().sendCommand({type: "initialize"})
+    })
 
     try {
       systemTest.debugLog("findByTestID blankText")
