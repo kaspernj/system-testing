@@ -364,7 +364,7 @@ export default class Browser {
    * @returns {Promise<void>}
    */
   async visit(path, args = {}) {
-    if (this.communicatorExists()) {
+    if (this.communicatorExists() && (!this.communicator?.ws || this.communicator.ws.readyState === 1)) {
       await this.sendBrowserCommand("visit", path, args)
     } else {
       await timeout(
@@ -381,7 +381,7 @@ export default class Browser {
    * @returns {Promise<void>}
    */
   async dismissTo(path, args = {}) {
-    if (this.communicatorExists()) {
+    if (this.communicatorExists() && (!this.communicator?.ws || this.communicator.ws.readyState === 1)) {
       await this.sendBrowserCommand("dismissTo", path, args)
     } else {
       await timeout(
