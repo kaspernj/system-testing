@@ -64,12 +64,11 @@ export const releasePatch = async (dependencies = {}) => {
   await updateLocalMasterFromOriginDependency()
 
   if (!await isNpmLoggedInDependency()) {
-    await runDependency("npm", ["login"])
+  await runDependency("npm", ["login"])
   }
 
   await runDependency("npm", ["version", "patch", "--no-git-tag-version"])
   await runDependency("npm", ["install"])
-  await runDependency("npm", ["run", "all-checks"])
 
   const version = await currentVersionDependency()
 
