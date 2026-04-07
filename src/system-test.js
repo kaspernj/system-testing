@@ -193,6 +193,11 @@ export default class SystemTest extends Browser {
       await systemTest.takeScreenshot()
 
       throw error
+    } finally {
+      systemTest.debugLog("Run finished - send teardown")
+      await timeout({timeout: 10_000, errorMessage: "Sending teardown to useSystemTest() timed out"}, async () => {
+        await systemTest.getCommunicator().sendCommand({type: "teardown"})
+      })
     }
   }
 
@@ -622,6 +627,14 @@ export default class SystemTest extends Browser {
    */
   getRootPath() {
     return this._rootPath ?? SystemTest.rootPath
+  }
+
+  /**
+   * @param {string} rootPath
+   * @returns {void}
+   */
+  setRootPath(rootPath) {
+    this._rootPath = rootPath
   }
 
   /**

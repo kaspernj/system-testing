@@ -15,6 +15,7 @@ export default class UseSystemTestShapeHook extends ShapeHook {
     onDismissTo: undefined,
     onFirstInitialize: undefined,
     onInitialize: undefined,
+    onTeardown: undefined,
     onNavigate: undefined
   }
 
@@ -60,7 +61,8 @@ export default class UseSystemTestShapeHook extends ShapeHook {
 
       systemTestBrowserHelper.onFirstInitialize(this.p.onFirstInitialize)
       systemTestBrowserHelper.onInitialize(this.p.onInitialize)
-    }, [systemTestBrowserHelper, this.p.onFirstInitialize, this.p.onInitialize])
+      systemTestBrowserHelper.onTeardown(this.p.onTeardown)
+    }, [systemTestBrowserHelper, this.p.onFirstInitialize, this.p.onInitialize, this.p.onTeardown])
   }
 
   /** @param {{path: string}} args */

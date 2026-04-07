@@ -29,6 +29,16 @@ This package has three main entry points:
 
 Use `SystemTest` if you are testing your app. Use `Browser` if you just want a Selenium/Appium-backed browser session.
 
+## Browser-side lifecycle callbacks
+
+The `useSystemTest*` hooks support three browser-side lifecycle callbacks:
+
+- `onFirstInitialize`: runs only the first time the browser helper initializes in a browser session
+- `onInitialize`: runs before each `SystemTest.run(...)` example after the test bridge is ready
+- `onTeardown`: runs after each `SystemTest.run(...)` example, even when the example fails
+
+Use `onTeardown` for per-example browser cleanup such as clearing auth state or resetting app-local fixtures. Keep destructive cleanup there instead of `onInitialize` so signed-in flows can still run normally during an example.
+
 ## Getting started
 
 1. Add one of the browser-side hooks to your app:

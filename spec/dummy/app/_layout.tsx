@@ -17,7 +17,17 @@ const systemTestHost = process.env.EXPO_PUBLIC_SYSTEM_TEST_HOST || undefined
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  useSystemTestExpo({enabled: systemTestEnabled, host: systemTestHost});
+  useSystemTestExpo({
+    enabled: systemTestEnabled,
+    host: systemTestHost,
+    onTeardown: () => {
+      const teardownCookieName = new URLSearchParams(globalThis.location?.search || "").get("teardownCookieName")
+
+      if (teardownCookieName) {
+        document.cookie = `${teardownCookieName}=present; path=/`
+      }
+    }
+  });
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
