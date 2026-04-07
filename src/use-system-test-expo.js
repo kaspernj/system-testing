@@ -9,9 +9,10 @@ import useSystemTest from "./use-system-test.js"
  * @param {string} [options.host] Override the system test host for WebSocket connections.
  * @param {function() : void} [options.onFirstInitialize]
  * @param {function() : void} [options.onInitialize]
+ * @param {function() : void} [options.onTeardown]
  * @returns {{enabled: boolean, systemTestBrowserHelper: import("./system-test-browser-helper.js").default | null}}
  */
-export default function useSystemTestExpo({browserHelper, enabled, host, onFirstInitialize, onInitialize, ...restArgs} = {browserHelper: undefined, enabled: undefined, host: undefined, onFirstInitialize: undefined, onInitialize: undefined}) {
+export default function useSystemTestExpo({browserHelper, enabled, host, onFirstInitialize, onInitialize, onTeardown, ...restArgs} = {browserHelper: undefined, enabled: undefined, host: undefined, onFirstInitialize: undefined, onInitialize: undefined, onTeardown: undefined}) {
   const router = useRouter()
   const restArgsKeys = Object.keys(restArgs)
 
@@ -32,6 +33,7 @@ export default function useSystemTestExpo({browserHelper, enabled, host, onFirst
     },
     onFirstInitialize,
     onInitialize,
+    onTeardown,
     onNavigate: ({path}) => {
       router.navigate(path)
     }

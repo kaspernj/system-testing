@@ -35,10 +35,11 @@ function isSystemTestEnabled() {
  * @param {(args: {path: string}) => void} [options.onDismissTo]
  * @param {function() : void} [options.onFirstInitialize]
  * @param {function() : void} [options.onInitialize]
+ * @param {function() : void} [options.onTeardown]
  * @param {(args: {path: string}) => void} [options.onNavigate]
  * @returns {{enabled: boolean, systemTestBrowserHelper: import("./system-test-browser-helper.js").default | null}}
  */
-export default function useSystemTest({browserHelper, enabled, host, onDismissTo, onFirstInitialize, onInitialize, onNavigate, ...restArgs} = {browserHelper: undefined, enabled: undefined, host: undefined, onDismissTo: undefined, onFirstInitialize: undefined, onInitialize: undefined, onNavigate: undefined}) {
+export default function useSystemTest({browserHelper, enabled, host, onDismissTo, onFirstInitialize, onInitialize, onTeardown, onNavigate, ...restArgs} = {browserHelper: undefined, enabled: undefined, host: undefined, onDismissTo: undefined, onFirstInitialize: undefined, onInitialize: undefined, onTeardown: undefined, onNavigate: undefined}) {
   const restArgsKeys = Object.keys(restArgs)
 
   if (restArgsKeys.length > 0) {
@@ -57,6 +58,7 @@ export default function useSystemTest({browserHelper, enabled, host, onDismissTo
     onDismissTo,
     onFirstInitialize,
     onInitialize,
+    onTeardown,
     onNavigate
   })
   const systemTestBrowserHelper = shapeHook.systemTestBrowserHelper()

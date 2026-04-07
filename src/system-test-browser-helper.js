@@ -323,6 +323,14 @@ export default class SystemTestBrowserHelper {
       }
 
       return {result: "initialized"}
+    } else if (data.type == "teardown") {
+      this.events.emit("teardown")
+
+      if (this._onTeardownCallback) {
+        await this._onTeardownCallback()
+      }
+
+      return {result: "torn-down"}
     } else if (data.type == "waitForScoundrel") {
       await this.waitForScoundrelStarted()
       return {result: "scoundrel-ready"}
@@ -343,6 +351,14 @@ export default class SystemTestBrowserHelper {
    */
   onInitialize(callback) {
     this._onInitializeCallback = callback
+  }
+
+  /**
+   * @param {function() : void} callback
+   * @returns {void}
+   */
+  onTeardown(callback) {
+    this._onTeardownCallback = callback
   }
 
   /**

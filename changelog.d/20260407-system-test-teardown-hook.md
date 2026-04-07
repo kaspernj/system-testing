@@ -1,0 +1,1 @@
+Added `onTeardown` to the `useSystemTest*` browser hooks and made `SystemTest.run(...)` call it after each example. Apps can now perform per-example browser cleanup, such as signing out, without putting destructive cleanup into `onInitialize`.

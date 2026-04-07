@@ -8,6 +8,7 @@ systemTestHelper.installJasmineHooks()
 const isNative = process.env.SYSTEM_TEST_NATIVE === "true"
 const itIfWeb = isNative ? xit : it
 const leakedCookieName = "system-testing-leaked-cookie"
+let teardownCookieName = `system-testing-teardown-cookie-${Date.now()}`
 
 describe("System test", () => {
   it("shows the welcome text on the front page", async () => {
@@ -68,6 +69,30 @@ describe("System test", () => {
 
       expect(cookieString).not.toContain(`${leakedCookieName}=present`)
     })
+  })
+
+  itIfWeb("runs browser teardown hooks after each example callback", async () => {
+    const systemTest = systemTestHelper.getSystemTest()
+    const originalRootPath = systemTest.getRootPath()
+
+    systemTest.setRootPath(`/blank?systemTest=true&teardownCookieName=${teardownCookieName}`)
+
+    try {
+      await SystemTest.run(async (runningSystemTest) => {
+        const cookieString = await runningSystemTest.getDriver().executeScript("return document.cookie")
+
+        expect(cookieString).not.toContain(`${teardownCookieName}=present`)
+      })
+
+      await SystemTest.run(async (runningSystemTest) => {
+        const cookieString = await runningSystemTest.getDriver().executeScript("return document.cookie")
+
+        expect(cookieString).not.toContain(`${teardownCookieName}=present`)
+      })
+    } finally {
+      systemTest.setRootPath(originalRootPath)
+      teardownCookieName = `system-testing-teardown-cookie-${Date.now()}`
+    }
   })
 
   itIfWeb("dismisses only the matching notification message", async () => {

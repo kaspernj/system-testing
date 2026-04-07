@@ -22,4 +22,26 @@ describe("SystemTestBrowserHelper command events", () => {
       browserHelper.emitCommandEvent("dismissTo", {path: "/ok"})
     }).not.toThrow()
   })
+
+  it("runs the teardown callback for teardown commands", async () => {
+    const originalStartScoundrel = SystemTestBrowserHelper.prototype.startScoundrel
+
+    try {
+      SystemTestBrowserHelper.prototype.startScoundrel = function () {}
+
+      const browserHelper = new SystemTestBrowserHelper()
+      let teardownCount = 0
+
+      browserHelper.onTeardown(async () => {
+        teardownCount += 1
+      })
+
+      const result = await browserHelper.onCommand({data: {type: "teardown"}})
+
+      expect(result).toEqual({result: "torn-down"})
+      expect(teardownCount).toEqual(1)
+    } finally {
+      SystemTestBrowserHelper.prototype.startScoundrel = originalStartScoundrel
+    }
+  })
 })

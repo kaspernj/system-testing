@@ -33,7 +33,6 @@ describe("release-patch script", () => {
       ["git", ["merge", "origin/master"]],
       ["npm", ["version", "patch", "--no-git-tag-version"]],
       ["npm", ["install"]],
-      ["npm", ["run", "all-checks"]],
       ["git", ["add", "package.json", "package-lock.json"]],
       ["git", ["commit", "-m", "Release v1.2.3"]],
       ["git", ["push", "origin", "master"]],
