@@ -180,6 +180,11 @@ export default class SystemTest extends Browser {
       await systemTest.getCommunicator().sendCommand({type: "initialize"})
     })
 
+    /** @type {unknown} */
+    let runError = undefined
+    /** @type {unknown} */
+    let teardownError = undefined
+
     try {
       systemTest.debugLog("findByTestID blankText")
       await systemTest.findByTestID("blankText", {useBaseSelector: false})
@@ -192,12 +197,28 @@ export default class SystemTest extends Browser {
       systemTest.debugLog(`Run error caught, taking screenshot: ${error instanceof Error ? error.message : error}`)
       await systemTest.takeScreenshot()
 
-      throw error
+      runError = error
     } finally {
       systemTest.debugLog("Run finished - send teardown")
-      await timeout({timeout: 10_000, errorMessage: "Sending teardown to useSystemTest() timed out"}, async () => {
-        await systemTest.getCommunicator().sendCommand({type: "teardown"})
-      })
+      try {
+        await timeout({timeout: 10_000, errorMessage: "Sending teardown to useSystemTest() timed out"}, async () => {
+          await systemTest.getCommunicator().sendCommand({type: "teardown"})
+        })
+      } catch (error) {
+        teardownError = error
+      }
+    }
+
+    if (runError) {
+      if (teardownError) {
+        console.error("System test teardown failed after test failure", teardownError)
+      }
+
+      throw runError
+    }
+
+    if (teardownError) {
+      throw teardownError
     }
   }
 
