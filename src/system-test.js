@@ -200,12 +200,18 @@ export default class SystemTest extends Browser {
       runError = error
     } finally {
       systemTest.debugLog("Run finished - send teardown")
-      try {
-        await timeout({timeout: 10_000, errorMessage: "Sending teardown to useSystemTest() timed out"}, async () => {
-          await systemTest.getCommunicator().sendCommand({type: "teardown"})
-        })
-      } catch (error) {
-        teardownError = error
+      const teardownWs = systemTest.getCommunicator().ws
+
+      if (!teardownWs || teardownWs.readyState !== 1) {
+        systemTest.debugLog("Skipping teardown — browser websocket is no longer open (likely closed by navigation/sign-out during the test)")
+      } else {
+        try {
+          await timeout({timeout: 10_000, errorMessage: "Sending teardown to useSystemTest() timed out"}, async () => {
+            await systemTest.getCommunicator().sendCommand({type: "teardown"})
+          })
+        } catch (error) {
+          teardownError = error
+        }
       }
     }
 
