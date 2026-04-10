@@ -260,7 +260,7 @@ describe("WebDriverDriver interact", () => {
     expect(executeScriptCalls[0][2]).toBe("new")
   })
 
-  it("dispatches pointer and mouse events for interact press calls", async () => {
+  it("dispatches pointer, mouse, and keyboard events for interact press calls", async () => {
     const element = {}
     const executeScriptSpy = jasmine.createSpy("executeScript").and.resolveTo(undefined)
     const driver = new WebDriverDriver({
@@ -277,6 +277,10 @@ describe("WebDriverDriver interact", () => {
     await driver.interact({selector: "[data-testid='project-environment-agent-submit']"}, "press")
 
     expect(executeScriptSpy).toHaveBeenCalled()
+    expect(executeScriptSpy.calls.mostRecent().args[0]).toContain('new PointerEvent("pointerdown"')
+    expect(executeScriptSpy.calls.mostRecent().args[0]).toContain('new PointerEvent("pointerup"')
+    expect(executeScriptSpy.calls.mostRecent().args[0]).toContain('new KeyboardEvent("keydown"')
+    expect(executeScriptSpy.calls.mostRecent().args[0]).toContain('new KeyboardEvent("keyup"')
     expect(executeScriptSpy.calls.mostRecent().args[1]).toBe(element)
   })
 

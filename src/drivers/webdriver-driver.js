@@ -712,16 +712,50 @@ export default class WebDriverDriver {
         element.focus()
       }
 
-      for (const eventName of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
-        const mouseEvent = new MouseEvent(eventName, {
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-          view: window
-        })
-
-        element.dispatchEvent(mouseEvent)
-      }
+      element.dispatchEvent(new PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        pointerType: "mouse",
+        view: window
+      }))
+      element.dispatchEvent(new MouseEvent("mousedown", {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        view: window
+      }))
+      element.dispatchEvent(new PointerEvent("pointerup", {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        pointerType: "mouse",
+        view: window
+      }))
+      element.dispatchEvent(new MouseEvent("mouseup", {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        view: window
+      }))
+      element.dispatchEvent(new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        view: window
+      }))
+      element.dispatchEvent(new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        key: "Enter"
+      }))
+      element.dispatchEvent(new KeyboardEvent("keyup", {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        key: "Enter"
+      }))
     `, element)
   }
 
