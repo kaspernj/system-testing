@@ -14,6 +14,19 @@ const sharedState = globalThis.__systemTestHelperState ??= {
 }
 
 /**
+ * @param {string} name
+ * @param {number} defaultValue
+ * @returns {number}
+ */
+function integerEnv(name, defaultValue) {
+  const value = process.env[name]
+
+  if (!value) return defaultValue
+
+  return Number.parseInt(value, 10)
+}
+
+/**
  * @param {string} message
  * @param {unknown} cause
  * @returns {Error & {cause: unknown}}
@@ -63,11 +76,13 @@ export default class SystemTestHelper {
       this.debugLog("[system-test] beforeAll: creating SystemTest")
       this.systemTest = SystemTest.current({
         debug: this.debug,
-        host: "127.0.0.1",
-        port: 3601,
-        httpHost: "0.0.0.0",
-        httpPort: 3602,
+        host: process.env.SYSTEM_TEST_APP_HOST || "127.0.0.1",
+        port: integerEnv("SYSTEM_TEST_APP_PORT", 3601),
+        httpHost: process.env.SYSTEM_TEST_HTTP_HOST || "0.0.0.0",
+        httpPort: integerEnv("SYSTEM_TEST_HTTP_PORT", 3602),
         httpConnectHost: process.env.SYSTEM_TEST_HTTP_CONNECT_HOST,
+        clientWsPort: integerEnv("SYSTEM_TEST_CLIENT_WS_PORT", 1985),
+        scoundrelPort: integerEnv("SYSTEM_TEST_SCOUNDREL_PORT", 8090),
         errorFilter: (error) => {
           if (typeof error?.value?.[0] === "string" && error.value[0].includes("Uncaught Error: Minified React error #418; visit")) return false
           return true
