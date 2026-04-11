@@ -570,7 +570,7 @@ export default class WebDriverDriver {
           }
 
           return await element.sendKeys(...args)
-        } else if (methodName === "click") {
+        } else if (methodName === "click" || methodName === "press") {
           if (isWebDriverElement(element)) {
             await this.click(element)
 
@@ -578,10 +578,6 @@ export default class WebDriverDriver {
           }
 
           return await /** @type {{click: (...clickArgs: any[]) => Promise<any>}} */ (element).click(...args)
-        } else if (methodName === "press") {
-          await this.interactPress(element)
-
-          return undefined
         } else if (!(/** @type {any} */ (element))[methodName]) {
           throw new Error(`${element.constructor.name} hasn't an attribute named: ${methodName}`)
         } else if (typeof (/** @type {any} */ (element))[methodName] != "function") {
@@ -698,69 +694,6 @@ export default class WebDriverDriver {
     `, element, nextValue)
 
     return sendKeysResult
-  }
-
-  /**
-   * @param {import("selenium-webdriver").WebElement} element
-   * @returns {Promise<void>}
-   */
-  async interactPress(element) {
-    await this.getWebDriver().executeScript(`
-      const element = arguments[0]
-
-      if (typeof element.focus == "function") {
-        element.focus()
-      }
-
-      if (typeof PointerEvent == "function") {
-        element.dispatchEvent(new PointerEvent("pointerdown", {
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-          pointerType: "mouse",
-          view: window
-        }))
-      }
-      element.dispatchEvent(new MouseEvent("mousedown", {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        view: window
-      }))
-      if (typeof PointerEvent == "function") {
-        element.dispatchEvent(new PointerEvent("pointerup", {
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-          pointerType: "mouse",
-          view: window
-        }))
-      }
-      element.dispatchEvent(new MouseEvent("mouseup", {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        view: window
-      }))
-      element.dispatchEvent(new MouseEvent("click", {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        view: window
-      }))
-      element.dispatchEvent(new KeyboardEvent("keydown", {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        key: "Enter"
-      }))
-      element.dispatchEvent(new KeyboardEvent("keyup", {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        key: "Enter"
-      }))
-    `, element)
   }
 
   /**

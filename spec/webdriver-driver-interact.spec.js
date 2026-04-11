@@ -138,6 +138,29 @@ describe("WebDriverDriver interact", () => {
     expect(element.click).not.toHaveBeenCalled()
   })
 
+  it("delegates interact press calls for webdriver elements to the driver click helper", async () => {
+    const element = {
+      getId: async () => "webdriver-element-id",
+      click: jasmine.createSpy("elementClick")
+    }
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const clickSpy = jasmine.createSpy("click").and.resolveTo(undefined)
+
+    driver._findElement = async () => /** @type {any} */ (element)
+    driver.click = /** @type {any} */ (clickSpy)
+
+    await driver.interact({selector: "[data-testid='project-environment-agent-submit']"}, "press")
+
+    expect(clickSpy).toHaveBeenCalledWith(element)
+    expect(element.click).not.toHaveBeenCalled()
+  })
+
   it("calls plain element click handlers directly for non-webdriver elements", async () => {
     const element = {
       click: jasmine.createSpy("elementClick").and.resolveTo("clicked")
@@ -260,9 +283,10 @@ describe("WebDriverDriver interact", () => {
     expect(executeScriptCalls[0][2]).toBe("new")
   })
 
-  it("dispatches pointer, mouse, and keyboard events for interact press calls", async () => {
-    const element = {}
-    const executeScriptSpy = jasmine.createSpy("executeScript").and.resolveTo(undefined)
+  it("calls plain element click handlers directly for non-webdriver press calls", async () => {
+    const element = {
+      click: jasmine.createSpy("elementClick").and.resolveTo("pressed")
+    }
     const driver = new WebDriverDriver({
       browser: /** @type {any} */ ({
         driver: undefined,
@@ -270,20 +294,16 @@ describe("WebDriverDriver interact", () => {
         throwIfHttpServerError: () => {}
       })
     })
+    const clickSpy = jasmine.createSpy("click").and.resolveTo(undefined)
 
     driver._findElement = async () => /** @type {any} */ (element)
-    driver.setWebDriver(/** @type {any} */ ({executeScript: executeScriptSpy}))
+    driver.click = /** @type {any} */ (clickSpy)
 
-    await driver.interact({selector: "[data-testid='project-environment-agent-submit']"}, "press")
+    const result = await driver.interact({selector: "[data-testid='project-environment-agent-submit']"}, "press")
 
-    expect(executeScriptSpy).toHaveBeenCalled()
-    expect(executeScriptSpy.calls.mostRecent().args[0]).toContain('typeof PointerEvent == "function"')
-    expect(executeScriptSpy.calls.mostRecent().args[0]).toContain('new PointerEvent("pointerdown"')
-    expect(executeScriptSpy.calls.mostRecent().args[0]).toContain('new PointerEvent("pointerup"')
-    expect(executeScriptSpy.calls.mostRecent().args[0]).toContain('new MouseEvent("click"')
-    expect(executeScriptSpy.calls.mostRecent().args[0]).toContain('new KeyboardEvent("keydown"')
-    expect(executeScriptSpy.calls.mostRecent().args[0]).toContain('new KeyboardEvent("keyup"')
-    expect(executeScriptSpy.calls.mostRecent().args[1]).toBe(element)
+    expect(clickSpy).not.toHaveBeenCalled()
+    expect(element.click).toHaveBeenCalled()
+    expect(result).toBe("pressed")
   })
 
   it("scrolls an element into view with webdriver actions first", async () => {

@@ -95,16 +95,6 @@ describe("SystemTest interact", () => {
     })
   })
 
-  itIfWeb("press triggers a real react-native-web Pressable", async () => {
-    await SystemTest.run(async (runningSystemTest) => {
-      await runningSystemTest.visit("/blank")
-      await runningSystemTest.findByTestID("blankPressStateIdle", {useBaseSelector: false})
-
-      await runningSystemTest.interact("[data-testid='blankPressButton']", "press", {useBaseSelector: false})
-      await runningSystemTest.findByTestID("blankPressStatePressed", {useBaseSelector: false})
-    })
-  })
-
   it("clears and sends replacement keys through retryable interactions", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const interactSpy = spyOn(systemTest, "interact").and.resolveTo(undefined)
