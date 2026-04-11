@@ -1,10 +1,12 @@
 import {ThemedText} from "@/components/themed-text"
 import {ThemedView} from "@/components/themed-view"
 
+const styles = {}
+
 export default function BlankScreen() {
   return (
     <ThemedView
-      style={{flex: 1, alignItems: "center", justifyContent: "center", padding: 24}}
+      style={styles.themedView ||= {flex: 1, alignItems: "center", justifyContent: "center", padding: 24}}
     >
       <ThemedText
         testID="blankText"
