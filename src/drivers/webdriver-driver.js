@@ -570,7 +570,7 @@ export default class WebDriverDriver {
           }
 
           return await element.sendKeys(...args)
-        } else if (methodName === "click" || methodName === "press") {
+        } else if (methodName === "click") {
           if (isWebDriverElement(element)) {
             await this.click(element)
 
