@@ -279,6 +279,7 @@ describe("WebDriverDriver interact", () => {
     expect(executeScriptSpy).toHaveBeenCalled()
     expect(executeScriptSpy.calls.mostRecent().args[0]).toContain('new PointerEvent("pointerdown"')
     expect(executeScriptSpy.calls.mostRecent().args[0]).toContain('new PointerEvent("pointerup"')
+    expect(executeScriptSpy.calls.mostRecent().args[0]).toContain('new MouseEvent("click"')
     expect(executeScriptSpy.calls.mostRecent().args[0]).toContain('new KeyboardEvent("keydown"')
     expect(executeScriptSpy.calls.mostRecent().args[0]).toContain('new KeyboardEvent("keyup"')
     expect(executeScriptSpy.calls.mostRecent().args[1]).toBe(element)
