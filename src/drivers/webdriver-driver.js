@@ -578,10 +578,6 @@ export default class WebDriverDriver {
           }
 
           return await /** @type {{click: (...clickArgs: any[]) => Promise<any>}} */ (element).click(...args)
-        } else if (methodName === "press") {
-          await this.interactPress(element)
-
-          return undefined
         } else if (!(/** @type {any} */ (element))[methodName]) {
           throw new Error(`${element.constructor.name} hasn't an attribute named: ${methodName}`)
         } else if (typeof (/** @type {any} */ (element))[methodName] != "function") {
@@ -698,31 +694,6 @@ export default class WebDriverDriver {
     `, element, nextValue)
 
     return sendKeysResult
-  }
-
-  /**
-   * @param {import("selenium-webdriver").WebElement} element
-   * @returns {Promise<void>}
-   */
-  async interactPress(element) {
-    await this.getWebDriver().executeScript(`
-      const element = arguments[0]
-
-      if (typeof element.focus == "function") {
-        element.focus()
-      }
-
-      for (const eventName of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
-        const mouseEvent = new MouseEvent(eventName, {
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-          view: window
-        })
-
-        element.dispatchEvent(mouseEvent)
-      }
-    `, element)
   }
 
   /**

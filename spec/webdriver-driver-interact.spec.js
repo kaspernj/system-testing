@@ -260,26 +260,6 @@ describe("WebDriverDriver interact", () => {
     expect(executeScriptCalls[0][2]).toBe("new")
   })
 
-  it("dispatches pointer and mouse events for interact press calls", async () => {
-    const element = {}
-    const executeScriptSpy = jasmine.createSpy("executeScript").and.resolveTo(undefined)
-    const driver = new WebDriverDriver({
-      browser: /** @type {any} */ ({
-        driver: undefined,
-        getSelector: (selector) => selector,
-        throwIfHttpServerError: () => {}
-      })
-    })
-
-    driver._findElement = async () => /** @type {any} */ (element)
-    driver.setWebDriver(/** @type {any} */ ({executeScript: executeScriptSpy}))
-
-    await driver.interact({selector: "[data-testid='project-environment-agent-submit']"}, "press")
-
-    expect(executeScriptSpy).toHaveBeenCalled()
-    expect(executeScriptSpy.calls.mostRecent().args[1]).toBe(element)
-  })
-
   it("scrolls an element into view with webdriver actions first", async () => {
     const element = {
       getId: async () => "webdriver-element-id"

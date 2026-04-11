@@ -15,3 +15,4 @@
 - In system tests, if a spec needs the click-clear-sendKeys input flow, add or use a shared package helper on `Browser`/`SystemTest` (for example `clearAndSendKeys(...)`) instead of open-coding that sequence in individual specs.
 - In system tests, if a spec needs to scroll an offscreen element into view, add or use a shared package helper on `Browser`/`SystemTest` (for example `scrollIntoView(...)` / `scrollTestIdIntoView(...)`) instead of project-local DOM query wrappers.
 - For per-example browser cleanup such as auth reset, prefer lifecycle support in `SystemTest.run(...)` / `useSystemTest*` (for example `onTeardown`) over putting destructive cleanup into app bootstrap callbacks like `onInitialize`.
+- If a downstream app exposes a bug rooted in `system-testing`, fix it in `system-testing` first and open the PR here before asking the app repo to carry a dependency override or downstream workaround.
