@@ -277,6 +277,7 @@ describe("WebDriverDriver interact", () => {
     await driver.interact({selector: "[data-testid='project-environment-agent-submit']"}, "press")
 
     expect(executeScriptSpy).toHaveBeenCalled()
+    expect(executeScriptSpy.calls.mostRecent().args[0]).toContain('typeof PointerEvent == "function"')
     expect(executeScriptSpy.calls.mostRecent().args[0]).toContain('new PointerEvent("pointerdown"')
     expect(executeScriptSpy.calls.mostRecent().args[0]).toContain('new PointerEvent("pointerup"')
     expect(executeScriptSpy.calls.mostRecent().args[0]).toContain('new MouseEvent("click"')

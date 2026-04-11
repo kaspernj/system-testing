@@ -712,26 +712,30 @@ export default class WebDriverDriver {
         element.focus()
       }
 
-      element.dispatchEvent(new PointerEvent("pointerdown", {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        pointerType: "mouse",
-        view: window
-      }))
+      if (typeof PointerEvent == "function") {
+        element.dispatchEvent(new PointerEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerType: "mouse",
+          view: window
+        }))
+      }
       element.dispatchEvent(new MouseEvent("mousedown", {
         bubbles: true,
         cancelable: true,
         composed: true,
         view: window
       }))
-      element.dispatchEvent(new PointerEvent("pointerup", {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        pointerType: "mouse",
-        view: window
-      }))
+      if (typeof PointerEvent == "function") {
+        element.dispatchEvent(new PointerEvent("pointerup", {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerType: "mouse",
+          view: window
+        }))
+      }
       element.dispatchEvent(new MouseEvent("mouseup", {
         bubbles: true,
         cancelable: true,
