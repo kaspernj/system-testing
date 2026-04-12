@@ -486,6 +486,7 @@ export default class WebDriverDriver {
    * @returns {Promise<void>}
    */
   async click(elementOrIdentifier, args) {
+    const {scrollTo = false} = args || {}
     let tries = 0
 
     while (true) {
@@ -494,7 +495,10 @@ export default class WebDriverDriver {
       try {
         const element = await this._findElement(elementOrIdentifier, args)
 
-        await this.scrollElementIntoView(element)
+        if (scrollTo) {
+          await this.scrollElementIntoView(element)
+        }
+
         await this.getWebDriver().actions({async: true}).move({origin: element}).click().perform()
         break
       } catch (error) {
@@ -572,7 +576,18 @@ export default class WebDriverDriver {
           return await element.sendKeys(...args)
         } else if (methodName === "click") {
           if (isWebDriverElement(element)) {
-            await this.click(element)
+            const clickArgs = typeof elementOrIdentifier === "object" &&
+              elementOrIdentifier &&
+              !isWebDriverElement(elementOrIdentifier) &&
+              elementOrIdentifier.scrollTo
+              ? {scrollTo: true}
+              : undefined
+
+            if (clickArgs) {
+              await this.click(element, clickArgs)
+            } else {
+              await this.click(element)
+            }
 
             return undefined
           }

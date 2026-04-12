@@ -1,1 +1,1 @@
-Ensure WebDriver click scrolls the target into view before running the pointer-action click sequence.
+Allow WebDriver click helpers to opt into scrolling targets into view before running the pointer-action click sequence.
