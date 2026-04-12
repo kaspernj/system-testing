@@ -134,7 +134,7 @@ describe("WebDriverDriver interact", () => {
 
     await driver.interact({selector: "[data-testid='project-environment-agent-submit']"}, "click")
 
-    expect(clickSpy).toHaveBeenCalledWith(element)
+    expect(clickSpy).toHaveBeenCalledWith(element, {})
     expect(element.click).not.toHaveBeenCalled()
   })
 

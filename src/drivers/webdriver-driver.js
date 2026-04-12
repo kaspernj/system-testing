@@ -502,8 +502,10 @@ export default class WebDriverDriver {
 
         if (method === "actions") {
           await this.getWebDriver().actions({async: true}).move({origin: element}).click().perform()
-        } else {
+        } else if (method === undefined) {
           await element.click()
+        } else {
+          throw new Error(`Unknown method: ${method}`)
         }
 
         break
@@ -582,24 +584,14 @@ export default class WebDriverDriver {
           return await element.sendKeys(...args)
         } else if (methodName === "click") {
           if (isWebDriverElement(element)) {
-            /** @type {FindArgs | undefined} */
-            let clickArgs
-
+            /** @type {FindArgs} */
+            const clickArgs = {}
             if (typeof elementOrIdentifier === "object" && elementOrIdentifier && !isWebDriverElement(elementOrIdentifier)) {
-              if (elementOrIdentifier.method === "actions" && elementOrIdentifier.scrollTo) {
-                clickArgs = {method: "actions", scrollTo: true}
-              } else if (elementOrIdentifier.method === "actions") {
-                clickArgs = {method: "actions"}
-              } else if (elementOrIdentifier.scrollTo) {
-                clickArgs = {scrollTo: true}
-              }
+              if (elementOrIdentifier.method !== undefined) clickArgs.method = elementOrIdentifier.method
+              if (elementOrIdentifier.scrollTo !== undefined) clickArgs.scrollTo = elementOrIdentifier.scrollTo
             }
 
-            if (clickArgs) {
-              await this.click(element, clickArgs)
-            } else {
-              await this.click(element)
-            }
+            await this.click(element, clickArgs)
 
             return undefined
           }
