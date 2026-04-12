@@ -33,6 +33,7 @@ import Browser from "./browser.js"
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
+ * @property {"actions"} [method] Use the Selenium Actions API instead of a normal element click.
  * @property {boolean} [scrollTo] Whether to scroll found elements into view before returning them.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */

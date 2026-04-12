@@ -1,0 +1,1 @@
+Keep WebDriver clicks on normal Selenium `element.click()` by default, while allowing callers to opt into `{method: "actions", scrollTo: true}` for pointer-action clicks that need pre-scroll alignment.
