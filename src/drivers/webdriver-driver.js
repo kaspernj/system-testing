@@ -94,6 +94,7 @@ function getSendKeysUsesSelectAllAndDelete(...args) {
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
+ * @property {"actions"} [method] Use the Selenium Actions API instead of a normal element click.
  * @property {boolean} [scrollTo] Whether to scroll found elements into view before returning them.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
@@ -486,7 +487,7 @@ export default class WebDriverDriver {
    * @returns {Promise<void>}
    */
   async click(elementOrIdentifier, args) {
-    const {scrollTo = false} = args || {}
+    const {method, scrollTo = false} = args || {}
     let tries = 0
 
     while (true) {
@@ -499,7 +500,12 @@ export default class WebDriverDriver {
           await this.scrollElementIntoView(element)
         }
 
-        await this.getWebDriver().actions({async: true}).move({origin: element}).click().perform()
+        if (method === "actions") {
+          await this.getWebDriver().actions({async: true}).move({origin: element}).click().perform()
+        } else {
+          await element.click()
+        }
+
         break
       } catch (error) {
         if (error instanceof Error) {
@@ -576,12 +582,18 @@ export default class WebDriverDriver {
           return await element.sendKeys(...args)
         } else if (methodName === "click") {
           if (isWebDriverElement(element)) {
-            const clickArgs = typeof elementOrIdentifier === "object" &&
-              elementOrIdentifier &&
-              !isWebDriverElement(elementOrIdentifier) &&
-              elementOrIdentifier.scrollTo
-              ? {scrollTo: true}
-              : undefined
+            /** @type {FindArgs | undefined} */
+            let clickArgs
+
+            if (typeof elementOrIdentifier === "object" && elementOrIdentifier && !isWebDriverElement(elementOrIdentifier)) {
+              if (elementOrIdentifier.method === "actions" && elementOrIdentifier.scrollTo) {
+                clickArgs = {method: "actions", scrollTo: true}
+              } else if (elementOrIdentifier.method === "actions") {
+                clickArgs = {method: "actions"}
+              } else if (elementOrIdentifier.scrollTo) {
+                clickArgs = {scrollTo: true}
+              }
+            }
 
             if (clickArgs) {
               await this.click(element, clickArgs)

@@ -161,7 +161,102 @@ describe("WebDriverDriver interact", () => {
     expect(element.click).not.toHaveBeenCalled()
   })
 
-  it("does not scroll webdriver clicks into view unless explicitly requested", async () => {
+  it("passes the actions click method through interact click calls for webdriver elements", async () => {
+    const element = {
+      getId: async () => "webdriver-element-id",
+      click: jasmine.createSpy("elementClick")
+    }
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const clickSpy = jasmine.createSpy("click").and.resolveTo(undefined)
+
+    driver._findElement = async () => /** @type {any} */ (element)
+    driver.click = /** @type {any} */ (clickSpy)
+
+    await driver.interact({selector: "[data-testid='project-environment-agent-submit']", method: "actions", scrollTo: true}, "click")
+
+    expect(clickSpy).toHaveBeenCalledWith(element, {method: "actions", scrollTo: true})
+    expect(element.click).not.toHaveBeenCalled()
+  })
+
+  it("uses a plain element click by default", async () => {
+    const element = {
+      click: jasmine.createSpy("elementClick").and.resolveTo(undefined),
+      getId: async () => "webdriver-element-id"
+    }
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const scrollSpy = jasmine.createSpy("scrollElementIntoView").and.resolveTo(undefined)
+    const actionsSpy = jasmine.createSpy("actions")
+
+    driver._findElement = async () => /** @type {any} */ (element)
+    driver.scrollElementIntoView = /** @type {any} */ (scrollSpy)
+    driver.setWebDriver(/** @type {any} */ ({actions: actionsSpy}))
+
+    await driver.click(element)
+
+    expect(scrollSpy).not.toHaveBeenCalled()
+    expect(actionsSpy).not.toHaveBeenCalled()
+    expect(element.click).toHaveBeenCalled()
+  })
+
+  it("does not scroll normal webdriver clicks into view unless explicitly requested", async () => {
+    const element = {
+      click: jasmine.createSpy("elementClick").and.resolveTo(undefined),
+      getId: async () => "webdriver-element-id"
+    }
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const scrollSpy = jasmine.createSpy("scrollElementIntoView").and.resolveTo(undefined)
+
+    driver._findElement = async () => /** @type {any} */ (element)
+    driver.scrollElementIntoView = /** @type {any} */ (scrollSpy)
+
+    await driver.click(element)
+
+    expect(scrollSpy).not.toHaveBeenCalled()
+    expect(element.click).toHaveBeenCalled()
+  })
+
+  it("scrolls normal webdriver clicks into view when requested", async () => {
+    const element = {
+      click: jasmine.createSpy("elementClick").and.resolveTo(undefined),
+      getId: async () => "webdriver-element-id"
+    }
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const scrollSpy = jasmine.createSpy("scrollElementIntoView").and.resolveTo(undefined)
+
+    driver._findElement = async () => /** @type {any} */ (element)
+    driver.scrollElementIntoView = /** @type {any} */ (scrollSpy)
+
+    await driver.click(element, {scrollTo: true})
+
+    expect(scrollSpy).toHaveBeenCalledWith(element)
+    expect(element.click).toHaveBeenCalled()
+  })
+
+  it("does not scroll webdriver action clicks into view unless explicitly requested", async () => {
     const element = {
       getId: async () => "webdriver-element-id"
     }
@@ -185,7 +280,7 @@ describe("WebDriverDriver interact", () => {
       actions: () => actions
     }))
 
-    await driver.click(element)
+    await driver.click(element, {method: "actions"})
 
     expect(scrollSpy).not.toHaveBeenCalled()
     expect(actions.move).toHaveBeenCalledWith({origin: element})
@@ -193,7 +288,7 @@ describe("WebDriverDriver interact", () => {
     expect(actions.perform).toHaveBeenCalled()
   })
 
-  it("scrolls webdriver clicks into view when requested", async () => {
+  it("scrolls webdriver action clicks into view when requested", async () => {
     const element = {
       getId: async () => "webdriver-element-id"
     }
@@ -217,7 +312,7 @@ describe("WebDriverDriver interact", () => {
       actions: () => actions
     }))
 
-    await driver.click(element, {scrollTo: true})
+    await driver.click(element, {method: "actions", scrollTo: true})
 
     expect(scrollSpy).toHaveBeenCalledWith(element)
     expect(actions.move).toHaveBeenCalledWith({origin: element})
