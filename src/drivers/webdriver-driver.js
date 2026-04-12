@@ -493,9 +493,9 @@ export default class WebDriverDriver {
 
       try {
         const element = await this._findElement(elementOrIdentifier, args)
-        const actions = this.getWebDriver().actions({async: true})
 
-        await actions.move({origin: element}).click().perform()
+        await this.scrollElementIntoView(element)
+        await this.getWebDriver().actions({async: true}).move({origin: element}).click().perform()
         break
       } catch (error) {
         if (error instanceof Error) {
