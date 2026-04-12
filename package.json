@@ -1,6 +1,6 @@
 {
   "name": "system-testing",
-  "version": "1.0.94",
+  "version": "1.0.95",
   "description": "System testing with Selenium and browsers.",
   "bin": {
     "system-testing": "build/cli.js"
