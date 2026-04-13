@@ -208,6 +208,27 @@ describe("WebDriverDriver interact", () => {
     expect(clickSpy).toHaveBeenCalledWith(element, {method: "actions", scrollTo: true})
   })
 
+  it("strips method before selector lookup in _findElement", async () => {
+    const element = {
+      getId: async () => "webdriver-element-id",
+      click: jasmine.createSpy("elementClick")
+    }
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const findSpy = jasmine.createSpy("find").and.resolveTo(element)
+
+    driver.find = /** @type {any} */ (findSpy)
+
+    await driver._findElement({selector: "[data-testid='project-environment-agent-submit']", method: "actions", scrollTo: true})
+
+    expect(findSpy).toHaveBeenCalledWith("[data-testid='project-environment-agent-submit']", {scrollTo: true})
+  })
+
   it("passes scrollTo through to the element lookup for non-click interact methods", async () => {
     const element = {
       getAttribute: async () => "",
@@ -229,6 +250,32 @@ describe("WebDriverDriver interact", () => {
     await driver.interact({selector: "textarea[data-testid='project-environment-agent-input']", scrollTo: true}, "sendKeys", "pwd")
 
     expect(findSpy).toHaveBeenCalledWith("textarea[data-testid='project-environment-agent-input']", {scrollTo: true})
+  })
+
+  it("uses the DOM press sequence for div pressables with tabindex", async () => {
+    const element = {
+      click: jasmine.createSpy("elementClick").and.resolveTo(undefined),
+      getAttribute: jasmine.createSpy("getAttribute").and.callFake(async (name) => name === "tabindex" ? "0" : null),
+      getId: async () => "webdriver-element-id",
+      getTagName: async () => "div"
+    }
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const executeScriptSpy = jasmine.createSpy("executeScript").and.resolveTo(undefined)
+
+    driver._findElement = async () => /** @type {any} */ (element)
+    driver.setWebDriver(/** @type {any} */ ({executeScript: executeScriptSpy}))
+
+    await driver.click(element)
+
+    expect(executeScriptSpy).toHaveBeenCalled()
+    expect(executeScriptSpy.calls.mostRecent().args[1]).toBe(element)
+    expect(element.click).not.toHaveBeenCalled()
   })
 
   it("uses a plain element click by default", async () => {

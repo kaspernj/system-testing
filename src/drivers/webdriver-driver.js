@@ -455,6 +455,7 @@ export default class WebDriverDriver {
       const {selector, ...restArgs} = elementOrIdentifier
 
       delete restArgs.withFallback
+      delete restArgs.method
 
       element = await this.find(selector, restArgs)
     } else {
@@ -500,7 +501,9 @@ export default class WebDriverDriver {
           await this.scrollElementIntoView(element)
         }
 
-        if (method === "actions") {
+        if (await this.shouldUseDomPressSequence(element)) {
+          await this.dispatchDomPressSequence(element)
+        } else if (method === "actions") {
           await this.getWebDriver().actions({async: true}).move({origin: element}).click().perform()
         } else if (method === undefined) {
           await element.click()
@@ -535,6 +538,64 @@ export default class WebDriverDriver {
    */
   async scrollElementIntoView(element) {
     await this.getWebDriver().actions({async: true}).move({origin: element}).perform()
+  }
+
+  /**
+   * Uses a DOM press sequence for React Native Web pressables that Selenium can focus
+   * without actually triggering their `onPress` handlers.
+   * @param {import("selenium-webdriver").WebElement} element
+   * @returns {Promise<boolean>}
+   */
+  async shouldUseDomPressSequence(element) {
+    if (typeof element.getTagName !== "function" || typeof element.getAttribute !== "function") return false
+
+    const tagName = await element.getTagName()
+
+    if (tagName !== "div") return false
+
+    const tabIndex = await element.getAttribute("tabindex")
+
+    return tabIndex !== null
+  }
+
+  /**
+   * Dispatches the full pointer/mouse/click event sequence on the element.
+   * @param {import("selenium-webdriver").WebElement} element
+   * @returns {Promise<void>}
+   */
+  async dispatchDomPressSequence(element) {
+    await this.getWebDriver().executeScript(`
+      const element = arguments[0]
+      const rect = element.getBoundingClientRect()
+      const clientX = rect.left + rect.width / 2
+      const clientY = rect.top + rect.height / 2
+      const baseEvent = {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        button: 0,
+        buttons: 1,
+        clientX,
+        clientY,
+        detail: 1,
+        view: window
+      }
+
+      if (typeof element.focus === "function") element.focus()
+
+      if (typeof PointerEvent === "function") {
+        element.dispatchEvent(new PointerEvent("pointerdown", {...baseEvent, pointerId: 1, pointerType: "mouse", isPrimary: true}))
+      }
+
+      element.dispatchEvent(new MouseEvent("mousedown", baseEvent))
+
+      if (typeof PointerEvent === "function") {
+        element.dispatchEvent(new PointerEvent("pointerup", {...baseEvent, buttons: 0, pointerId: 1, pointerType: "mouse", isPrimary: true}))
+      }
+
+      element.dispatchEvent(new MouseEvent("mouseup", {...baseEvent, buttons: 0}))
+      element.dispatchEvent(new MouseEvent("click", {...baseEvent, buttons: 0}))
+    `, element)
   }
 
   /**
