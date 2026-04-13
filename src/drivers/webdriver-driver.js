@@ -584,11 +584,13 @@ export default class WebDriverDriver {
       let findArgs
 
       if (interactArgs) {
-        const {method, scrollTo, withFallback, ...restFindArgs} = interactArgs
-        /** @type {FindArgs & {selector?: string}} */
-        const sanitizedFindArgs = restFindArgs
+        /** @type {FindArgs & {selector?: string, method?: any, scrollTo?: any, withFallback?: any}} */
+        const sanitizedFindArgs = {...interactArgs}
 
         delete sanitizedFindArgs.selector
+        delete sanitizedFindArgs.method
+        delete sanitizedFindArgs.scrollTo
+        delete sanitizedFindArgs.withFallback
         findArgs = sanitizedFindArgs
       }
 
