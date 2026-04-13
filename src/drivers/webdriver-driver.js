@@ -487,14 +487,14 @@ export default class WebDriverDriver {
    * @returns {Promise<void>}
    */
   async click(elementOrIdentifier, args) {
-    const {method, scrollTo = false} = args || {}
+    const {method, scrollTo = false, ...findArgs} = args || {}
     let tries = 0
 
     while (true) {
       tries++
 
       try {
-        const element = await this._findElement(elementOrIdentifier, args)
+        const element = await this._findElement(elementOrIdentifier, findArgs)
 
         if (scrollTo) {
           await this.scrollElementIntoView(element)
@@ -573,11 +573,33 @@ export default class WebDriverDriver {
     while (true) {
       tries++
 
-      const element = await this._findElement(elementOrIdentifier)
+      /** @type {InteractArgs | undefined} */
+      let interactArgs
+
+      if (typeof elementOrIdentifier === "object" && elementOrIdentifier && !isWebDriverElement(elementOrIdentifier)) {
+        interactArgs = elementOrIdentifier
+      }
+
+      /** @type {FindArgs | undefined} */
+      let findArgs
+
+      if (interactArgs) {
+        /** @type {FindArgs & {selector?: string, method?: any, withFallback?: any}} */
+        const sanitizedFindArgs = {...interactArgs}
+
+        delete sanitizedFindArgs.selector
+        delete sanitizedFindArgs.method
+        delete sanitizedFindArgs.withFallback
+        findArgs = sanitizedFindArgs
+      }
+
+      const element = interactArgs
+        ? await this._findElement(/** @type {{selector: string}} */ (interactArgs).selector, findArgs)
+        : await this._findElement(elementOrIdentifier, findArgs)
 
       try {
         if (methodName === "sendKeys") {
-          if (typeof elementOrIdentifier === "object" && elementOrIdentifier && "withFallback" in elementOrIdentifier && elementOrIdentifier.withFallback) {
+          if (interactArgs?.withFallback) {
             return await this.interactSendKeysWithFallback(element, ...args)
           }
 
@@ -586,10 +608,8 @@ export default class WebDriverDriver {
           if (isWebDriverElement(element)) {
             /** @type {FindArgs} */
             const clickArgs = {}
-            if (typeof elementOrIdentifier === "object" && elementOrIdentifier && !isWebDriverElement(elementOrIdentifier)) {
-              if (elementOrIdentifier.method !== undefined) clickArgs.method = elementOrIdentifier.method
-              if (elementOrIdentifier.scrollTo !== undefined) clickArgs.scrollTo = elementOrIdentifier.scrollTo
-            }
+            if (interactArgs?.method !== undefined) clickArgs.method = interactArgs.method
+            if (interactArgs?.scrollTo !== undefined) clickArgs.scrollTo = interactArgs.scrollTo
 
             await this.click(element, clickArgs)
 

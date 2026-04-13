@@ -57,7 +57,7 @@ export async function main() {
   await run("npm", ["test"], {
     env: {
       ...process.env,
-      SYSTEM_TEST_HOST: process.env.SYSTEM_TEST_HOST ?? "dist",
+      SYSTEM_TEST_HOST: "dist",
       SYSTEM_TEST_DRIVER: "appium",
       SYSTEM_TEST_APPIUM_DRIVERS: "chromium",
       SYSTEM_TEST_APPIUM_TEST_ID_STRATEGY: "css",
