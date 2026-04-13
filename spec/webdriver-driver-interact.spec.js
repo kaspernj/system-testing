@@ -204,8 +204,31 @@ describe("WebDriverDriver interact", () => {
 
     await driver.interact({selector: "[data-testid='project-environment-agent-submit']", method: "actions", scrollTo: true}, "click")
 
-    expect(findElementSpy).toHaveBeenCalledWith("[data-testid='project-environment-agent-submit']", {})
+    expect(findElementSpy).toHaveBeenCalledWith("[data-testid='project-environment-agent-submit']", {scrollTo: true})
     expect(clickSpy).toHaveBeenCalledWith(element, {method: "actions", scrollTo: true})
+  })
+
+  it("passes scrollTo through to the element lookup for non-click interact methods", async () => {
+    const element = {
+      getAttribute: async () => "",
+      getText: async () => "",
+      sendKeys: async () => null
+    }
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const findSpy = jasmine.createSpy("find").and.resolveTo(element)
+
+    driver.find = /** @type {any} */ (findSpy)
+    driver.setWebDriver(/** @type {any} */ ({executeScript: jasmine.createSpy("executeScript")}))
+
+    await driver.interact({selector: "textarea[data-testid='project-environment-agent-input']", scrollTo: true}, "sendKeys", "pwd")
+
+    expect(findSpy).toHaveBeenCalledWith("textarea[data-testid='project-environment-agent-input']", {scrollTo: true})
   })
 
   it("uses a plain element click by default", async () => {
