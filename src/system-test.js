@@ -49,6 +49,14 @@ import Browser from "./browser.js"
  * @property {boolean} [dismiss] Whether to dismiss the notification after it appears.
  */
 
+/**
+ * @param {string} message
+ * @returns {boolean}
+ */
+function shouldIgnoreChromePasswordFieldWarning(message) {
+  return /^\[DOM\] Password field is not contained in a form:/i.test(message)
+}
+
 /** @type {Record<string, any>} */
 const globalAny = globalThis
 
@@ -121,6 +129,7 @@ export default class SystemTest extends Browser {
     if (typeof message === "string") {
       if (message.includes("Minified React error #418")) return true
       if (message.includes("Minified React error #419")) return true
+      if (shouldIgnoreChromePasswordFieldWarning(message)) return true
     }
 
     if (this._errorFilter && this._errorFilter(data) === false) {
