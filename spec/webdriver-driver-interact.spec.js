@@ -576,4 +576,30 @@ describe("WebDriverDriver interact", () => {
 
     expect(await driver.getBrowserLogs()).toEqual(["INFO: Something useful"])
   })
+
+  it("does not filter app logs that mention the same phrase", async () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver.setWebDriver(/** @type {any} */ ({
+      manage: () => ({
+        logs: () => ({
+          get: async () => ([
+            {level: {name: "WARNING"}, message: "http://127.0.0.1:8085/sign-in 0:0 Password field is not contained in a form"},
+            {level: {name: "INFO"}, message: "http://127.0.0.1:8085/sign-in 0:0 Something useful"}
+          ])
+        })
+      })
+    }))
+
+    expect(await driver.getBrowserLogs()).toEqual([
+      "WARNING: Password field is not contained in a form",
+      "INFO: Something useful"
+    ])
+  })
 })
