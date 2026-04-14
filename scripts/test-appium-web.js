@@ -55,14 +55,9 @@ export async function main() {
   })
 
   await run("npm", ["test"], {
-    env: {
-      ...process.env,
-      SYSTEM_TEST_HOST: "dist",
-      SYSTEM_TEST_DRIVER: "appium",
-      SYSTEM_TEST_APPIUM_DRIVERS: "chromium",
-      SYSTEM_TEST_APPIUM_TEST_ID_STRATEGY: "css",
-      SYSTEM_TEST_APPIUM_CAPABILITIES: JSON.stringify(capabilities)
-    }
+    env: buildAppiumWebTestEnv({
+      capabilities
+    })
   })
 }
 
@@ -198,6 +193,26 @@ export function buildAppiumWebCapabilities({chromeBinary, chromedriverPath}) {
       binary: chromeBinary,
       args: ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
     }
+  }
+}
+
+
+/**
+ * @param {{
+ *   capabilities: Record<string, unknown>,
+ *   baseEnv?: Record<string, string | undefined>
+ * }} args
+ * @returns {Record<string, string | undefined>}
+ */
+export function buildAppiumWebTestEnv({capabilities, baseEnv = process.env}) {
+  return {
+    ...baseEnv,
+    SYSTEM_TEST_HOST: "dist",
+    SYSTEM_TEST_HTTP_CONNECT_HOST: "127.0.0.1",
+    SYSTEM_TEST_DRIVER: "appium",
+    SYSTEM_TEST_APPIUM_DRIVERS: "chromium",
+    SYSTEM_TEST_APPIUM_TEST_ID_STRATEGY: "css",
+    SYSTEM_TEST_APPIUM_CAPABILITIES: JSON.stringify(capabilities)
   }
 }
 

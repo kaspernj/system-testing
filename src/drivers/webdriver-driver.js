@@ -91,6 +91,16 @@ function getSendKeysUsesSelectAllAndDelete(...args) {
 }
 
 /**
+ * @param {{level: {name: string}, message: string}} entry
+ * @param {string} message
+ * @returns {boolean}
+ */
+function shouldIgnoreBrowserLogEntry(entry, message) {
+  return entry.level.name === "DEBUG" &&
+    /^\[DOM\] Password field is not contained in a form:/i.test(message)
+}
+
+/**
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
@@ -283,6 +293,8 @@ export default class WebDriverDriver {
       } else {
         message = entry.message
       }
+
+      if (shouldIgnoreBrowserLogEntry(entry, message)) continue
 
       browserLogs.push(`${entry.level.name}: ${message}`)
     }

@@ -1,4 +1,4 @@
-import {buildAppiumWebCapabilities, resolveChromedriverDownload} from "../scripts/test-appium-web.js"
+import {buildAppiumWebCapabilities, buildAppiumWebTestEnv, resolveChromedriverDownload} from "../scripts/test-appium-web.js"
 
 describe("test-appium-web helpers", () => {
   it("prefers the closest matching chromedriver for the current Chrome build", () => {
@@ -88,5 +88,22 @@ describe("test-appium-web helpers", () => {
         args: ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
       }
     })
+  })
+
+  it("forces localhost as the dist HTTP connect host for Appium web runs", () => {
+    const env = buildAppiumWebTestEnv({
+      capabilities: {browserName: "chrome"},
+      baseEnv: {SYSTEM_TEST_HTTP_CONNECT_HOST: "10.0.2.2", PATH: "/usr/bin"}
+    })
+
+    expect(env).toEqual(jasmine.objectContaining({
+      PATH: "/usr/bin",
+      SYSTEM_TEST_HOST: "dist",
+      SYSTEM_TEST_HTTP_CONNECT_HOST: "127.0.0.1",
+      SYSTEM_TEST_DRIVER: "appium",
+      SYSTEM_TEST_APPIUM_DRIVERS: "chromium",
+      SYSTEM_TEST_APPIUM_TEST_ID_STRATEGY: "css",
+      SYSTEM_TEST_APPIUM_CAPABILITIES: JSON.stringify({browserName: "chrome"})
+    }))
   })
 })
