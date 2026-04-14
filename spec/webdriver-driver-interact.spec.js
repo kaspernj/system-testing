@@ -553,4 +553,27 @@ describe("WebDriverDriver interact", () => {
     expect(performSpy).toHaveBeenCalled()
     expect(executeScriptSpy).not.toHaveBeenCalled()
   })
+
+  it("filters the known Chrome password-not-in-form warning from browser logs", async () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver.setWebDriver(/** @type {any} */ ({
+      manage: () => ({
+        logs: () => ({
+          get: async () => ([
+            {level: {name: "DEBUG"}, message: "http://127.0.0.1:8085/sign-in 0:0 [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o"},
+            {level: {name: "INFO"}, message: "http://127.0.0.1:8085/sign-in 0:0 Something useful"}
+          ])
+        })
+      })
+    }))
+
+    expect(await driver.getBrowserLogs()).toEqual(["INFO: Something useful"])
+  })
 })

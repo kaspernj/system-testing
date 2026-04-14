@@ -91,6 +91,32 @@ function getSendKeysUsesSelectAllAndDelete(...args) {
 }
 
 /**
+ * @param {string} message
+ * @returns {boolean}
+ */
+function shouldIgnoreBrowserLogMessage(message) {
+  return /Password field is not contained in a form/i.test(message)
+}
+
+/**
+ * React Native Web Pressable controls can render as focusable divs or links,
+ * and WebDriver click delivery can become unreliable after Expo Router leaves
+ * stale screens in the DOM. Use a DOM click fallback for those controls so
+ * onClick/onPress still fires.
+ * @param {import("selenium-webdriver").WebElement} element
+ * @returns {Promise<boolean>}
+ */
+async function shouldUseActionsClickFallback(element) {
+  const tagName = (await element.getTagName()).toLowerCase()
+
+  if (!["a", "div"].includes(tagName)) {
+    return false
+  }
+
+  return await element.getAttribute("tabindex") === "0"
+}
+
+/**
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
@@ -283,6 +309,8 @@ export default class WebDriverDriver {
       } else {
         message = entry.message
       }
+
+      if (shouldIgnoreBrowserLogMessage(message)) continue
 
       browserLogs.push(`${entry.level.name}: ${message}`)
     }
@@ -503,7 +531,11 @@ export default class WebDriverDriver {
         if (method === "actions") {
           await this.getWebDriver().actions({async: true}).move({origin: element}).click().perform()
         } else if (method === undefined) {
-          await element.click()
+          if (await shouldUseActionsClickFallback(element)) {
+            await this.getWebDriver().executeScript("arguments[0].click()", element)
+          } else {
+            await element.click()
+          }
         } else {
           throw new Error(`Unknown method: ${method}`)
         }
