@@ -46,6 +46,17 @@ describe("SystemTest root path", () => {
     })).toBeTrue()
   })
 
+
+  it("ignores the known Chrome password-field DOM warning when Chrome prefixes the URL", () => {
+    spyOn(SystemTest.prototype, "startScoundrel").and.callFake(() => {})
+
+    const systemTest = new SystemTest()
+
+    expect(systemTest.shouldIgnoreError({
+      value: ["http://127.0.0.1:8085/ - [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o"]
+    })).toBeTrue()
+  })
+
   it("does not ignore app errors that only mention the same phrase", () => {
     spyOn(SystemTest.prototype, "startScoundrel").and.callFake(() => {})
 

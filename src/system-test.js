@@ -54,7 +54,7 @@ import Browser from "./browser.js"
  * @returns {boolean}
  */
 function shouldIgnoreChromePasswordFieldWarning(message) {
-  return /^\[DOM\] Password field is not contained in a form:/i.test(message)
+  return /(?:^|\s-\s)\[DOM\] Password field is not contained in a form:/i.test(message)
 }
 
 /** @type {Record<string, any>} */

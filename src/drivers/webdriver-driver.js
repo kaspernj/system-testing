@@ -97,7 +97,7 @@ function getSendKeysUsesSelectAllAndDelete(...args) {
  */
 function shouldIgnoreBrowserLogEntry(entry, message) {
   return entry.level.name === "DEBUG" &&
-    /^\[DOM\] Password field is not contained in a form:/i.test(message)
+    /(?:^|\s-\s)\[DOM\] Password field is not contained in a form:/i.test(message)
 }
 
 /**
