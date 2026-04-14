@@ -36,4 +36,24 @@ describe("SystemTest root path", () => {
     expect(url.searchParams.getAll("systemTestClientWsPort")).toEqual(["7001"])
     expect(url.searchParams.getAll("systemTestScoundrelPort")).toEqual(["7002"])
   })
+  it("ignores the known Chrome password-field DOM warning in live browser errors", () => {
+    spyOn(SystemTest.prototype, "startScoundrel").and.callFake(() => {})
+
+    const systemTest = new SystemTest()
+
+    expect(systemTest.shouldIgnoreError({
+      value: ["[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o"]
+    })).toBeTrue()
+  })
+
+  it("does not ignore app errors that only mention the same phrase", () => {
+    spyOn(SystemTest.prototype, "startScoundrel").and.callFake(() => {})
+
+    const systemTest = new SystemTest()
+
+    expect(systemTest.shouldIgnoreError({
+      value: ["Password field is not contained in a form"]
+    })).toBeFalse()
+  })
+
 })
