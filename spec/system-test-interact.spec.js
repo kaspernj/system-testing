@@ -95,6 +95,58 @@ describe("SystemTest interact", () => {
     })
   })
 
+  itIfWeb("dispatches element.click() via executeScript when method:'js' is set", async () => {
+    await SystemTest.run(async (runningSystemTest) => {
+      const originalBaseSelector = runningSystemTest.getBaseSelector()
+
+      try {
+        runningSystemTest.setBaseSelector("#does-not-exist")
+
+        await runningSystemTest.getDriver().executeScript(`
+          const elementId = "system-test-interact-js-target"
+          let element = document.getElementById(elementId)
+
+          if (element) {
+            element.remove()
+          }
+
+          element = document.createElement("button")
+          element.id = elementId
+          element.setAttribute("data-testid", "systemTestJsClickTarget")
+          element.style.position = "fixed"
+          element.style.top = "12px"
+          element.style.left = "12px"
+          element.style.zIndex = "9999"
+          element.textContent = "JS click target"
+          element.addEventListener("click", () => {
+            element.setAttribute("data-clicked", "true")
+          })
+          document.body.appendChild(element)
+          return true
+        `)
+
+        await runningSystemTest.interact({selector: "[data-testid='systemTestJsClickTarget']", method: "js", useBaseSelector: false}, "click")
+
+        const wasClicked = await runningSystemTest.getDriver().executeScript(`
+          const element = document.querySelector("[data-testid='systemTestJsClickTarget']")
+          return element?.getAttribute("data-clicked") === "true"
+        `)
+
+        expect(wasClicked).toBeTrue()
+      } finally {
+        if (originalBaseSelector) {
+          runningSystemTest.setBaseSelector(originalBaseSelector)
+        }
+
+        await runningSystemTest.getDriver().executeScript(`
+          const element = document.getElementById("system-test-interact-js-target")
+          if (element) element.remove()
+          return true
+        `)
+      }
+    })
+  })
+
   it("clears and sends replacement keys through retryable interactions", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const interactSpy = spyOn(systemTest, "interact").and.resolveTo(undefined)

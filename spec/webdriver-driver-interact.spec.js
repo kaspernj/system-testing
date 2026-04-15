@@ -184,6 +184,29 @@ describe("WebDriverDriver interact", () => {
     expect(element.click).not.toHaveBeenCalled()
   })
 
+  it("passes the js click method through interact click calls for webdriver elements", async () => {
+    const element = {
+      getId: async () => "webdriver-element-id",
+      click: jasmine.createSpy("elementClick")
+    }
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const clickSpy = jasmine.createSpy("click").and.resolveTo(undefined)
+
+    driver._findElement = async () => /** @type {any} */ (element)
+    driver.click = /** @type {any} */ (clickSpy)
+
+    await driver.interact({selector: "[data-testid='project-environment-agent-submit']", method: "js", scrollTo: true}, "click")
+
+    expect(clickSpy).toHaveBeenCalledWith(element, {method: "js", scrollTo: true})
+    expect(element.click).not.toHaveBeenCalled()
+  })
+
   it("strips interact-only selector args before element lookup for click interactions", async () => {
     const element = {
       getId: async () => "webdriver-element-id",
