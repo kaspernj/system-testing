@@ -30,6 +30,17 @@ export default function useSystemTestExpo({browserHelper, enabled, host, onFirst
       } catch (error) {
         console.error(`Failed to dismiss to path "${path}": ${error instanceof Error ? error.message : error}`)
       }
+
+      // Pop every other screen off the Stack so previously-visited routes
+      // unmount instead of accumulating in DOM with display:none. Without this,
+      // react-native-web's global PressResponder gets confused by stale
+      // Pressables that share the same testID as the visible one and Selenium
+      // clicks fail to fire onPress.
+      try {
+        router.dismissAll()
+      } catch (error) {
+        console.error(`Failed to dismiss all stack screens: ${error instanceof Error ? error.message : error}`)
+      }
     },
     onFirstInitialize,
     onInitialize,
