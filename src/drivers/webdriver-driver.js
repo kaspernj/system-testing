@@ -104,7 +104,7 @@ function shouldIgnoreBrowserLogEntry(entry, message) {
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
- * @property {"actions"} [method] Use the Selenium Actions API instead of a normal element click.
+ * @property {"actions" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context (skips WebDriver's pointer synthesis entirely — useful when the default click is dropped by a framework responder that refuses synthetic WebDriver pointer events).
  * @property {boolean} [scrollTo] Whether to scroll found elements into view before returning them.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
@@ -514,6 +514,8 @@ export default class WebDriverDriver {
 
         if (method === "actions") {
           await this.getWebDriver().actions({async: true}).move({origin: element}).click().perform()
+        } else if (method === "js") {
+          await this.getWebDriver().executeScript("arguments[0].click()", element)
         } else if (method === undefined) {
           await element.click()
         } else {

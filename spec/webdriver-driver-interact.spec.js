@@ -184,6 +184,29 @@ describe("WebDriverDriver interact", () => {
     expect(element.click).not.toHaveBeenCalled()
   })
 
+  it("passes the js click method through interact click calls for webdriver elements", async () => {
+    const element = {
+      getId: async () => "webdriver-element-id",
+      click: jasmine.createSpy("elementClick")
+    }
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const clickSpy = jasmine.createSpy("click").and.resolveTo(undefined)
+
+    driver._findElement = async () => /** @type {any} */ (element)
+    driver.click = /** @type {any} */ (clickSpy)
+
+    await driver.interact({selector: "[data-testid='project-environment-agent-submit']", method: "js", scrollTo: true}, "click")
+
+    expect(clickSpy).toHaveBeenCalledWith(element, {method: "js", scrollTo: true})
+    expect(element.click).not.toHaveBeenCalled()
+  })
+
   it("strips interact-only selector args before element lookup for click interactions", async () => {
     const element = {
       getId: async () => "webdriver-element-id",
@@ -399,6 +422,32 @@ describe("WebDriverDriver interact", () => {
     expect(actions.move).toHaveBeenCalledWith({origin: element})
     expect(actions.click).toHaveBeenCalled()
     expect(actions.perform).toHaveBeenCalled()
+  })
+
+  it("dispatches element.click() via executeScript when method is 'js'", async () => {
+    const element = {
+      getId: async () => "webdriver-element-id"
+    }
+    const executeScriptSpy = jasmine.createSpy("executeScript").and.resolveTo(undefined)
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const scrollSpy = jasmine.createSpy("scrollElementIntoView").and.resolveTo(undefined)
+
+    driver._findElement = async () => /** @type {any} */ (element)
+    driver.scrollElementIntoView = /** @type {any} */ (scrollSpy)
+    driver.setWebDriver(/** @type {any} */ ({
+      executeScript: executeScriptSpy
+    }))
+
+    await driver.click(element, {method: "js", scrollTo: true})
+
+    expect(scrollSpy).toHaveBeenCalledWith(element)
+    expect(executeScriptSpy).toHaveBeenCalledWith("arguments[0].click()", element)
   })
 
   it("calls plain element click handlers directly for non-webdriver elements", async () => {
