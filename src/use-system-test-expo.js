@@ -1,4 +1,4 @@
-import {useNavigationContainerRef, useRouter} from "expo-router"
+import {useRouter} from "expo-router"
 import useSystemTest from "./use-system-test.js"
 
 /**
@@ -14,7 +14,6 @@ import useSystemTest from "./use-system-test.js"
  */
 export default function useSystemTestExpo({browserHelper, enabled, host, onFirstInitialize, onInitialize, onTeardown, ...restArgs} = {browserHelper: undefined, enabled: undefined, host: undefined, onFirstInitialize: undefined, onInitialize: undefined, onTeardown: undefined}) {
   const router = useRouter()
-  const navigationRef = useNavigationContainerRef()
   const restArgsKeys = Object.keys(restArgs)
 
   if (restArgsKeys.length > 0) {
@@ -32,22 +31,15 @@ export default function useSystemTestExpo({browserHelper, enabled, host, onFirst
         console.error(`Failed to dismiss to path "${path}": ${error instanceof Error ? error.message : error}`)
       }
 
-      // Flush the Stack history so previously-visited screens unmount instead
-      // of accumulating in DOM with display:none. Without this, react-native-web's
-      // global PressResponder gets confused by stale Pressables that share the
-      // same testID as the visible one and Selenium clicks fail to fire onPress.
+      // Pop every other screen off the Stack so previously-visited routes
+      // unmount instead of accumulating in DOM with display:none. Without this,
+      // react-native-web's global PressResponder gets confused by stale
+      // Pressables that share the same testID as the visible one and Selenium
+      // clicks fail to fire onPress.
       try {
-        const state = navigationRef.getRootState?.()
-        const currentRoute = state?.routes?.[state.routes.length - 1]
-
-        if (currentRoute) {
-          navigationRef.reset({
-            index: 0,
-            routes: [{name: currentRoute.name, params: currentRoute.params, path: currentRoute.path}]
-          })
-        }
+        router.dismissAll()
       } catch (error) {
-        console.error(`Failed to reset navigation history: ${error instanceof Error ? error.message : error}`)
+        console.error(`Failed to dismiss all stack screens: ${error instanceof Error ? error.message : error}`)
       }
     },
     onFirstInitialize,
