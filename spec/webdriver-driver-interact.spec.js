@@ -401,6 +401,32 @@ describe("WebDriverDriver interact", () => {
     expect(actions.perform).toHaveBeenCalled()
   })
 
+  it("dispatches element.click() via executeScript when method is 'js'", async () => {
+    const element = {
+      getId: async () => "webdriver-element-id"
+    }
+    const executeScriptSpy = jasmine.createSpy("executeScript").and.resolveTo(undefined)
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const scrollSpy = jasmine.createSpy("scrollElementIntoView").and.resolveTo(undefined)
+
+    driver._findElement = async () => /** @type {any} */ (element)
+    driver.scrollElementIntoView = /** @type {any} */ (scrollSpy)
+    driver.setWebDriver(/** @type {any} */ ({
+      executeScript: executeScriptSpy
+    }))
+
+    await driver.click(element, {method: "js", scrollTo: true})
+
+    expect(scrollSpy).toHaveBeenCalledWith(element)
+    expect(executeScriptSpy).toHaveBeenCalledWith("arguments[0].click()", element)
+  })
+
   it("calls plain element click handlers directly for non-webdriver elements", async () => {
     const element = {
       click: jasmine.createSpy("elementClick").and.resolveTo("clicked")

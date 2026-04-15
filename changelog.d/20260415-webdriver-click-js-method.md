@@ -1,0 +1,1 @@
+Support `{method: "js"}` on `click`/`interact` so callers can dispatch `element.click()` via `executeScript` inside the page's JS context. Useful when the default WebDriver click is dropped by a framework responder that refuses synthetic pointer events.
