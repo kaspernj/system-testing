@@ -2,6 +2,8 @@ import {ShapeHook, useShapeHook} from "set-state-compare"
 import {useEffect} from "react"
 import SystemTestBrowserHelper from "./system-test-browser-helper.js"
 
+/** @typedef {{path: string}} SystemTestBrowserHelperPathEvent */
+
 const shared = {
   /** @type {SystemTestBrowserHelper | null} */
   defaultSystemTestBrowserHelper: null
@@ -65,22 +67,22 @@ export default class UseSystemTestShapeHook extends ShapeHook {
     }, [systemTestBrowserHelper, this.p.onFirstInitialize, this.p.onInitialize, this.p.onTeardown])
   }
 
-  /** @param {{path: string}} args */
-  onSystemTestBrowserHelperDismissTo = ({path}) => {
+  /** @param {...unknown} args */
+  onSystemTestBrowserHelperDismissTo = (...args) => {
     if (!this.p.enabled || !this.p.onDismissTo) {
       return
     }
 
-    this.p.onDismissTo({path})
+    this.p.onDismissTo({path: (/** @type {SystemTestBrowserHelperPathEvent} */ (args[0])).path})
   }
 
-  /** @param {{path: string}} args */
-  onSystemTestBrowserHelperNavigate = ({path}) => {
+  /** @param {...unknown} args */
+  onSystemTestBrowserHelperNavigate = (...args) => {
     if (!this.p.enabled || !this.p.onNavigate) {
       return
     }
 
-    this.p.onNavigate({path})
+    this.p.onNavigate({path: (/** @type {SystemTestBrowserHelperPathEvent} */ (args[0])).path})
   }
 }
 
