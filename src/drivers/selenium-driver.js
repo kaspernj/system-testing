@@ -47,5 +47,6 @@ export default class SeleniumDriver extends WebDriverDriver {
     const webDriver = await builder.build()
 
     this.setWebDriver(webDriver)
+    this.installExitHandlers()
   }
 }
