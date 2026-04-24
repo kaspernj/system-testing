@@ -228,9 +228,12 @@ export default class WebDriverDriver {
       // Best-effort — the process is going down anyway, and we'd rather
       // orphan a browser than throw from a signal handler.
     }
-    if (signal === "SIGINT" || signal === "SIGTERM") {
-      process.exit(0)
-    }
+    // Preserve the conventional signal-exit status (128 + signal number)
+    // so CI / wrapper scripts can still tell interrupted runs apart
+    // from a clean pass. Plain `process.exit(0)` would misreport a
+    // cancelled run as successful.
+    if (signal === "SIGINT") process.exit(130)
+    if (signal === "SIGTERM") process.exit(143)
   }
 
   /**
