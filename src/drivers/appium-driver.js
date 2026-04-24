@@ -124,6 +124,7 @@ export default class AppiumDriver extends WebDriverDriver {
       const webDriver = await builder.build()
 
       this.setWebDriver(webDriver)
+      this.installExitHandlers()
     } catch (error) {
       await this.cleanupChromeUserDataDir()
       throw error
