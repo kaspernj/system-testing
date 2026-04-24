@@ -135,6 +135,13 @@ export default class WebDriverDriver {
     this.webDriver = undefined
     this._driverTimeouts = 5000
     this._timeouts = 5000
+    /**
+     * Process-exit handlers installed while a WebDriver session is alive.
+     * Retained so `stop()` can deregister them before removing the
+     * WebDriver reference.
+     * @type {{sigint: () => void, sigterm: () => void, beforeExit: () => void} | null}
+     */
+    this._exitHandlers = null
   }
 
   /**
@@ -177,6 +184,56 @@ export default class WebDriverDriver {
   }
 
   /**
+   * Installs process-level handlers that terminate the WebDriver session
+   * if the Node process exits without an explicit `stop()` call. Without
+   * this, the chromedriver-spawned Chrome is orphaned to init (PPID=1)
+   * when the test runner exits — each `npx velocious test` run that
+   * skips explicit cleanup leaves a Chrome plus thousands of
+   * `/tmp/org.chromium.Chromium.scoped_dir.*` behind. Driver subclass
+   * `start()` implementations must call this after setting the
+   * WebDriver on a fresh session; tests that stub `setWebDriver`
+   * directly deliberately bypass it.
+   * @returns {void}
+   */
+  installExitHandlers() {
+    if (this._exitHandlers) return
+    const sigint = () => { void this._onExitSignal("SIGINT") }
+    const sigterm = () => { void this._onExitSignal("SIGTERM") }
+    const beforeExit = () => { void this._onExitSignal("beforeExit") }
+    process.once("SIGINT", sigint)
+    process.once("SIGTERM", sigterm)
+    process.once("beforeExit", beforeExit)
+    this._exitHandlers = {sigint, sigterm, beforeExit}
+  }
+
+  /** @returns {void} */
+  _removeExitHandlers() {
+    const handlers = this._exitHandlers
+    if (!handlers) return
+    this._exitHandlers = null
+    process.off("SIGINT", handlers.sigint)
+    process.off("SIGTERM", handlers.sigterm)
+    process.off("beforeExit", handlers.beforeExit)
+  }
+
+  /**
+   * @param {"SIGINT" | "SIGTERM" | "beforeExit"} signal
+   * @returns {Promise<void>}
+   */
+  async _onExitSignal(signal) {
+    this._removeExitHandlers()
+    try {
+      await this.stop()
+    } catch {
+      // Best-effort — the process is going down anyway, and we'd rather
+      // orphan a browser than throw from a signal handler.
+    }
+    if (signal === "SIGINT" || signal === "SIGTERM") {
+      process.exit(0)
+    }
+  }
+
+  /**
    * @returns {Promise<void>}
    */
   async start() {
@@ -187,6 +244,7 @@ export default class WebDriverDriver {
    * @returns {Promise<void>}
    */
   async stop() {
+    this._removeExitHandlers()
     if (this.webDriver) {
       await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while quitting WebDriver"}, async () => await /** @type {NonNullable<typeof this.webDriver>} */ (this.webDriver).quit())
     }
