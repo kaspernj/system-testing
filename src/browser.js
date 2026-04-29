@@ -4,6 +4,7 @@ import fs from "node:fs/promises"
 import {Key} from "selenium-webdriver"
 import moment from "moment"
 import {prettify} from "htmlfy"
+import {waitFor} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
 import SeleniumDriver from "./drivers/selenium-driver.js"
 import AppiumDriver from "./drivers/appium-driver.js"
@@ -23,6 +24,10 @@ import AppiumDriver from "./drivers/appium-driver.js"
 /**
  * @typedef {object} BrowserNavigationArgs
  * @property {number} [timeout] Override the timeout for this navigation command.
+ */
+/**
+ * @typedef {object} BrowserPathWaitArgs
+ * @property {number} [timeout] Override the timeout for this path wait.
  */
 
 /** Generic browser session wrapper around the configured driver. */
@@ -189,6 +194,23 @@ export default class Browser {
   /** @returns {Promise<string>} */
   async getCurrentUrl() {
     return await this.getDriverAdapter().getCurrentUrl()
+  }
+
+  /**
+   * Waits until the current URL pathname exactly matches the expected path.
+   * @param {string} expectedPath
+   * @param {BrowserPathWaitArgs} [args]
+   * @returns {Promise<void>}
+   */
+  async waitForPath(expectedPath, args = {}) {
+    await waitFor({timeout: this.getCommandTimeout(args.timeout)}, async () => {
+      const currentUrl = await this.getCurrentUrl()
+      const currentPath = new URL(currentUrl).pathname
+
+      if (currentPath !== expectedPath) {
+        throw new Error(`Timed out waiting for path ${expectedPath}. Current URL: ${currentUrl}`)
+      }
+    })
   }
 
   /**
