@@ -38,6 +38,21 @@ describe("Browser", () => {
     expect(visitedPaths).toEqual(["https://example.com"])
   })
 
+  it("waits for the current URL pathname", async () => {
+    const browser = new Browser()
+    const urls = [
+      "https://example.com/invoices/1/edit?token=abc",
+      "https://example.com/invoices/1?token=abc"
+    ]
+
+    browser.driverAdapter = /** @type {any} */ ({
+      getCurrentUrl: async () => urls.shift() || "https://example.com/invoices/1?token=abc",
+      getTimeouts: () => 500
+    })
+
+    await browser.waitForPath("/invoices/1")
+  })
+
   it("deletes all cookies through the driver adapter", async () => {
     const browser = new Browser()
     let deleteAllCookiesCalls = 0
