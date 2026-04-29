@@ -149,6 +149,34 @@ function isElementNotFoundError(error) {
 }
 
 /**
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+function isElementLookupTimeoutError(error) {
+  let currentError = error
+
+  while (currentError) {
+    if (currentError instanceof SeleniumError.TimeoutError) return true
+
+    if (!(currentError instanceof Error) || !("cause" in currentError)) {
+      return false
+    }
+
+    currentError = currentError.cause
+  }
+
+  return false
+}
+
+/**
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+function isElementUnavailableForScrollError(error) {
+  return isElementNotFoundError(error) || isElementLookupTimeoutError(error)
+}
+
+/**
  * Base driver using selenium-webdriver sessions.
  */
 export default class WebDriverDriver {
@@ -650,7 +678,7 @@ export default class WebDriverDriver {
     try {
       return await this._findElement(elementOrIdentifier, args)
     } catch (error) {
-      if (!isElementNotFoundError(error) || this.hasExplicitVisibleScrollLookup(elementOrIdentifier, args)) {
+      if (!isElementUnavailableForScrollError(error) || this.hasExplicitVisibleScrollLookup(elementOrIdentifier, args)) {
         throw error
       }
 

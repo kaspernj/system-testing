@@ -663,6 +663,36 @@ describe("WebDriverDriver interact", () => {
     expect(performSpy).toHaveBeenCalled()
   })
 
+  it("falls back to rendered scroll targets when the default visible lookup times out", async () => {
+    const renderedElement = {isDisplayed: async () => false}
+    const performSpy = jasmine.createSpy("perform").and.resolveTo(undefined)
+    const moveSpy = jasmine.createSpy("move").and.returnValue({perform: performSpy})
+    const executeScriptSpy = jasmine.createSpy("executeScript").and.resolveTo(true)
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver.setWebDriver(/** @type {any} */ ({
+      actions: jasmine.createSpy("actions").and.returnValue({move: moveSpy}),
+      executeScript: executeScriptSpy,
+      findElements: jasmine.createSpy("findElements").and.resolveTo([renderedElement]),
+      wait: jasmine.createSpy("wait").and.callFake(async (callback) => {
+        await callback()
+        throw new SeleniumError.TimeoutError("visible lookup timed out")
+      })
+    }))
+
+    await driver.scrollIntoView("[data-testid='project-environment-agent-submit']")
+
+    expect(executeScriptSpy).toHaveBeenCalledWith(jasmine.any(String), renderedElement)
+    expect(moveSpy).toHaveBeenCalledWith({origin: renderedElement})
+    expect(performSpy).toHaveBeenCalled()
+  })
+
   it("keeps rendered scroll fallback ambiguous when multiple rendered targets match", async () => {
     const firstElement = {isDisplayed: async () => false}
     const secondElement = {isDisplayed: async () => false}
