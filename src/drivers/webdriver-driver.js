@@ -619,7 +619,17 @@ export default class WebDriverDriver {
    * @returns {Promise<void>}
    */
   async scrollIntoView(elementOrIdentifier, args) {
-    const element = await this._findElement(elementOrIdentifier, args)
+    let scrollTarget = elementOrIdentifier
+    let findArgs = args
+
+    if (typeof elementOrIdentifier == "object" && elementOrIdentifier !== null && "selector" in elementOrIdentifier) {
+      scrollTarget = {...elementOrIdentifier, visible: elementOrIdentifier.visible ?? null}
+    } else {
+      findArgs = {...args, visible: args?.visible ?? null}
+    }
+
+    const element = await this._findElement(scrollTarget, findArgs)
+
     await this.scrollElementIntoView(element)
   }
 
@@ -630,7 +640,8 @@ export default class WebDriverDriver {
    * @returns {Promise<void>}
    */
   async scrollTestIdIntoView(testID, args) {
-    const element = await this.findByTestID(testID, args)
+    const element = await this.findByTestID(testID, {...args, visible: args?.visible ?? null})
+
     await this.scrollElementIntoView(element)
   }
 

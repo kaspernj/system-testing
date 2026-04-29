@@ -591,16 +591,48 @@ describe("WebDriverDriver interact", () => {
       executeScript: executeScriptSpy
     }
 
-    driver._findElement = async () => /** @type {any} */ (element)
+    const findElementSpy = jasmine.createSpy("_findElement").and.resolveTo(element)
+
+    driver._findElement = /** @type {any} */ (findElementSpy)
     driver.setWebDriver(/** @type {any} */ (webDriver))
     driver.isElementInViewport = /** @type {any} */ (jasmine.createSpy("isElementInViewport").and.resolveTo(true))
 
     await driver.scrollIntoView({selector: "[data-testid='project-environment-agent-submit']"})
 
+    expect(findElementSpy).toHaveBeenCalledWith({selector: "[data-testid='project-environment-agent-submit']", visible: null}, undefined)
     expect(webDriver.actions).toHaveBeenCalledWith({async: true})
     expect(moveSpy).toHaveBeenCalledWith({origin: element})
     expect(performSpy).toHaveBeenCalled()
     expect(executeScriptSpy).not.toHaveBeenCalled()
+  })
+
+  it("finds test ID scroll targets without requiring pre-scroll visibility", async () => {
+    const element = {
+      getId: async () => "webdriver-element-id"
+    }
+    const performSpy = jasmine.createSpy("perform").and.resolveTo(undefined)
+    const moveSpy = jasmine.createSpy("move").and.returnValue({perform: performSpy})
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const webDriver = {
+      actions: jasmine.createSpy("actions").and.returnValue({move: moveSpy})
+    }
+    const findByTestIDSpy = jasmine.createSpy("findByTestID").and.resolveTo(element)
+
+    driver.findByTestID = /** @type {any} */ (findByTestIDSpy)
+    driver.setWebDriver(/** @type {any} */ (webDriver))
+
+    await driver.scrollTestIdIntoView("project-environment-agent-submit")
+
+    expect(findByTestIDSpy).toHaveBeenCalledWith("project-environment-agent-submit", {visible: null})
+    expect(webDriver.actions).toHaveBeenCalledWith({async: true})
+    expect(moveSpy).toHaveBeenCalledWith({origin: element})
+    expect(performSpy).toHaveBeenCalled()
   })
 
   it("filters the known Chrome password-not-in-form warning from browser logs", async () => {
