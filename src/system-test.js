@@ -25,6 +25,9 @@ import Browser from "./browser.js"
  * @property {SystemTestDriverConfig} [driver] Driver configuration.
  */
 /**
+ * @typedef {SystemTestArgs & {reinitializeAfterFailure?: boolean}} SystemTestRunArgs
+ */
+/**
  * @typedef {object} SystemTestDriverConfig
  * @property {"selenium"|"appium"} [type] Driver implementation to use.
  * @property {Record<string, any>} [options] Driver-specific options.
@@ -148,19 +151,20 @@ export default class SystemTest extends Browser {
   /**
    * Runs a system test
    * @overload
-   * @param {SystemTestArgs} args
+   * @param {SystemTestRunArgs} args
    * @param {function(SystemTest): Promise<void>} callback
    * @returns {Promise<void>}
    */
   /**
    * Runs a system test
-   * @param {SystemTestArgs | function(SystemTest): Promise<void>} [args]
+   * @param {SystemTestRunArgs | function(SystemTest): Promise<void>} [args]
    * @param {function(SystemTest): Promise<void>} [callback]
    * @returns {Promise<void>}
    */
   static async run(args, callback) {
     const resolvedCallback = typeof args === "function" ? args : callback
-    const systemTest = this.current(typeof args === "function" ? {} : args)
+    const {reinitializeAfterFailure = true, ...systemTestArgs} = /** @type {SystemTestRunArgs} */ (typeof args === "function" ? {} : args || {})
+    const systemTest = this.current(systemTestArgs)
 
     if (!resolvedCallback) {
       throw new Error("SystemTest.run requires a callback")
@@ -234,10 +238,30 @@ export default class SystemTest extends Browser {
         console.error("System test teardown failed after test failure", teardownError)
       }
 
+      if (reinitializeAfterFailure) {
+        try {
+          systemTest.debugLog("Run failed - reinitialize SystemTest")
+          await systemTest.reinitialize()
+          systemTest.debugLog("Reinitialized SystemTest after failed run")
+        } catch (error) {
+          console.error("System test reinitialize failed after test failure", error)
+        }
+      }
+
       throw runError
     }
 
     if (teardownError) {
+      if (reinitializeAfterFailure) {
+        try {
+          systemTest.debugLog("Teardown failed - reinitialize SystemTest")
+          await systemTest.reinitialize()
+          systemTest.debugLog("Reinitialized SystemTest after failed teardown")
+        } catch (error) {
+          console.error("System test reinitialize failed after teardown failure", error)
+        }
+      }
+
       throw teardownError
     }
   }

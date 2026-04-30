@@ -591,15 +591,146 @@ describe("WebDriverDriver interact", () => {
       executeScript: executeScriptSpy
     }
 
-    driver._findElement = async () => /** @type {any} */ (element)
+    const findElementSpy = jasmine.createSpy("_findElement").and.resolveTo(element)
+
+    driver._findElement = /** @type {any} */ (findElementSpy)
     driver.setWebDriver(/** @type {any} */ (webDriver))
     driver.isElementInViewport = /** @type {any} */ (jasmine.createSpy("isElementInViewport").and.resolveTo(true))
 
     await driver.scrollIntoView({selector: "[data-testid='project-environment-agent-submit']"})
 
+    expect(findElementSpy).toHaveBeenCalledWith({selector: "[data-testid='project-environment-agent-submit']"}, undefined)
     expect(webDriver.actions).toHaveBeenCalledWith({async: true})
     expect(moveSpy).toHaveBeenCalledWith({origin: element})
     expect(performSpy).toHaveBeenCalled()
+    expect(executeScriptSpy).not.toHaveBeenCalled()
+  })
+
+  it("finds test ID scroll targets with the default visible lookup", async () => {
+    const element = {
+      getId: async () => "webdriver-element-id"
+    }
+    const performSpy = jasmine.createSpy("perform").and.resolveTo(undefined)
+    const moveSpy = jasmine.createSpy("move").and.returnValue({perform: performSpy})
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const webDriver = {
+      actions: jasmine.createSpy("actions").and.returnValue({move: moveSpy})
+    }
+    const findScrollTargetSpy = jasmine.createSpy("findScrollTarget").and.resolveTo(element)
+
+    driver.findScrollTarget = /** @type {any} */ (findScrollTargetSpy)
+    driver.setWebDriver(/** @type {any} */ (webDriver))
+
+    await driver.scrollTestIdIntoView("project-environment-agent-submit", {timeout: 123})
+
+    expect(findScrollTargetSpy).toHaveBeenCalledWith("[data-testid='project-environment-agent-submit']", {timeout: 123})
+    expect(webDriver.actions).toHaveBeenCalledWith({async: true})
+    expect(moveSpy).toHaveBeenCalledWith({origin: element})
+    expect(performSpy).toHaveBeenCalled()
+  })
+
+  it("falls back to rendered scroll targets without accepting hidden zero-size elements", async () => {
+    const hiddenElement = {isDisplayed: async () => false}
+    const renderedElement = {isDisplayed: async () => false}
+    const performSpy = jasmine.createSpy("perform").and.resolveTo(undefined)
+    const moveSpy = jasmine.createSpy("move").and.returnValue({perform: performSpy})
+    const executeScriptSpy = jasmine.createSpy("executeScript").and.callFake(async (_script, element) => element === renderedElement)
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver.setWebDriver(/** @type {any} */ ({
+      actions: jasmine.createSpy("actions").and.returnValue({move: moveSpy}),
+      executeScript: executeScriptSpy,
+      findElements: jasmine.createSpy("findElements").and.resolveTo([hiddenElement, renderedElement])
+    }))
+
+    await driver.scrollIntoView("[data-testid='project-environment-agent-submit']", {timeout: 0})
+
+    expect(executeScriptSpy).toHaveBeenCalledWith(jasmine.any(String), hiddenElement)
+    expect(executeScriptSpy).toHaveBeenCalledWith(jasmine.any(String), renderedElement)
+    expect(moveSpy).toHaveBeenCalledWith({origin: renderedElement})
+    expect(performSpy).toHaveBeenCalled()
+  })
+
+  it("falls back to rendered scroll targets when the default visible lookup times out", async () => {
+    const renderedElement = {isDisplayed: async () => false}
+    const performSpy = jasmine.createSpy("perform").and.resolveTo(undefined)
+    const moveSpy = jasmine.createSpy("move").and.returnValue({perform: performSpy})
+    const executeScriptSpy = jasmine.createSpy("executeScript").and.resolveTo(true)
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver.setWebDriver(/** @type {any} */ ({
+      actions: jasmine.createSpy("actions").and.returnValue({move: moveSpy}),
+      executeScript: executeScriptSpy,
+      findElements: jasmine.createSpy("findElements").and.resolveTo([renderedElement]),
+      wait: jasmine.createSpy("wait").and.callFake(async (callback) => {
+        await callback()
+        throw new SeleniumError.TimeoutError("visible lookup timed out")
+      })
+    }))
+
+    await driver.scrollIntoView("[data-testid='project-environment-agent-submit']")
+
+    expect(executeScriptSpy).toHaveBeenCalledWith(jasmine.any(String), renderedElement)
+    expect(moveSpy).toHaveBeenCalledWith({origin: renderedElement})
+    expect(performSpy).toHaveBeenCalled()
+  })
+
+  it("keeps rendered scroll fallback ambiguous when multiple rendered targets match", async () => {
+    const firstElement = {isDisplayed: async () => false}
+    const secondElement = {isDisplayed: async () => false}
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver.setWebDriver(/** @type {any} */ ({
+      executeScript: jasmine.createSpy("executeScript").and.resolveTo(true),
+      findElements: jasmine.createSpy("findElements").and.resolveTo([firstElement, secondElement])
+    }))
+
+    await expectAsync(driver.scrollIntoView("[data-testid='project-environment-agent-submit']", {timeout: 0}))
+      .toBeRejectedWithError(/More than 1 rendered elements \(2\) was found by CSS/)
+  })
+
+  it("honors explicit visible scroll lookups without rendered fallback", async () => {
+    const hiddenElement = {isDisplayed: async () => false}
+    const executeScriptSpy = jasmine.createSpy("executeScript").and.resolveTo(true)
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver.setWebDriver(/** @type {any} */ ({
+      executeScript: executeScriptSpy,
+      findElements: jasmine.createSpy("findElements").and.resolveTo([hiddenElement])
+    }))
+
+    await expectAsync(driver.scrollIntoView("[data-testid='project-environment-agent-submit']", {timeout: 0, visible: true}))
+      .toBeRejectedWithError(/Element couldn't be found/)
     expect(executeScriptSpy).not.toHaveBeenCalled()
   })
 

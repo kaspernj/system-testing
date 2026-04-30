@@ -120,6 +120,63 @@ class ElementNotFoundError extends Error { }
 const {WebDriverError} = SeleniumError
 
 /**
+ * @param {Record<string, any> | undefined} args
+ * @param {string} key
+ * @returns {boolean}
+ */
+function hasOwnArg(args, key) {
+  return Boolean(args && Object.prototype.hasOwnProperty.call(args, key))
+}
+
+/**
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+function isElementNotFoundError(error) {
+  let currentError = error
+
+  while (currentError) {
+    if (currentError instanceof ElementNotFoundError) return true
+
+    if (!(currentError instanceof Error) || !("cause" in currentError)) {
+      return false
+    }
+
+    currentError = currentError.cause
+  }
+
+  return false
+}
+
+/**
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+function isElementLookupTimeoutError(error) {
+  let currentError = error
+
+  while (currentError) {
+    if (currentError instanceof SeleniumError.TimeoutError) return true
+
+    if (!(currentError instanceof Error) || !("cause" in currentError)) {
+      return false
+    }
+
+    currentError = currentError.cause
+  }
+
+  return false
+}
+
+/**
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+function isElementUnavailableForScrollError(error) {
+  return isElementNotFoundError(error) || isElementLookupTimeoutError(error)
+}
+
+/**
  * Base driver using selenium-webdriver sessions.
  */
 export default class WebDriverDriver {
@@ -613,13 +670,120 @@ export default class WebDriverDriver {
   }
 
   /**
+   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs & {withFallback?: boolean})} elementOrIdentifier
+   * @param {FindArgs} [args]
+   * @returns {Promise<import("selenium-webdriver").WebElement>}
+   */
+  async findScrollTarget(elementOrIdentifier, args) {
+    try {
+      return await this._findElement(elementOrIdentifier, args)
+    } catch (error) {
+      if (!isElementUnavailableForScrollError(error) || this.hasExplicitVisibleScrollLookup(elementOrIdentifier, args)) {
+        throw error
+      }
+
+      return await this.findRenderedScrollTarget(elementOrIdentifier, args, error)
+    }
+  }
+
+  /**
+   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs & {withFallback?: boolean})} elementOrIdentifier
+   * @param {FindArgs} [args]
+   * @returns {boolean}
+   */
+  hasExplicitVisibleScrollLookup(elementOrIdentifier, args) {
+    if (hasOwnArg(args, "visible")) return true
+
+    return Boolean(
+      typeof elementOrIdentifier == "object" &&
+      elementOrIdentifier !== null &&
+      "selector" in elementOrIdentifier &&
+      hasOwnArg(elementOrIdentifier, "visible")
+    )
+  }
+
+  /**
+   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs & {withFallback?: boolean})} elementOrIdentifier
+   * @param {FindArgs | undefined} args
+   * @param {unknown} originalError
+   * @returns {Promise<import("selenium-webdriver").WebElement>}
+   */
+  async findRenderedScrollTarget(elementOrIdentifier, args, originalError) {
+    const selectorAndArgs = this.getSelectorScrollLookupArgs(elementOrIdentifier, args)
+
+    if (!selectorAndArgs) throw originalError
+
+    const {selector, findArgs} = selectorAndArgs
+    const renderedElements = []
+    const foundElements = await this.all(selector, {...findArgs, scrollTo: false, timeout: 0, visible: null})
+
+    for (const element of foundElements) {
+      if (await this.isRenderedScrollTarget(element)) {
+        renderedElements.push(element)
+      }
+    }
+
+    if (renderedElements.length === 1) return renderedElements[0]
+
+    if (renderedElements.length > 1) {
+      throw new Error(`More than 1 rendered elements (${renderedElements.length}) was found by CSS: ${this.getSelector(selector)}`)
+    }
+
+    throw originalError
+  }
+
+  /**
+   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs & {withFallback?: boolean})} elementOrIdentifier
+   * @param {FindArgs} [args]
+   * @returns {{selector: string, findArgs: FindArgs} | undefined}
+   */
+  getSelectorScrollLookupArgs(elementOrIdentifier, args) {
+    if (typeof elementOrIdentifier == "string") {
+      return {selector: elementOrIdentifier, findArgs: args || {}}
+    }
+
+    if (typeof elementOrIdentifier == "object" && elementOrIdentifier !== null && "selector" in elementOrIdentifier) {
+      const {selector, ...restArgs} = elementOrIdentifier
+
+      delete restArgs.withFallback
+
+      return {selector, findArgs: restArgs}
+    }
+
+    return undefined
+  }
+
+  /**
+   * @param {import("selenium-webdriver").WebElement} element
+   * @returns {Promise<boolean>}
+   */
+  async isRenderedScrollTarget(element) {
+    return Boolean(await this.getWebDriver().executeScript(`
+      const element = arguments[0]
+      if (!(element instanceof Element)) return false
+
+      for (let current = element; current; current = current.parentElement) {
+        const style = window.getComputedStyle(current)
+        if (current.hidden) return false
+        if (current.getAttribute("aria-hidden") === "true") return false
+        if (style.display === "none") return false
+        if (style.visibility === "hidden" || style.visibility === "collapse") return false
+        if (style.opacity === "0") return false
+      }
+
+      return Array.from(element.getClientRects()).some((rect) => rect.width > 0 && rect.height > 0)
+    `, element))
+  }
+
+  /**
    * Scrolls an element into view.
    * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs & {withFallback?: boolean})} elementOrIdentifier
    * @param {FindArgs} [args]
    * @returns {Promise<void>}
    */
   async scrollIntoView(elementOrIdentifier, args) {
-    const element = await this._findElement(elementOrIdentifier, args)
+    const element = await this.findScrollTarget(elementOrIdentifier, args)
+
     await this.scrollElementIntoView(element)
   }
 
@@ -630,7 +794,8 @@ export default class WebDriverDriver {
    * @returns {Promise<void>}
    */
   async scrollTestIdIntoView(testID, args) {
-    const element = await this.findByTestID(testID, args)
+    const element = await this.findScrollTarget(`[data-testid='${testID}']`, args)
+
     await this.scrollElementIntoView(element)
   }
 
