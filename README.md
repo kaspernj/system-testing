@@ -449,6 +449,14 @@ await systemTest.reinitialize()
 
 This tears down the browser, servers, and sockets, then starts them again so subsequent steps run against a fresh app instance.
 
+`SystemTest.run(...)` does this automatically after a failed callback or teardown by default. Disable it only for tests that intentionally inspect the broken session after failure:
+
+```js
+await SystemTest.run({reinitializeAfterFailure: false}, async (systemTest) => {
+  await systemTest.findByTestID("brokenState")
+})
+```
+
 ## Dummy Expo app
 
 A ready-to-run Expo Router dummy app that uses `system-testing` lives in `spec/dummy`.
