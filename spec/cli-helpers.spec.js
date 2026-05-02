@@ -81,4 +81,44 @@ describe("cli helpers", () => {
   it("rejects invalid timeout flags", () => {
     expect(() => resolveBrowserCommand({find: ".card", timeout: "soon"})).toThrowError("Invalid timeout flag: soon")
   })
+
+  it("threads executeScript flags through the generic command path", () => {
+    expect(resolveBrowserCommand({
+      arg: ["one", "two"],
+      command: "executeScript",
+      script: "return arguments[0] + arguments[1]"
+    })).toEqual({
+      args: {
+        args: ["one", "two"],
+        script: "return arguments[0] + arguments[1]"
+      },
+      command: "executeScript"
+    })
+  })
+
+  it("threads addCookie flags through the generic command path without colliding with the daemon --name", () => {
+    // `--name` is reserved at the CLI level for the browser daemon being
+    // routed to, so cookie commands use the `cookie-` prefix instead.
+    expect(resolveBrowserCommand({
+      command: "addCookie",
+      "cookie-domain": "127.0.0.1",
+      "cookie-http-only": true,
+      "cookie-name": "tensorbuzz_auth",
+      "cookie-path": "/",
+      "cookie-same-site": "Lax",
+      "cookie-secure": false,
+      "cookie-value": "encrypted-cookie-value"
+    })).toEqual({
+      args: {
+        domain: "127.0.0.1",
+        httpOnly: true,
+        name: "tensorbuzz_auth",
+        path: "/",
+        sameSite: "Lax",
+        secure: false,
+        value: "encrypted-cookie-value"
+      },
+      command: "addCookie"
+    })
+  })
 })

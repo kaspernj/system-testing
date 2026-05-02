@@ -222,6 +222,18 @@ export function resolveBrowserCommand(flags) {
     if (flags["scroll-to"] !== undefined) args.scrollTo = flags["scroll-to"]
     if (flags.visible !== undefined) args.visible = flags.visible
     if (flags["use-base-selector"] !== undefined) args.useBaseSelector = flags["use-base-selector"]
+    if (flags.script) args.script = flags.script
+    // Cookie flags use a `cookie-` prefix so the cookie name does not
+    // collide with the daemon-level `--name <my-browser>` flag the CLI
+    // already consumes for routing.
+    if (flags["cookie-name"]) args.name = flags["cookie-name"]
+    if (flags["cookie-value"] !== undefined) args.value = flags["cookie-value"]
+    if (flags["cookie-domain"]) args.domain = flags["cookie-domain"]
+    if (flags["cookie-path"]) args.path = flags["cookie-path"]
+    if (flags["cookie-secure"] !== undefined) args.secure = flags["cookie-secure"]
+    if (flags["cookie-http-only"] !== undefined) args.httpOnly = flags["cookie-http-only"]
+    if (flags["cookie-expiry"] !== undefined) args.expiry = flags["cookie-expiry"]
+    if (flags["cookie-same-site"]) args.sameSite = flags["cookie-same-site"]
 
     return {args, command: flags.command}
   }

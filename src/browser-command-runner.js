@@ -178,6 +178,47 @@ export default class BrowserCommandRunner {
       return {ok: true}
     }
 
+    if (command === "executeScript") {
+      const script = commandArgs.script
+
+      if (typeof script !== "string" || script.length === 0) {
+        throw new Error("executeScript requires script")
+      }
+
+      const scriptArgs = Array.isArray(commandArgs.args) ? commandArgs.args : []
+      const result = await this.browser.executeScript(script, ...scriptArgs)
+
+      return {result}
+    }
+
+    if (command === "addCookie") {
+      const name = commandArgs.name
+
+      if (typeof name !== "string" || name.length === 0) {
+        throw new Error("addCookie requires name")
+      }
+
+      const value = commandArgs.value
+
+      if (typeof value !== "string") {
+        throw new Error("addCookie requires string value")
+      }
+
+      /** @type {{name: string, value: string, domain?: string, path?: string, secure?: boolean, httpOnly?: boolean, expiry?: number, sameSite?: "Strict" | "Lax" | "None"}} */
+      const cookie = {name, value}
+
+      if (typeof commandArgs.domain === "string" && commandArgs.domain.length > 0) cookie.domain = commandArgs.domain
+      if (typeof commandArgs.path === "string" && commandArgs.path.length > 0) cookie.path = commandArgs.path
+      if (commandArgs.secure !== undefined) cookie.secure = commandArgs.secure === true || commandArgs.secure === "true"
+      if (commandArgs.httpOnly !== undefined) cookie.httpOnly = commandArgs.httpOnly === true || commandArgs.httpOnly === "true"
+      if (commandArgs.expiry !== undefined) cookie.expiry = Number(commandArgs.expiry)
+      if (typeof commandArgs.sameSite === "string") cookie.sameSite = /** @type {"Strict" | "Lax" | "None"} */ (commandArgs.sameSite)
+
+      await this.browser.addCookie(cookie)
+
+      return {ok: true}
+    }
+
     if (command === "interact") {
       const selector = commandArgs.selector
       const methodName = commandArgs.methodName ?? commandArgs.method

@@ -14,6 +14,8 @@ function printHelp() {
   system-testing browser-command [--name my-browser] [--port 1991] --visit=https://example.com
   system-testing browser-command [--name my-browser] --find-by-test-id someID [--timeout 15]
   system-testing browser-command [--name my-browser] --take-screenshot
+  system-testing browser-command [--name my-browser] --command=executeScript --script='return document.title' [--arg ...]
+  system-testing browser-command [--name my-browser] --command=addCookie --cookie-name=auth --cookie-value=... [--cookie-domain=127.0.0.1] [--cookie-path=/]
 `)
 }
 

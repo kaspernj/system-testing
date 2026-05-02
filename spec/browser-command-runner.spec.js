@@ -146,4 +146,68 @@ describe("BrowserCommandRunner", () => {
 
     await expectAsync(runner.run("visit", {timeout: "invalid", url: "https://example.com"})).toBeRejectedWithError("Invalid timeout: invalid")
   })
+
+  it("forwards executeScript scripts and arguments to the browser and returns the resolved value", async () => {
+    const browser = {
+      executeScript: async (script, ...args) => {
+        browser.call = {args, script}
+        return "title-string"
+      }
+    }
+    const runner = new BrowserCommandRunner({browser: /** @type {any} */ (browser)})
+
+    const result = await runner.run("executeScript", {script: "return document.title", args: ["one", 2]})
+
+    expect(browser.call).toEqual({args: ["one", 2], script: "return document.title"})
+    expect(result).toEqual({result: "title-string"})
+  })
+
+  it("requires a non-empty script for executeScript", async () => {
+    const browser = {executeScript: async () => undefined}
+    const runner = new BrowserCommandRunner({browser: /** @type {any} */ (browser)})
+
+    await expectAsync(runner.run("executeScript", {})).toBeRejectedWithError("executeScript requires script")
+    await expectAsync(runner.run("executeScript", {script: ""})).toBeRejectedWithError("executeScript requires script")
+  })
+
+  it("normalizes addCookie payload fields and forwards them to the browser", async () => {
+    const browser = {
+      addCookie: async (cookie) => {
+        browser.call = cookie
+      }
+    }
+    const runner = new BrowserCommandRunner({browser: /** @type {any} */ (browser)})
+
+    const result = await runner.run("addCookie", {
+      domain: "127.0.0.1",
+      expiry: "1234567890",
+      httpOnly: "true",
+      name: "tensorbuzz_auth",
+      path: "/",
+      sameSite: "Lax",
+      secure: "false",
+      value: "encrypted-cookie-value"
+    })
+
+    expect(browser.call).toEqual({
+      domain: "127.0.0.1",
+      expiry: 1234567890,
+      httpOnly: true,
+      name: "tensorbuzz_auth",
+      path: "/",
+      sameSite: "Lax",
+      secure: false,
+      value: "encrypted-cookie-value"
+    })
+    expect(result).toEqual({ok: true})
+  })
+
+  it("requires name and value for addCookie", async () => {
+    const browser = {addCookie: async () => undefined}
+    const runner = new BrowserCommandRunner({browser: /** @type {any} */ (browser)})
+
+    await expectAsync(runner.run("addCookie", {value: "x"})).toBeRejectedWithError("addCookie requires name")
+    await expectAsync(runner.run("addCookie", {name: "auth"})).toBeRejectedWithError("addCookie requires string value")
+    await expectAsync(runner.run("addCookie", {name: "auth", value: 123})).toBeRejectedWithError("addCookie requires string value")
+  })
 })
