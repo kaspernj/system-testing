@@ -7,4 +7,10 @@ module.exports = defineConfig([
   {
     ignores: ['dist/*'],
   },
+  {
+    files: ['app/_layout.tsx'],
+    rules: {
+      'object-curly-spacing': ['error', 'never'],
+    },
+  },
 ]);
