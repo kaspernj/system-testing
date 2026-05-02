@@ -61,17 +61,38 @@ function cssAttributeValue(value) {
 }
 
 /**
- * Checks whether a browser-normalized CSS color contains the RGB triplet.
+ * Extracts the RGB channels from CSS `rgb(...)`/`rgba(...)` values or an RGB fragment.
+ * @param {string} value CSS color value or RGB fragment like `30, 41, 59`.
+ * @returns {[number, number, number] | undefined}
+ */
+function cssRgbChannels(value) {
+  const rgbMatch = value.match(/rgba?\(([^)]+)\)/)
+  const channelsValue = rgbMatch ? rgbMatch[1] : value
+  const channels = channelsValue
+    .replace(/\s*\/.*$/, "")
+    .split(/[,\s]+/)
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((channel) => Number(channel))
+
+  if (channels.length !== 3 || channels.some((channel) => !Number.isFinite(channel))) return undefined
+
+  return /** @type {[number, number, number]} */ (channels)
+}
+
+/**
+ * Checks whether a browser-normalized CSS color matches the RGB triplet.
  * @param {string} actualValue Browser-normalized CSS color.
  * @param {string} rgbFragment RGB fragment like `30, 41, 59`.
- * @returns {boolean} Whether the fragment appears.
+ * @returns {boolean} Whether the RGB channels match.
  */
-function cssValueContainsRgb(actualValue, rgbFragment) {
-  const spaceSeparatedRgb = rgbFragment.replace(/, /g, " ")
+function cssValueMatchesRgb(actualValue, rgbFragment) {
+  const actualChannels = cssRgbChannels(actualValue)
+  const expectedChannels = cssRgbChannels(rgbFragment)
 
-  return actualValue.includes(rgbFragment) ||
-    actualValue.includes(`rgb(${spaceSeparatedRgb}`) ||
-    actualValue.includes(`rgba(${spaceSeparatedRgb}`)
+  if (!actualChannels || !expectedChannels) return false
+
+  return actualChannels.every((actualChannel, index) => actualChannel === expectedChannels[index])
 }
 
 /** Generic browser session wrapper around the configured driver. */
@@ -395,7 +416,7 @@ export default class Browser {
    */
   async waitForTestIDText(testID, expectedText, args = {}) {
     await waitFor({timeout: this.getCommandTimeout(args.timeout)}, async () => {
-      const element = await this.findByTestID(testID)
+      const element = await this.findByTestID(testID, {timeout: 0})
       const actualText = await element.getText()
 
       if (!actualText.includes(expectedText)) {
@@ -413,7 +434,7 @@ export default class Browser {
    */
   async waitForTestIDTextExcludes(testID, excludedText, args = {}) {
     await waitFor({timeout: this.getCommandTimeout(args.timeout)}, async () => {
-      const element = await this.findByTestID(testID)
+      const element = await this.findByTestID(testID, {timeout: 0})
       const actualText = await element.getText()
 
       if (actualText.includes(excludedText)) {
@@ -435,10 +456,10 @@ export default class Browser {
     const element = await this.findByTestID(testID)
     const actualValue = await element.getCssValue(propertyName)
 
-    if (cssValueContainsRgb(actualValue, lightRgb)) {
+    if (cssValueMatchesRgb(actualValue, lightRgb)) {
       throw new Error(`Expected ${description} to avoid the light palette, got ${propertyName} ${actualValue}`)
     }
-    if (!cssValueContainsRgb(actualValue, expectedRgb)) {
+    if (!cssValueMatchesRgb(actualValue, expectedRgb)) {
       throw new Error(`Expected ${description} to include rgb(${expectedRgb}), got ${propertyName} ${actualValue}`)
     }
   }
