@@ -6,7 +6,7 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { SystemTestFocusedView } from '@/components/system-test-focused-view';
 import { SystemTestRootMarker } from '@/components/system-test-root-marker';
-import useSystemTestExpo from "system-testing/build/use-system-test-expo.js";
+import { useSystemTestExpo } from "system-testing/build/expo.js";
 
 export const unstable_settings = {
   anchor: '(tabs)',

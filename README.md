@@ -1,6 +1,6 @@
 # System testing
 
-Rails inspired system testing for Expo apps.
+Rails inspired system testing for browser, React Native, and Expo apps.
 
 ## Install
 
@@ -183,7 +183,7 @@ Useful browser methods:
 
 If you want app-level navigation instead of direct URL loads, keep `Browser` for the driver/session side and use one of the `useSystemTest*` hooks in the app so the communicator has something to talk to.
 
-`react` and `expo-router` are optional peer dependencies. Install them only in apps that import the React/Expo hook helpers; CLI/browser-daemon consumers should not need React just to use `system-testing`.
+`react` is an optional peer dependency. Install it only in apps that import the React hook helpers; CLI/browser-daemon consumers should not need React just to use `system-testing`. `expo-router` is not a package-level peer dependency. Install it only in Expo Router apps that import `system-testing/build/expo.js` or `system-testing/build/use-system-test-expo.js`.
 
 ### Browser daemon CLI
 
@@ -302,7 +302,7 @@ Minimal example:
 
 ```jsx
 import {Stack} from "expo-router"
-import useSystemTestExpo from "system-testing/build/use-system-test-expo.js"
+import {useSystemTestExpo} from "system-testing/build/expo.js"
 
 export default function RootLayout() {
   const {enabled, systemTestBrowserHelper} = useSystemTestExpo({
