@@ -1,3 +1,20 @@
+/**
+ * Parse a cookie boolean attribute coming in over the JSON command transport.
+ * The transport carries booleans either as native `true`/`false` or as the
+ * string forms `"true"`/`"false"`. Anything else is rejected so a typo like
+ * `--cookie-secure=TRUE` or `--cookie-secure=1` fails loudly instead of
+ * silently producing an insecure cookie.
+ * @param {string} fieldName
+ * @param {unknown} rawValue
+ * @returns {boolean}
+ */
+function parseCookieBoolean(fieldName, rawValue) {
+  if (rawValue === true || rawValue === "true") return true
+  if (rawValue === false || rawValue === "false") return false
+
+  throw new Error(`addCookie ${fieldName} must be true or false, got ${JSON.stringify(rawValue)}`)
+}
+
 /** Runs browser commands across CLI and WebSocket transports. */
 export default class BrowserCommandRunner {
   /**
@@ -175,6 +192,47 @@ export default class BrowserCommandRunner {
       }
 
       await this.browser.expectNoElement(commandArgs.selector, this.normalizeFindArgs(commandArgs))
+      return {ok: true}
+    }
+
+    if (command === "executeScript") {
+      const script = commandArgs.script
+
+      if (typeof script !== "string" || script.length === 0) {
+        throw new Error("executeScript requires script")
+      }
+
+      const scriptArgs = Array.isArray(commandArgs.args) ? commandArgs.args : []
+      const result = await this.browser.executeScript(script, ...scriptArgs)
+
+      return {result}
+    }
+
+    if (command === "addCookie") {
+      const name = commandArgs.name
+
+      if (typeof name !== "string" || name.length === 0) {
+        throw new Error("addCookie requires name")
+      }
+
+      const value = commandArgs.value
+
+      if (typeof value !== "string") {
+        throw new Error("addCookie requires string value")
+      }
+
+      /** @type {{name: string, value: string, domain?: string, path?: string, secure?: boolean, httpOnly?: boolean, expiry?: number, sameSite?: "Strict" | "Lax" | "None"}} */
+      const cookie = {name, value}
+
+      if (typeof commandArgs.domain === "string" && commandArgs.domain.length > 0) cookie.domain = commandArgs.domain
+      if (typeof commandArgs.path === "string" && commandArgs.path.length > 0) cookie.path = commandArgs.path
+      if (commandArgs.secure !== undefined) cookie.secure = parseCookieBoolean("secure", commandArgs.secure)
+      if (commandArgs.httpOnly !== undefined) cookie.httpOnly = parseCookieBoolean("httpOnly", commandArgs.httpOnly)
+      if (commandArgs.expiry !== undefined) cookie.expiry = Number(commandArgs.expiry)
+      if (typeof commandArgs.sameSite === "string") cookie.sameSite = /** @type {"Strict" | "Lax" | "None"} */ (commandArgs.sameSite)
+
+      await this.browser.addCookie(cookie)
+
       return {ok: true}
     }
 

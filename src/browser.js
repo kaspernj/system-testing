@@ -548,6 +548,51 @@ export default class Browser {
   }
 
   /**
+   * Add a cookie to the active driver session for the current document
+   * origin. Useful when an out-of-band login (curl, fetch, etc.) returned
+   * a `Set-Cookie` value and the test needs the browser to start
+   * authenticated without driving the sign-in UI.
+   *
+   * The driver must already be on a page whose origin/domain matches the
+   * cookie domain, otherwise Selenium will reject the call.
+   * @param {{name: string, value: string, domain?: string, path?: string, secure?: boolean, httpOnly?: boolean, expiry?: number, sameSite?: "Strict" | "Lax" | "None"}} cookie
+   * @returns {Promise<void>}
+   */
+  async addCookie(cookie) {
+    if (!cookie || typeof cookie.name !== "string" || cookie.name.length === 0) {
+      throw new Error("addCookie requires a non-empty `name`")
+    }
+
+    if (typeof cookie.value !== "string") {
+      throw new Error("addCookie requires a string `value`")
+    }
+
+    await this.getDriver().manage().addCookie(cookie)
+  }
+
+  /**
+   * Run an arbitrary script in the active browser session and return the
+   * resolved value. `script` is the function body executed in the browser
+   * (`new Function("...")`-style); `args` are forwarded as `arguments[i]`.
+   * Asynchronous scripts must `return` a Promise, which Selenium awaits.
+   *
+   * Useful for verification flows that need to call into application code
+   * (e.g. `fetch("/development/sign-in", {...})`) without going through the
+   * UI, or to read browser state the existing finder/interact commands
+   * don't expose.
+   * @param {string} script
+   * @param {...any} args
+   * @returns {Promise<any>}
+   */
+  async executeScript(script, ...args) {
+    if (typeof script !== "string" || script.length === 0) {
+      throw new Error("executeScript requires a non-empty `script` string")
+    }
+
+    return await this.getDriver().executeScript(script, ...args)
+  }
+
+  /**
    * @param {string} type
    * @param {string} path
    * @param {BrowserNavigationArgs} [args]
