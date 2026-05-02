@@ -210,4 +210,39 @@ describe("BrowserCommandRunner", () => {
     await expectAsync(runner.run("addCookie", {name: "auth"})).toBeRejectedWithError("addCookie requires string value")
     await expectAsync(runner.run("addCookie", {name: "auth", value: 123})).toBeRejectedWithError("addCookie requires string value")
   })
+
+  it("rejects malformed boolean attributes for addCookie instead of silently coercing them", async () => {
+    const browser = {
+      addCookie: async (cookie) => {
+        browser.call = cookie
+      }
+    }
+    const runner = new BrowserCommandRunner({browser: /** @type {any} */ (browser)})
+
+    // A typo like `TRUE` or `1` previously coerced silently to `false`,
+    // which would downgrade an intended secure/httpOnly cookie without
+    // warning. Both forms must fail loudly.
+    await expectAsync(runner.run("addCookie", {name: "auth", secure: "TRUE", value: "x"})).toBeRejectedWithError(/addCookie secure must be true or false/)
+    await expectAsync(runner.run("addCookie", {httpOnly: "1", name: "auth", value: "x"})).toBeRejectedWithError(/addCookie httpOnly must be true or false/)
+    await expectAsync(runner.run("addCookie", {name: "auth", secure: 1, value: "x"})).toBeRejectedWithError(/addCookie secure must be true or false/)
+    expect(browser.call).toBeUndefined()
+  })
+
+  it("accepts native and string boolean forms for addCookie", async () => {
+    const browser = {
+      addCookie: async (cookie) => {
+        browser.calls = browser.calls || []
+        browser.calls.push(cookie)
+      }
+    }
+    const runner = new BrowserCommandRunner({browser: /** @type {any} */ (browser)})
+
+    await runner.run("addCookie", {httpOnly: true, name: "auth", secure: false, value: "x"})
+    await runner.run("addCookie", {httpOnly: "false", name: "auth", secure: "true", value: "x"})
+
+    expect(browser.calls).toEqual([
+      {httpOnly: true, name: "auth", secure: false, value: "x"},
+      {httpOnly: false, name: "auth", secure: true, value: "x"}
+    ])
+  })
 })

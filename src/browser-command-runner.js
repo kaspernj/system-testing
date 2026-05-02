@@ -1,3 +1,20 @@
+/**
+ * Parse a cookie boolean attribute coming in over the JSON command transport.
+ * The transport carries booleans either as native `true`/`false` or as the
+ * string forms `"true"`/`"false"`. Anything else is rejected so a typo like
+ * `--cookie-secure=TRUE` or `--cookie-secure=1` fails loudly instead of
+ * silently producing an insecure cookie.
+ * @param {string} fieldName
+ * @param {unknown} rawValue
+ * @returns {boolean}
+ */
+function parseCookieBoolean(fieldName, rawValue) {
+  if (rawValue === true || rawValue === "true") return true
+  if (rawValue === false || rawValue === "false") return false
+
+  throw new Error(`addCookie ${fieldName} must be true or false, got ${JSON.stringify(rawValue)}`)
+}
+
 /** Runs browser commands across CLI and WebSocket transports. */
 export default class BrowserCommandRunner {
   /**
@@ -209,8 +226,8 @@ export default class BrowserCommandRunner {
 
       if (typeof commandArgs.domain === "string" && commandArgs.domain.length > 0) cookie.domain = commandArgs.domain
       if (typeof commandArgs.path === "string" && commandArgs.path.length > 0) cookie.path = commandArgs.path
-      if (commandArgs.secure !== undefined) cookie.secure = commandArgs.secure === true || commandArgs.secure === "true"
-      if (commandArgs.httpOnly !== undefined) cookie.httpOnly = commandArgs.httpOnly === true || commandArgs.httpOnly === "true"
+      if (commandArgs.secure !== undefined) cookie.secure = parseCookieBoolean("secure", commandArgs.secure)
+      if (commandArgs.httpOnly !== undefined) cookie.httpOnly = parseCookieBoolean("httpOnly", commandArgs.httpOnly)
       if (commandArgs.expiry !== undefined) cookie.expiry = Number(commandArgs.expiry)
       if (typeof commandArgs.sameSite === "string") cookie.sameSite = /** @type {"Strict" | "Lax" | "None"} */ (commandArgs.sameSite)
 
