@@ -53,6 +53,110 @@ describe("Browser", () => {
     await browser.waitForPath("/invoices/1")
   })
 
+  it("waits for exact and fragment URL assertions", async () => {
+    const browser = new Browser()
+    const urls = [
+      "https://example.com/invoices?filter=open",
+      "https://example.com/invoices?filter=closed",
+      "https://example.com/invoices?filter=closed"
+    ]
+
+    browser.driverAdapter = /** @type {any} */ ({
+      getCurrentUrl: async () => urls.shift() || "https://example.com/invoices?filter=closed",
+      getTimeouts: () => 500
+    })
+
+    await browser.waitForUrlContains("filter=closed")
+    await browser.waitForUrlExcludes("filter=open")
+    await browser.waitForCurrentUrl("https://example.com/invoices?filter=closed")
+  })
+
+  it("waits for text on elements by test id", async () => {
+    const browser = new Browser()
+    const findArgs = []
+    const texts = [
+      "Loading",
+      "Ready",
+      "Removing stale text",
+      "Fresh text"
+    ]
+
+    browser.driverAdapter = /** @type {any} */ ({
+      findByTestID: async (_testID, args) => {
+        findArgs.push(args)
+
+        return {
+          getText: async () => texts.shift() || "Fresh text"
+        }
+      },
+      getTimeouts: () => 500
+    })
+
+    await browser.waitForTestIDText("statusText", "Ready")
+    await browser.waitForTestIDTextExcludes("statusText", "stale")
+
+    expect(findArgs).toEqual([
+      {timeout: 0},
+      {timeout: 0},
+      {timeout: 0},
+      {timeout: 0}
+    ])
+  })
+
+  it("asserts CSS colors by test id", async () => {
+    const browser = new Browser()
+
+    browser.driverAdapter = /** @type {any} */ ({
+      findByTestID: async () => ({
+        getCssValue: async () => "rgb(30 41 59 / 1)"
+      })
+    })
+
+    await browser.expectTestIDCssColor("panel", "background-color", "30, 41, 59", "255, 255, 255", "panel")
+  })
+
+  it("rejects CSS color substring matches by test id", async () => {
+    const browser = new Browser()
+
+    browser.driverAdapter = /** @type {any} */ ({
+      findByTestID: async () => ({
+        getCssValue: async () => "rgb(130, 41, 59)"
+      })
+    })
+
+    await expectAsync(
+      browser.expectTestIDCssColor("panel", "background-color", "30, 41, 59", "255, 255, 255", "panel")
+    ).toBeRejectedWithError("Expected panel to include rgb(30, 41, 59), got background-color rgb(130, 41, 59)")
+  })
+
+  it("replaces input values by test id through shared retryable interactions", async () => {
+    const browser = new Browser()
+    const calls = []
+
+    browser.interact = /** @type {any} */ (async (...args) => {
+      calls.push(args)
+    })
+
+    await browser.replaceTestIDInputValue("name\"Input", "Next value", {timeout: 250})
+
+    expect(calls.length).toEqual(2)
+    expect(calls[0]).toEqual([
+      {
+        selector: "[data-testid=\"name\\\"Input\"]",
+        timeout: 250,
+        withFallback: true
+      },
+      "click"
+    ])
+    expect(calls[1][0]).toEqual({
+      selector: "[data-testid=\"name\\\"Input\"]",
+      timeout: 250,
+      withFallback: true
+    })
+    expect(calls[1][1]).toEqual("sendKeys")
+    expect(calls[1][4]).toEqual("Next value")
+  })
+
   it("deletes all cookies through the driver adapter", async () => {
     const browser = new Browser()
     let deleteAllCookiesCalls = 0
