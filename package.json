@@ -62,14 +62,10 @@
     "ya-use-event-emitter": "^0.1.2"
   },
   "peerDependencies": {
-    "expo-router": ">= 1.0.0",
     "react": ">= 18.3.0",
     "selenium-webdriver": ">= 4.34.0"
   },
   "peerDependenciesMeta": {
-    "expo-router": {
-      "optional": true
-    },
     "react": {
       "optional": true
     }
