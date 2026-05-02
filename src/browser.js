@@ -29,6 +29,50 @@ import AppiumDriver from "./drivers/appium-driver.js"
  * @typedef {object} BrowserPathWaitArgs
  * @property {number} [timeout] Override the timeout for this path wait.
  */
+/**
+ * @typedef {object} BrowserTextWaitArgs
+ * @property {number} [timeout] Override the timeout for this text wait.
+ */
+/**
+ * @typedef {object} BrowserCurrentUrlWaitArgs
+ * @property {number} [timeout] Override the timeout for this URL wait.
+ */
+/**
+ * @typedef {object} BrowserTestIDInputArgs
+ * @property {number} [timeout] Override timeout for the input lookup.
+ */
+
+/**
+ * Builds a data-testid CSS selector.
+ * @param {string} testID Raw value from a `data-testid` attribute.
+ * @returns {string} CSS attribute selector.
+ */
+function testIdSelector(testID) {
+  return `[data-testid="${cssAttributeValue(testID)}"]`
+}
+
+/**
+ * Escapes a value for use inside a double-quoted CSS attribute selector.
+ * @param {string | number} value Raw attribute value.
+ * @returns {string} Escaped selector value.
+ */
+function cssAttributeValue(value) {
+  return String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"")
+}
+
+/**
+ * Checks whether a browser-normalized CSS color contains the RGB triplet.
+ * @param {string} actualValue Browser-normalized CSS color.
+ * @param {string} rgbFragment RGB fragment like `30, 41, 59`.
+ * @returns {boolean} Whether the fragment appears.
+ */
+function cssValueContainsRgb(actualValue, rgbFragment) {
+  const spaceSeparatedRgb = rgbFragment.replace(/, /g, " ")
+
+  return actualValue.includes(rgbFragment) ||
+    actualValue.includes(`rgb(${spaceSeparatedRgb}`) ||
+    actualValue.includes(`rgba(${spaceSeparatedRgb}`)
+}
 
 /** Generic browser session wrapper around the configured driver. */
 export default class Browser {
@@ -214,6 +258,54 @@ export default class Browser {
   }
 
   /**
+   * Waits until the current URL exactly matches the expected URL.
+   * @param {string} expectedUrl Exact URL expected.
+   * @param {BrowserCurrentUrlWaitArgs} [args] Optional timeout.
+   * @returns {Promise<void>}
+   */
+  async waitForCurrentUrl(expectedUrl, args = {}) {
+    await waitFor({timeout: this.getCommandTimeout(args.timeout)}, async () => {
+      const currentUrl = await this.getCurrentUrl()
+
+      if (currentUrl !== expectedUrl) {
+        throw new Error(`Timed out waiting for URL ${expectedUrl}. Current URL: ${currentUrl}`)
+      }
+    })
+  }
+
+  /**
+   * Waits until the current URL contains a fragment.
+   * @param {string} expectedFragment Fragment that should appear.
+   * @param {BrowserCurrentUrlWaitArgs} [args] Optional timeout.
+   * @returns {Promise<void>}
+   */
+  async waitForUrlContains(expectedFragment, args = {}) {
+    await waitFor({timeout: this.getCommandTimeout(args.timeout)}, async () => {
+      const currentUrl = await this.getCurrentUrl()
+
+      if (!currentUrl.includes(expectedFragment)) {
+        throw new Error(`Timed out waiting for URL to include ${expectedFragment}. Current URL: ${currentUrl}`)
+      }
+    })
+  }
+
+  /**
+   * Waits until the current URL does not contain a fragment.
+   * @param {string} unexpectedFragment Fragment that should disappear.
+   * @param {BrowserCurrentUrlWaitArgs} [args] Optional timeout.
+   * @returns {Promise<void>}
+   */
+  async waitForUrlExcludes(unexpectedFragment, args = {}) {
+    await waitFor({timeout: this.getCommandTimeout(args.timeout)}, async () => {
+      const currentUrl = await this.getCurrentUrl()
+
+      if (currentUrl.includes(unexpectedFragment)) {
+        throw new Error(`Timed out waiting for URL to exclude ${unexpectedFragment}. Current URL: ${currentUrl}`)
+      }
+    })
+  }
+
+  /**
    * @param {string} selector
    * @param {import("./system-test.js").FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement[]>}
@@ -277,6 +369,78 @@ export default class Browser {
   async clearAndSendKeys(elementOrIdentifier, nextValue) {
     await this.interact(elementOrIdentifier, "click")
     await this.interact(elementOrIdentifier, "sendKeys", Key.chord(Key.CONTROL, "a"), Key.BACK_SPACE, nextValue)
+  }
+
+  /**
+   * Replaces an input-like element's value by test id.
+   * @param {string} testID Field `data-testid` to target.
+   * @param {string} nextValue Text to leave in the field.
+   * @param {BrowserTestIDInputArgs} [args] Optional lookup timeout.
+   * @returns {Promise<void>}
+   */
+  async replaceTestIDInputValue(testID, nextValue, args = {}) {
+    await this.clearAndSendKeys({
+      selector: testIdSelector(testID),
+      timeout: args.timeout,
+      withFallback: true
+    }, nextValue)
+  }
+
+  /**
+   * Waits until a test id contains expected visible text.
+   * @param {string} testID Element `data-testid` to inspect.
+   * @param {string} expectedText Fragment that must appear in the element text.
+   * @param {BrowserTextWaitArgs} [args] Optional timeout.
+   * @returns {Promise<void>}
+   */
+  async waitForTestIDText(testID, expectedText, args = {}) {
+    await waitFor({timeout: this.getCommandTimeout(args.timeout)}, async () => {
+      const element = await this.findByTestID(testID)
+      const actualText = await element.getText()
+
+      if (!actualText.includes(expectedText)) {
+        throw new Error(`Timed out waiting for text ${expectedText}. Last text was ${actualText}`)
+      }
+    })
+  }
+
+  /**
+   * Waits until a test id no longer contains excluded visible text.
+   * @param {string} testID Element `data-testid` to inspect.
+   * @param {string} excludedText Fragment that should disappear from the element text.
+   * @param {BrowserTextWaitArgs} [args] Optional timeout.
+   * @returns {Promise<void>}
+   */
+  async waitForTestIDTextExcludes(testID, excludedText, args = {}) {
+    await waitFor({timeout: this.getCommandTimeout(args.timeout)}, async () => {
+      const element = await this.findByTestID(testID)
+      const actualText = await element.getText()
+
+      if (actualText.includes(excludedText)) {
+        throw new Error(`Timed out waiting for text to exclude ${excludedText}. Last text was ${actualText}`)
+      }
+    })
+  }
+
+  /**
+   * Asserts a rendered element has a CSS color from the expected palette.
+   * @param {string} testID Element `data-testid` to inspect.
+   * @param {string} propertyName CSS property to read.
+   * @param {string} expectedRgb Expected RGB fragment.
+   * @param {string} lightRgb Disallowed RGB fragment.
+   * @param {string} description Human-readable element description.
+   * @returns {Promise<void>}
+   */
+  async expectTestIDCssColor(testID, propertyName, expectedRgb, lightRgb, description) {
+    const element = await this.findByTestID(testID)
+    const actualValue = await element.getCssValue(propertyName)
+
+    if (cssValueContainsRgb(actualValue, lightRgb)) {
+      throw new Error(`Expected ${description} to avoid the light palette, got ${propertyName} ${actualValue}`)
+    }
+    if (!cssValueContainsRgb(actualValue, expectedRgb)) {
+      throw new Error(`Expected ${description} to include rgb(${expectedRgb}), got ${propertyName} ${actualValue}`)
+    }
   }
 
   /**
