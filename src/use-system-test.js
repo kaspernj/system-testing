@@ -3,8 +3,12 @@ import useEventEmitter from "ya-use-event-emitter"
 import SystemTestBrowserHelper from "./system-test-browser-helper.js"
 import {useSystemTestShapeHook} from "./use-system-test-shape-hook.js"
 
+let autoDetectedSystemTestEnabled = false
+
 /** @returns {boolean} */
-function isSystemTestEnabled() {
+export function isSystemTestEnabled() {
+  if (autoDetectedSystemTestEnabled) return true
+
   let enabled = false
   const envEnabled = process.env.EXPO_PUBLIC_SYSTEM_TEST === "true"
   const envHost = process.env.EXPO_PUBLIC_SYSTEM_TEST_HOST
@@ -23,7 +27,14 @@ function isSystemTestEnabled() {
     enabled = true
   }
 
-  return enabled
+  if (enabled) autoDetectedSystemTestEnabled = true
+
+  return autoDetectedSystemTestEnabled
+}
+
+/** @returns {void} */
+export function resetSystemTestEnabledForTests() {
+  autoDetectedSystemTestEnabled = false
 }
 
 /**
