@@ -22,6 +22,7 @@ const extraPackages = process.env.ANDROID_SDK_PACKAGES
 const packages = [
   "platform-tools",
   "platforms;android-33",
+  "platforms;android-36",
   "emulator",
   systemImage,
   ...(ndkVersion ? [`ndk;${ndkVersion}`] : []),
