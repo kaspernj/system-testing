@@ -176,12 +176,15 @@ function runSdkManager(args, {sudo}) {
  * @returns {void}
  */
 function runWithYes(args, {sudo}) {
-  const command = `${sudoPrefix({sudo})} "${sdkmanagerPath}" ${args.join(" ")}`
-  console.log(`[android] yes | ${command}`)
-  const result = spawnSync("bash", ["-lc", `yes | ${command}`], {
+  const fullCommand = sudo ? sudoPrefix({sudo: true}) : sdkmanagerPath
+  const fullArgs = sudo ? buildSudoArgs(sdkmanagerPath, args, sdkEnv()) : args
+
+  console.log(`[android] ${fullCommand} ${fullArgs.join(" ")} < yes`)
+  const result = spawnSync(fullCommand, fullArgs, {
     env: sdkEnv(),
     encoding: "utf-8",
-    stdio: "inherit"
+    input: "y\n".repeat(100),
+    stdio: ["pipe", "inherit", "inherit"]
   })
 
   if (result.status !== 0) {
