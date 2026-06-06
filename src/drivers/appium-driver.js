@@ -16,6 +16,33 @@ function errorWithCause(message, cause) {
 }
 
 /**
+ * Escapes text for use inside a Java regular expression.
+ * @param {string} value Unescaped regex text.
+ * @returns {string} Regex-safe text.
+ */
+function escapeRegExp(value) {
+  return value.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&")
+}
+
+/**
+ * Escapes text for use inside a quoted UiAutomator Java string.
+ * @param {string} value Unescaped Java string text.
+ * @returns {string} Java-string-safe text.
+ */
+function escapeJavaString(value) {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
+}
+
+/**
+ * Builds a UiAutomator selector for React Native and package-qualified resource IDs.
+ * @param {string} testId Resource id suffix to match.
+ * @returns {string} UiAutomator selector source.
+ */
+export function androidResourceIdSelector(testId) {
+  return `new UiSelector().resourceIdMatches("(^|.*:id/)${escapeJavaString(escapeRegExp(testId))}$")`
+}
+
+/**
  * Ensures Chrome Appium capabilities use a caller-owned user-data directory.
  * This avoids repeated sessions leaking temp profiles under `/tmp` in CI.
  * @param {object} args
@@ -28,6 +55,12 @@ export async function ensureChromeUserDataDirCapability({browserName, capabiliti
   const resolvedBrowserName = capabilities.browserName ?? browserName
 
   if (typeof resolvedBrowserName !== "string" || resolvedBrowserName.toLowerCase() !== "chrome") {
+    return undefined
+  }
+
+  const platformName = capabilities.platformName
+
+  if (typeof platformName === "string" && platformName.toLowerCase() === "android") {
     return undefined
   }
 
@@ -418,7 +451,7 @@ export default class AppiumDriver extends WebDriverDriver {
     const startTime = Date.now()
     const getTimeLeft = () => Math.max(actualTimeout - (Date.now() - startTime), 0)
     const getElements = async () => {
-      const foundElements = await this.getWebDriver().findElements(By.id(testId))
+      const foundElements = await this.getWebDriver().findElements(this.idLocator(testId))
 
       if (visible !== true && visible !== false) {
         return foundElements
@@ -471,6 +504,30 @@ export default class AppiumDriver extends WebDriverDriver {
     }
 
     return elements
+  }
+
+  /**
+   * Builds an id locator for the active Appium context.
+   * @param {string} testId Test id or native resource id suffix.
+   * @returns {By} Selenium/Appium locator.
+   */
+  idLocator(testId) {
+    if (this.isAndroidNativeAppContext()) {
+      return new By("-android uiautomator", androidResourceIdSelector(testId))
+    }
+
+    return By.id(testId)
+  }
+
+  /**
+   * Checks whether the current session is a native Android app, not Android Chrome.
+   * @returns {boolean} True when UiAutomator resource-id lookup should be used.
+   */
+  isAndroidNativeAppContext() {
+    const platformName = this.options.capabilities?.platformName
+    const browserName = this.options.capabilities?.browserName ?? this.options.browserName
+
+    return typeof platformName === "string" && platformName.toLowerCase() === "android" && !browserName
   }
 
   /**

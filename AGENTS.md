@@ -17,3 +17,5 @@
 - In system tests, if a spec needs to scroll an offscreen element into view, add or use a shared package helper on `Browser`/`SystemTest` (for example `scrollIntoView(...)` / `scrollTestIdIntoView(...)`) instead of project-local DOM query wrappers.
 - For per-example browser cleanup such as auth reset, prefer lifecycle support in `SystemTest.run(...)` / `useSystemTest*` (for example `onTeardown`) over putting destructive cleanup into app bootstrap callbacks like `onInitialize`.
 - If a downstream app exposes a bug rooted in `system-testing`, fix it in `system-testing` first and open the PR here before asking the app repo to carry a dependency override or downstream workaround.
+- Do not run Android emulator/Appium specs locally when `/dev/kvm` is unavailable; they are too slow without hardware virtualization. Use CI/Tensorbuzz for those checks instead, and run non-emulator validation locally.
+- The Android CI setup must install every SDK platform required by the dummy app build. Expo SDK 54 currently builds with compileSdk 36, so keep `platforms;android-36` in `scripts/setup-android-emulator.js` along with the emulator system image packages.
