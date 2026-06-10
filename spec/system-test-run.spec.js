@@ -18,6 +18,7 @@ function createSystemTestRunDouble() {
       deleteAllCookies: jasmine.createSpy("deleteAllCookies").and.resolveTo(undefined),
       dismissTo: jasmine.createSpy("dismissTo").and.resolveTo(undefined),
       findByTestID: jasmine.createSpy("findByTestID").and.resolveTo(undefined),
+      applyArgs: jasmine.createSpy("applyArgs"),
       getCommunicator: jasmine.createSpy("getCommunicator").and.returnValue(communicator),
       getRootPath: jasmine.createSpy("getRootPath").and.returnValue("/blank?systemTest=true"),
       reinitialize: jasmine.createSpy("reinitialize").and.resolveTo(undefined),
