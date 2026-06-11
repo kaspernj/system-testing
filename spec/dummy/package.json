@@ -9,7 +9,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "export:web": "EXPO_USE_STATIC=0 expo export -p web --output-dir dist --source-maps",
-    "lint": "expo lint"
+    "lint": "npm run eslint",
+    "eslint": "expo lint"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

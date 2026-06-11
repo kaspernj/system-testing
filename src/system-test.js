@@ -19,6 +19,8 @@ import Browser from "./browser.js"
  * @property {string} [httpConnectHost] Hostname used by the driver to reach the HTTP server.
  * @property {boolean} [debug] Enable debug logging.
  * @property {(error: any) => boolean} [errorFilter] Filter for browser errors (return false to ignore).
+ * @property {boolean} [failOnBrowserError] Throw registered browser errors from finder/interact helpers.
+ * @property {boolean} [failOnConsoleError] Treat browser console.error calls as registered browser errors.
  * @property {number} [clientWsPort] Port for the browser-command WebSocket server.
  * @property {number} [scoundrelPort] Port for the Scoundrel WebSocket server.
  * @property {Record<string, any>} [urlArgs] Query params appended to the root path.
@@ -73,8 +75,12 @@ export default class SystemTest extends Browser {
   _clientWsPort = 1985
   _httpHost = "localhost"
   _httpPort = 1984
+  _failOnBrowserError = true
+  _failOnConsoleError = false
   /** @type {((error: any) => boolean) | undefined} */
   _errorFilter = undefined
+  /** @type {Error[]} */
+  _browserErrors = []
   _scoundrelPort = 8090
   /** @type {WebSocketServer | undefined} */
   scoundrelWss = undefined
@@ -89,9 +95,23 @@ export default class SystemTest extends Browser {
   static current(args = {}) {
     if (!globalAny.systemTest) {
       globalAny.systemTest = new SystemTest(args)
+    } else {
+      globalAny.systemTest.applyArgs(args)
     }
 
     return globalAny.systemTest
+  }
+
+  /**
+   * Applies mutable options to an already-running singleton SystemTest.
+   * @param {Partial<SystemTestArgs>} args
+   * @returns {void}
+   */
+  applyArgs(args = {}) {
+    if ("debug" in args) this._debug = args.debug ?? false
+    if ("errorFilter" in args) this._errorFilter = args.errorFilter
+    if ("failOnBrowserError" in args) this._failOnBrowserError = args.failOnBrowserError ?? true
+    if ("failOnConsoleError" in args) this._failOnConsoleError = args.failOnConsoleError ?? false
   }
 
   /** @returns {SystemTestCommunicator} */
@@ -169,6 +189,9 @@ export default class SystemTest extends Browser {
     if (!resolvedCallback) {
       throw new Error("SystemTest.run requires a callback")
     }
+
+    systemTest._browserErrors = []
+    systemTest.applyArgs({failOnBrowserError: true, failOnConsoleError: false, ...systemTestArgs})
 
     systemTest.debugLog("Resetting browser cookies before initialize")
     await systemTest.deleteAllCookies()
@@ -270,7 +293,7 @@ export default class SystemTest extends Browser {
    * Creates a new SystemTest instance
    * @param {SystemTestArgs} [args]
    */
-  constructor({clientWsPort = 1985, host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, httpConnectHost, debug = false, errorFilter, scoundrelPort = 8090, urlArgs, driver, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
+  constructor({clientWsPort = 1985, host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, httpConnectHost, debug = false, errorFilter, failOnBrowserError = true, failOnConsoleError = false, scoundrelPort = 8090, urlArgs, driver, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
     super({debug, driver})
 
     const restArgsKeys = Object.keys(restArgs)
@@ -287,6 +310,8 @@ export default class SystemTest extends Browser {
     this._httpConnectHost = httpConnectHost
     this._debug = debug
     this._errorFilter = errorFilter
+    this._failOnBrowserError = failOnBrowserError
+    this._failOnConsoleError = failOnConsoleError
     this._scoundrelPort = scoundrelPort
     this._urlArgs = urlArgs
     this._rootPath = this.buildRootPath()
@@ -388,7 +413,11 @@ export default class SystemTest extends Browser {
    * @returns {Promise<import("selenium-webdriver").WebElement[]>}
    */
   async all(selector, args = {}) {
-    return await this.getDriverAdapter().all(selector, args)
+    this.throwRegisteredBrowserError()
+    const result = await this.getDriverAdapter().all(selector, args)
+    this.throwRegisteredBrowserError()
+
+    return result
   }
 
   /**
@@ -403,7 +432,9 @@ export default class SystemTest extends Browser {
    * @returns {Promise<void>}
    */
   async click(elementOrIdentifier, args) {
+    this.throwRegisteredBrowserError()
     await this.getDriverAdapter().click(elementOrIdentifier, args)
+    this.throwRegisteredBrowserError()
   }
 
   /**
@@ -413,7 +444,11 @@ export default class SystemTest extends Browser {
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
   async find(selector, args = {}) {
-    return await this.getDriverAdapter().find(selector, args)
+    this.throwRegisteredBrowserError()
+    const result = await this.getDriverAdapter().find(selector, args)
+    this.throwRegisteredBrowserError()
+
+    return result
   }
 
   /**
@@ -423,7 +458,11 @@ export default class SystemTest extends Browser {
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
   async findByTestID(testID, args) {
-    return await this.getDriverAdapter().findByTestID(testID, args)
+    this.throwRegisteredBrowserError()
+    const result = await this.getDriverAdapter().findByTestID(testID, args)
+    this.throwRegisteredBrowserError()
+
+    return result
   }
 
   /**
@@ -433,7 +472,11 @@ export default class SystemTest extends Browser {
    * @returns {Promise<boolean>}
    */
   async hasTestID(testID, args) {
-    return await this.getDriverAdapter().hasTestID(testID, args)
+    this.throwRegisteredBrowserError()
+    const result = await this.getDriverAdapter().hasTestID(testID, args)
+    this.throwRegisteredBrowserError()
+
+    return result
   }
 
   /**
@@ -443,7 +486,11 @@ export default class SystemTest extends Browser {
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
   async findNoWait(selector, args = {}) {
-    return await this.getDriverAdapter().findNoWait(selector, args)
+    this.throwRegisteredBrowserError()
+    const result = await this.getDriverAdapter().findNoWait(selector, args)
+    this.throwRegisteredBrowserError()
+
+    return result
   }
 
   /**
@@ -455,7 +502,11 @@ export default class SystemTest extends Browser {
    * @returns {Promise<any>}
    */
   async interact(elementOrIdentifier, methodName, ...args) {
-    return await this.getDriverAdapter().interact(elementOrIdentifier, methodName, ...args)
+    this.throwRegisteredBrowserError()
+    const result = await this.getDriverAdapter().interact(elementOrIdentifier, methodName, ...args)
+    this.throwRegisteredBrowserError()
+
+    return result
   }
 
   /**
@@ -489,7 +540,9 @@ export default class SystemTest extends Browser {
    * @returns {Promise<void>}
    */
   async waitForNoSelector(selector, args = {}) {
+    this.throwRegisteredBrowserError()
     await this.getDriverAdapter().waitForNoSelector(selector, args)
+    this.throwRegisteredBrowserError()
   }
 
   /**
@@ -806,6 +859,9 @@ export default class SystemTest extends Browser {
 
       if (showMessage) {
         console.error("Browser error", ...data.value)
+        if (this._failOnConsoleError) {
+          this.registerBrowserError(data)
+        }
       }
     } else if (type == "console.log") {
       console.log("Browser log", ...data.value)
@@ -863,13 +919,38 @@ export default class SystemTest extends Browser {
   handleError(data) {
     if (this.shouldIgnoreError(data)) return
 
-    const error = new Error(`Browser error: ${data.message}`)
+    const error = this.registerBrowserError(data)
+
+    console.error(error)
+  }
+
+  /**
+   * Registers an error reported from the browser.
+   * @param {Record<string, any>} data Error payload.
+   * @returns {Error} Registered error.
+   */
+  registerBrowserError(data) {
+    const error = new Error(`Browser error: ${this.extractErrorMessage(data)}`)
 
     if (data.backtrace) {
       error.stack = `${error.message}\n${data.backtrace}\n\n${error.stack}`
     }
 
-    console.error(error)
+    this._browserErrors.push(error)
+
+    return error
+  }
+
+  /**
+   * Throws the first registered browser error when fail-fast is enabled.
+   * @returns {void}
+   */
+  throwRegisteredBrowserError() {
+    if (!this._failOnBrowserError) return
+
+    const browserError = this._browserErrors[0]
+
+    if (browserError) throw browserError
   }
 
   /**

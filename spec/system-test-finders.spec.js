@@ -209,4 +209,64 @@ describeIfWeb("SystemTest finders", () => {
       }
     })
   })
+
+  it("throws registered browser errors from finders by default", async () => {
+    await SystemTest.run(async (runningSystemTest) => {
+      runningSystemTest.registerBrowserError({message: "finder fail fast"})
+
+      await expectAsync(
+        runningSystemTest.findByTestID("blankText", {useBaseSelector: false, timeout: 0})
+      ).toBeRejectedWithError(/Browser error: finder fail fast/)
+    })
+  })
+
+  it("throws registered browser unhandled rejections from finders by default", async () => {
+    await SystemTest.run(async (runningSystemTest) => {
+      runningSystemTest.handleError({message: "finder rejection fail fast"})
+
+      await expectAsync(
+        runningSystemTest.findByTestID("blankText", {useBaseSelector: false, timeout: 0})
+      ).toBeRejectedWithError(/Browser error: finder rejection fail fast/)
+    })
+  })
+
+  it("does not throw registered browser errors when fail-fast is disabled", async () => {
+    await SystemTest.run({failOnBrowserError: false}, async (runningSystemTest) => {
+      runningSystemTest.registerBrowserError({message: "ignored finder error"})
+
+      const element = await runningSystemTest.findByTestID("blankText", {useBaseSelector: false, timeout: 0})
+
+      expect(element).toBeTruthy()
+    })
+  })
+
+  it("does not register filtered browser errors", async () => {
+    await SystemTest.run({errorFilter: (error) => !String(error?.message).includes("filtered finder error")}, async (runningSystemTest) => {
+      runningSystemTest.handleError({message: "filtered finder error"})
+
+      const element = await runningSystemTest.findByTestID("blankText", {useBaseSelector: false, timeout: 0})
+
+      expect(element).toBeTruthy()
+    })
+  })
+
+  it("logs console errors without failing finders by default", async () => {
+    await SystemTest.run(async (runningSystemTest) => {
+      await runningSystemTest.onCommandReceived({data: {type: "console.error", value: ["logged browser warning"]}})
+
+      const element = await runningSystemTest.findByTestID("blankText", {useBaseSelector: false, timeout: 0})
+
+      expect(element).toBeTruthy()
+    })
+  })
+
+  it("can treat console errors as registered browser errors", async () => {
+    await SystemTest.run({failOnConsoleError: true}, async (runningSystemTest) => {
+      await runningSystemTest.onCommandReceived({data: {type: "console.error", value: ["fatal browser warning"]}})
+
+      await expectAsync(
+        runningSystemTest.findByTestID("blankText", {useBaseSelector: false, timeout: 0})
+      ).toBeRejectedWithError(/Browser error: fatal browser warning/)
+    })
+  })
 })
