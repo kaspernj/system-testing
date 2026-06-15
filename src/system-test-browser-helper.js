@@ -2,19 +2,35 @@
 
 import Client from "scoundrel-remote-eval/build/client/index.js"
 import ClientWebSocket from "scoundrel-remote-eval/build/client/connections/web-socket/index.js"
-import {digg} from "diggerize"
 import {EventEmitter} from "eventemitter3"
 
 import SystemTestCommunicator from "./system-test-communicator.js"
+
+const CLIENT_WEBSOCKET_RECONNECT_DELAY_MS = 250
+const CLIENT_WEBSOCKET_RECONNECT_WINDOW_MS = 30000
+const CLIENT_WEBSOCKET_MAX_RECONNECT_ATTEMPTS = Math.ceil(
+  CLIENT_WEBSOCKET_RECONNECT_WINDOW_MS / CLIENT_WEBSOCKET_RECONNECT_DELAY_MS
+)
 
 /** @type {{systemTestBrowserHelper: SystemTestBrowserHelper | null}} */
 const shared = {
   systemTestBrowserHelper: null
 }
 
+/**
+ * @param {Event | Error} error
+ * @returns {Error}
+ */
+function webSocketError(error) {
+  if (error instanceof Error) return error
+
+  return new Error(`WebSocket connection failed: ${error.type}`)
+}
+
 export default class SystemTestBrowserHelper {
   /** @type {string | undefined} */
   static _defaultHost = undefined
+  clientWebSocketReconnectAttempts = 0
 
   /**
    * Sets the default host for all browser helpers. Use this to override the
@@ -170,14 +186,52 @@ export default class SystemTestBrowserHelper {
 
   /** @returns {void} */
   connectWebSocket() {
+    this.clientWebSocketReconnectAttempts = 0
+    this.connectClientWebSocket()
+  }
+
+  /** @returns {void} */
+  connectClientWebSocket() {
     const host = this.getSystemTestHost()
     const clientWsPort = this.getSystemTestPort("systemTestClientWsPort", 1985)
+    const websocket = new WebSocket(`ws://${host}:${clientWsPort}`)
+    let opened = false
+    let reconnectScheduled = false
 
-    this.ws = new WebSocket(`ws://${host}:${clientWsPort}`)
-    this.communicator.ws = this.ws
-    this.ws.addEventListener("error", digg(this, "communicator", "onError"))
-    this.ws.addEventListener("open", digg(this, "communicator", "onOpen"))
-    this.ws.addEventListener("message", (event) => this.communicator.onMessage(event.data))
+    this.ws = websocket
+    this.communicator.ws = websocket
+
+    /** @param {Event | Error} error */
+    const scheduleReconnect = (error) => {
+      if (opened) {
+        this.communicator.onError(webSocketError(error))
+        return
+      }
+
+      if (reconnectScheduled || this.ws !== websocket) return
+
+      this.clientWebSocketReconnectAttempts += 1
+      if (this.clientWebSocketReconnectAttempts > CLIENT_WEBSOCKET_MAX_RECONNECT_ATTEMPTS) {
+        this.communicator.onError(webSocketError(error))
+        return
+      }
+
+      reconnectScheduled = true
+      setTimeout(() => {
+        if (opened || this.ws !== websocket) return
+
+        this.connectClientWebSocket()
+      }, CLIENT_WEBSOCKET_RECONNECT_DELAY_MS)
+    }
+
+    websocket.addEventListener("error", scheduleReconnect)
+    websocket.addEventListener("close", scheduleReconnect)
+    websocket.addEventListener("open", () => {
+      opened = true
+      this.clientWebSocketReconnectAttempts = 0
+      this.communicator.onOpen()
+    })
+    websocket.addEventListener("message", (event) => this.communicator.onMessage(event.data))
   }
 
   /** @returns {string} */
