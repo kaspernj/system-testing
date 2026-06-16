@@ -3,13 +3,18 @@
 import SystemTest, {defaultClientWebSocketConnectTimeout} from "../src/system-test.js"
 
 describe("SystemTest client WebSocket timeout", () => {
-  const originalSystemTestHost = process.env.SYSTEM_TEST_HOST
+  /** @type {string | undefined} */
+  let previousSystemTestHost
+
+  beforeEach(() => {
+    previousSystemTestHost = process.env.SYSTEM_TEST_HOST
+  })
 
   afterEach(() => {
-    if (originalSystemTestHost === undefined) {
+    if (previousSystemTestHost === undefined) {
       delete process.env.SYSTEM_TEST_HOST
     } else {
-      process.env.SYSTEM_TEST_HOST = originalSystemTestHost
+      process.env.SYSTEM_TEST_HOST = previousSystemTestHost
     }
   })
 
