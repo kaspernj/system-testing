@@ -49,6 +49,7 @@ export function defaultClientWebSocketConnectTimeout() {
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
  * @property {"actions" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context (skips WebDriver's pointer synthesis entirely — useful when the default click is dropped by a framework responder that refuses synthetic WebDriver pointer events).
  * @property {boolean} [scrollTo] Whether to scroll found elements into view before returning them.
+ * @property {string[]} [scrollContainerTestIDs] Native test IDs that should be tried as scroll containers before falling back to viewport gestures.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 /**

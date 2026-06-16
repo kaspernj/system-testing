@@ -31,7 +31,11 @@ import AppiumDriver from "./drivers/appium-driver.js"
  */
 /**
  * @typedef {object} BrowserTextWaitArgs
+ * @property {string[]} [scrollContainerTestIDs] Native test IDs that should be tried as scroll containers before falling back to viewport gestures.
+ * @property {boolean} [scrollTo] Whether to scroll found elements into view before returning them.
  * @property {number} [timeout] Override the timeout for this text wait.
+ * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
+ * @property {boolean | null} [visible] Whether to require elements to be visible.
  */
 /**
  * @typedef {object} BrowserCurrentUrlWaitArgs
@@ -354,6 +358,16 @@ export default class Browser {
   }
 
   /**
+   * Finds native Android visible text or an accessibility label.
+   * @param {string} expectedText Text to locate.
+   * @param {import("./system-test.js").FindArgs} [args] Optional lookup settings.
+   * @returns {Promise<import("selenium-webdriver").WebElement>} Matching native element.
+   */
+  async findByNativeText(expectedText, args = {}) {
+    return await this.getDriverAdapter().findByNativeText(expectedText, args)
+  }
+
+  /**
    * @param {string} selector
    * @param {import("./system-test.js").FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}
@@ -415,8 +429,10 @@ export default class Browser {
    * @returns {Promise<void>}
    */
   async waitForTestIDText(testID, expectedText, args = {}) {
-    await waitFor({timeout: this.getCommandTimeout(args.timeout)}, async () => {
-      const element = await this.findByTestID(testID, {timeout: 0})
+    const {timeout: waitTimeout, ...findArgs} = args
+
+    await waitFor({timeout: this.getCommandTimeout(waitTimeout)}, async () => {
+      const element = await this.findByTestID(testID, {...findArgs, timeout: 0})
       const actualText = await element.getText()
 
       if (!actualText.includes(expectedText)) {
@@ -433,8 +449,10 @@ export default class Browser {
    * @returns {Promise<void>}
    */
   async waitForTestIDTextExcludes(testID, excludedText, args = {}) {
-    await waitFor({timeout: this.getCommandTimeout(args.timeout)}, async () => {
-      const element = await this.findByTestID(testID, {timeout: 0})
+    const {timeout: waitTimeout, ...findArgs} = args
+
+    await waitFor({timeout: this.getCommandTimeout(waitTimeout)}, async () => {
+      const element = await this.findByTestID(testID, {...findArgs, timeout: 0})
       const actualText = await element.getText()
 
       if (actualText.includes(excludedText)) {
