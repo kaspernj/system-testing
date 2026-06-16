@@ -2,8 +2,11 @@
 
 import wait from "awaitery/build/wait.js"
 
-import SystemTest from "../../src/system-test.js"
+import SystemTest, {defaultClientWebSocketConnectTimeout} from "../../src/system-test.js"
 import DummyHttpServerEnvironment from "./dummy-http-server.js"
+
+const MINIMUM_JASMINE_TIMEOUT_INTERVAL_MS = 60000
+const JASMINE_TIMEOUT_INTERVAL_HEADROOM_MS = 30000
 
 const sharedState = globalThis.__systemTestHelperState ??= {
   refCount: 0,
@@ -37,13 +40,21 @@ function errorWithCause(message, cause) {
   return error
 }
 
+/** @returns {number} */
+export function defaultSystemTestJasmineTimeoutInterval() {
+  return Math.max(
+    MINIMUM_JASMINE_TIMEOUT_INTERVAL_MS,
+    defaultClientWebSocketConnectTimeout() + JASMINE_TIMEOUT_INTERVAL_HEADROOM_MS
+  )
+}
+
 export default class SystemTestHelper {
   constructor({debug = process.env.SYSTEM_TEST_DEBUG === "true"} = {}) {
     this.debug = debug
     this.dummyHttpServerEnvironment = sharedState.dummyHttpServerEnvironment
     this.systemTest = sharedState.systemTest
 
-    jasmine.DEFAULT_TIMEOUT_INTERVAL = 60000
+    jasmine.DEFAULT_TIMEOUT_INTERVAL = defaultSystemTestJasmineTimeoutInterval()
   }
 
   /** @param {...any} args */
