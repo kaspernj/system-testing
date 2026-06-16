@@ -10,6 +10,14 @@ import timeout from "awaitery/build/timeout.js"
 import {WebSocketServer} from "ws"
 import Browser from "./browser.js"
 
+const CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 30000
+const NATIVE_CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 120000
+
+/** @returns {number} */
+export function defaultClientWebSocketConnectTimeout() {
+  return process.env.SYSTEM_TEST_HOST === "native" ? NATIVE_CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS : CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS
+}
+
 /**
  * @typedef {object} SystemTestArgs
  * @property {string} [host] Hostname for the app server.
@@ -22,6 +30,7 @@ import Browser from "./browser.js"
  * @property {boolean} [failOnBrowserError] Throw registered browser errors from finder/interact helpers.
  * @property {boolean} [failOnConsoleError] Treat browser console.error calls as registered browser errors.
  * @property {number} [clientWsPort] Port for the browser-command WebSocket server.
+ * @property {number} [clientWsConnectTimeout] Timeout for the browser-command WebSocket client connection.
  * @property {number} [scoundrelPort] Port for the Scoundrel WebSocket server.
  * @property {Record<string, any>} [urlArgs] Query params appended to the root path.
  * @property {SystemTestDriverConfig} [driver] Driver configuration.
@@ -40,6 +49,7 @@ import Browser from "./browser.js"
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
  * @property {"actions" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context (skips WebDriver's pointer synthesis entirely — useful when the default click is dropped by a framework responder that refuses synthetic WebDriver pointer events).
  * @property {boolean} [scrollTo] Whether to scroll found elements into view before returning them.
+ * @property {string[]} [scrollContainerTestIDs] Native test IDs that should be tried as scroll containers before falling back to viewport gestures.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 /**
@@ -73,6 +83,7 @@ export default class SystemTest extends Browser {
 
   _started = false
   _clientWsPort = 1985
+  _clientWsConnectTimeout = CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS
   _httpHost = "localhost"
   _httpPort = 1984
   _failOnBrowserError = true
@@ -293,7 +304,7 @@ export default class SystemTest extends Browser {
    * Creates a new SystemTest instance
    * @param {SystemTestArgs} [args]
    */
-  constructor({clientWsPort = 1985, host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, httpConnectHost, debug = false, errorFilter, failOnBrowserError = true, failOnConsoleError = false, scoundrelPort = 8090, urlArgs, driver, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
+  constructor({clientWsPort = 1985, clientWsConnectTimeout, host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, httpConnectHost, debug = false, errorFilter, failOnBrowserError = true, failOnConsoleError = false, scoundrelPort = 8090, urlArgs, driver, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
     super({debug, driver})
 
     const restArgsKeys = Object.keys(restArgs)
@@ -305,6 +316,7 @@ export default class SystemTest extends Browser {
     this._host = host
     this._port = port
     this._clientWsPort = clientWsPort
+    this._clientWsConnectTimeout = clientWsConnectTimeout ?? defaultClientWebSocketConnectTimeout()
     this._httpHost = httpHost
     this._httpPort = httpPort
     this._httpConnectHost = httpConnectHost
@@ -798,7 +810,7 @@ export default class SystemTest extends Browser {
    */
   async waitForClientWebSocket() {
     try {
-      await timeout({timeout: 30000, errorMessage: "timeout while waiting for client WebSocket connection"}, () => new Promise((resolve, reject) => {
+      await timeout({timeout: this._clientWsConnectTimeout, errorMessage: "timeout while waiting for client WebSocket connection"}, () => new Promise((resolve, reject) => {
         if (this.ws) {
           resolve(undefined)
           return

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Add native Android text lookup and scroll-container-aware test ID scrolling for Appium.
 - Reinitialize `SystemTest.run(...)` browser state after failed callbacks or teardown by default.
 - Let scroll helpers find rendered targets before they are visible in the viewport.
 - Prevent system test shutdown timeouts by forcing HTTP server connections closed and shutting down the browser before the HTTP server.

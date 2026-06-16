@@ -136,7 +136,19 @@ await SystemTest.run({
 })
 ```
 
-If you already run an Appium server, provide `serverUrl` instead of `serverArgs`. By default, `findByTestID` uses the Appium `accessibility id` strategy, which matches the `content-desc` attribute on Android (set by React Native's `accessibilityLabel` prop). To use CSS instead (for web contexts), set `options.testIdStrategy` to `"css"` and optionally `options.testIdAttribute` (defaults to `"data-testid"`). Note: the `"id"` strategy does not work for native Android apps because UiAutomator2 expects a fully qualified resource ID with the package prefix, which React Native does not produce.
+If you already run an Appium server, provide `serverUrl` instead of `serverArgs`. By default, `findByTestID` uses the Appium `accessibility id` strategy, which matches the `content-desc` attribute on Android (set by React Native's `accessibilityLabel` prop). To use CSS instead (for web contexts), set `options.testIdStrategy` to `"css"` and optionally `options.testIdAttribute` (defaults to `"data-testid"`). For native Android apps, set `options.testIdStrategy` to `"id"`; system-testing matches React Native test IDs by resource-id suffix so package-qualified Android IDs work.
+
+Native Android test ID lookups can scroll offscreen controls into the rendered hierarchy with `findByTestID("target", {scrollTo: true})`. If an app has a known scroll container test ID, pass it with `scrollContainerTestIDs` so system-testing tries that container before falling back to generic viewport gestures:
+
+```js
+await systemTest.findByTestID("projectShowScreen/editButton", {
+  scrollContainerTestIDs: ["projectShowScreen/content/scroll"],
+  scrollTo: true,
+  useBaseSelector: false
+})
+```
+
+Native Android text or accessibility-label assertions can use `findByNativeText("Visible label", {scrollTo: true})`.
 
 For local or CI web runs against Chrome, `npm run test:appium:web` now resolves and downloads a matching Chrome for Testing `chromedriver` binary before it starts Appium. That keeps the Appium web path reproducible even when the installed Chrome patch version changes.
 

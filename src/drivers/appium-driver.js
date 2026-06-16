@@ -1,8 +1,31 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import {Builder, By} from "selenium-webdriver"
+import {Origin} from "selenium-webdriver/lib/input.js"
+import {wait} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
 import WebDriverDriver from "./webdriver-driver.js"
+
+/**
+ * Appium timeout values returned by Selenium.
+ * @typedef {{implicit: number, pageLoad?: number, script?: number}} NativeTimeouts
+ */
+/**
+ * Appium timeout update shape accepted by Selenium.
+ * @typedef {{implicit?: number, pageLoad?: number, script?: number}} NativeTimeoutOptions
+ */
+/**
+ * Native Appium window dimensions.
+ * @typedef {{x: number, y: number, width: number, height: number}} NativeWindowRect
+ */
+/**
+ * Tracks native scroll fallbacks that already reported no movement.
+ * @typedef {{tryElementScroll: boolean, tryViewportScroll: boolean}} NativeViewportScrollState
+ */
+/**
+ * Native Android lookup work executed by the scrolling poller.
+ * @typedef {{description: string, directFind: () => Promise<import("selenium-webdriver").WebElement>, scrollSelectors: string[]}} NativeControlLookup
+ */
 
 /**
  * @param {string} message
@@ -40,6 +63,48 @@ function escapeJavaString(value) {
  */
 export function androidResourceIdSelector(testId) {
   return `new UiSelector().resourceIdMatches("(^|.*:id/)${escapeJavaString(escapeRegExp(testId))}$")`
+}
+
+/**
+ * Builds a UiAutomator selector that matches visible text.
+ * @param {string} expectedText Text to locate.
+ * @returns {string} UiAutomator selector source.
+ */
+export function androidTextContainsSelector(expectedText) {
+  return `new UiSelector().textContains("${escapeJavaString(expectedText)}")`
+}
+
+/**
+ * Builds a UiAutomator selector that matches an accessibility label.
+ * @param {string} expectedText Text to locate.
+ * @returns {string} UiAutomator selector source.
+ */
+export function androidDescriptionContainsSelector(expectedText) {
+  return `new UiSelector().descriptionContains("${escapeJavaString(expectedText)}")`
+}
+
+/**
+ * Checks whether native lookup failed because the control is not currently mounted onscreen.
+ * @param {unknown} error Value thrown by Appium lookup.
+ * @returns {boolean} Whether native scrolling should be attempted.
+ */
+function isNativeControlLookupMiss(error) {
+  if (!(error instanceof Error)) return false
+
+  return error.message.includes("Element couldn't be found") || error.message.includes("Couldn't get elements")
+}
+
+/**
+ * Checks whether the hosted Appium driver lacks the mobile gesture extension.
+ * @param {unknown} error Value thrown by Appium.
+ * @returns {boolean} Whether W3C actions should be used instead.
+ */
+function isUnsupportedMobileGestureError(error) {
+  if (!(error instanceof Error)) return false
+
+  return error.message.includes("NotYetImplementedError") ||
+    error.message.includes("Method has not yet been implemented") ||
+    error.message.includes("Unknown mobile command")
 }
 
 /**
@@ -99,6 +164,7 @@ export async function ensureChromeUserDataDirCapability({browserName, capabiliti
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
  * @property {boolean} [scrollTo] Whether to scroll found elements into view before returning them.
+ * @property {string[]} [scrollContainerTestIDs] Native test IDs that should be tried as scroll containers before falling back to viewport gestures.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 
@@ -312,7 +378,8 @@ export default class AppiumDriver extends WebDriverDriver {
    * @returns {Promise<import("selenium-webdriver").WebElement[]>}
    */
   async allByAccessibilityId(testId, args = {}) {
-    const {scrollTo = false, visible = true, timeout, ...restArgs} = args
+    const {scrollContainerTestIDs, scrollTo = false, visible = true, timeout, ...restArgs} = args
+    void scrollContainerTestIDs
     const restArgsKeys = Object.keys(restArgs).filter((key) => key !== "useBaseSelector")
     let actualTimeout
 
@@ -404,6 +471,10 @@ export default class AppiumDriver extends WebDriverDriver {
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
   async findById(testId, args = {}) {
+    if (this.isAndroidNativeAppContext() && args.scrollTo) {
+      return await this.findNativeControlById(testId, args)
+    }
+
     const startTime = Date.now()
     /** @type {import("selenium-webdriver").WebElement[]} */
     let elements
@@ -436,7 +507,8 @@ export default class AppiumDriver extends WebDriverDriver {
    * @returns {Promise<import("selenium-webdriver").WebElement[]>}
    */
   async allById(testId, args = {}) {
-    const {scrollTo = false, visible = true, timeout, ...restArgs} = args
+    const {scrollContainerTestIDs, scrollTo = false, visible = true, timeout, ...restArgs} = args
+    void scrollContainerTestIDs
     const restArgsKeys = Object.keys(restArgs).filter((key) => key !== "useBaseSelector")
     let actualTimeout
 
@@ -517,6 +589,239 @@ export default class AppiumDriver extends WebDriverDriver {
     }
 
     return By.id(testId)
+  }
+
+  /**
+   * Finds native Android visible text or an accessibility label, scrolling it into view when needed.
+   * @param {string} expectedText Text to locate.
+   * @param {FindArgs} [args] Optional lookup settings.
+   * @returns {Promise<import("selenium-webdriver").WebElement>} Native element containing the text.
+   */
+  async findByNativeText(expectedText, args = {}) {
+    if (!this.isAndroidNativeAppContext()) {
+      throw new Error("findByNativeText is only supported for native Android Appium sessions")
+    }
+
+    const selectors = [androidTextContainsSelector(expectedText), androidDescriptionContainsSelector(expectedText)]
+    const directFind = async () => {
+      for (const selector of selectors) {
+        const elements = await this.getWebDriver().findElements(new By("-android uiautomator", selector))
+
+        if (elements.length > 0) return elements[0]
+      }
+
+      throw new Error(`Element couldn't be found by text or accessibility label: ${expectedText}`)
+    }
+
+    return await this.withNativeImplicitWait(0, async () => {
+      return await this.findNativeControlWithScrolling({
+        description: `text or accessibility label: ${expectedText}`,
+        directFind,
+        scrollSelectors: selectors
+      }, {...args, scrollTo: args.scrollTo ?? true})
+    })
+  }
+
+  /**
+   * Finds a native Android control by resource id, scrolling it into view first when requested.
+   * @param {string} testId Stable native resource id suffix.
+   * @param {FindArgs} [args] Optional lookup settings.
+   * @returns {Promise<import("selenium-webdriver").WebElement>} Matching native element.
+   */
+  async findNativeControlById(testId, args = {}) {
+    const directFind = async () => await this.findById(testId, {...args, timeout: 0, scrollTo: false})
+
+    return await this.withNativeImplicitWait(0, async () => {
+      return await this.findNativeControlWithScrolling({
+        description: `id: ${testId}`,
+        directFind,
+        scrollSelectors: [androidResourceIdSelector(testId)]
+      }, args)
+    })
+  }
+
+  /**
+   * Finds a native control, trying direct lookup, UiScrollable, and viewport gesture scrolling.
+   * @param {NativeControlLookup} lookup Lookup callbacks and diagnostics.
+   * @param {FindArgs} [args] Optional lookup settings.
+   * @returns {Promise<import("selenium-webdriver").WebElement>} Matching native element.
+   */
+  async findNativeControlWithScrolling(lookup, args = {}) {
+    const {scrollContainerTestIDs = [], scrollTo = true, timeout = 10000} = args
+    const startTime = Date.now()
+    const viewportScrollState = {
+      tryElementScroll: true,
+      tryViewportScroll: true
+    }
+    let attemptedUiSelectorScroll = false
+    /** @type {unknown} */
+    let lastError
+
+    do {
+      try {
+        return await lookup.directFind()
+      } catch (error) {
+        if (!isNativeControlLookupMiss(error)) throw error
+        lastError = error
+      }
+
+      if (scrollTo) {
+        if (!attemptedUiSelectorScroll) {
+          attemptedUiSelectorScroll = true
+          for (const scrollSelector of lookup.scrollSelectors) {
+            try {
+              await this.scrollNativeUiSelectorIntoView(scrollSelector, scrollContainerTestIDs)
+            } catch (error) {
+              void error
+            }
+          }
+        }
+
+        try {
+          return await lookup.directFind()
+        } catch (error) {
+          if (!isNativeControlLookupMiss(error)) throw error
+          void error
+        }
+
+        await this.scrollNativeViewportDown(viewportScrollState, scrollContainerTestIDs)
+
+        try {
+          return await lookup.directFind()
+        } catch (error) {
+          if (!isNativeControlLookupMiss(error)) throw error
+          lastError = error
+        }
+      }
+
+      if (timeout === 0) break
+      await wait(100)
+    } while (Date.now() - startTime < timeout)
+
+    const elapsedSeconds = (Date.now() - startTime) / 1000
+    throw errorWithCause(`Element couldn't be found after ${elapsedSeconds.toFixed(2)}s by ${lookup.description}`, lastError)
+  }
+
+  /**
+   * Runs explicit native polling without Appium's implicit wait extending every failed probe.
+   * @template TResult Result type.
+   * @param {number} implicitWaitMs Implicit wait duration to apply during the callback.
+   * @param {() => Promise<TResult>} callback Work that owns its own polling timeout.
+   * @returns {Promise<TResult>} Callback result.
+   */
+  async withNativeImplicitWait(implicitWaitMs, callback) {
+    const timeouts = /** @type {NativeTimeouts} */ (await this.getWebDriver().manage().getTimeouts())
+
+    await this.getWebDriver().manage().setTimeouts(/** @type {NativeTimeoutOptions} */ ({implicit: implicitWaitMs}))
+    try {
+      return await callback()
+    } finally {
+      await this.getWebDriver().manage().setTimeouts(/** @type {NativeTimeoutOptions} */ ({implicit: timeouts.implicit}))
+    }
+  }
+
+  /**
+   * Scrolls the visible native viewport down when UiScrollable cannot identify the owning ScrollView.
+   * @param {NativeViewportScrollState} scrollState Per-lookup Appium scroll state.
+   * @param {string[]} scrollContainerTestIDs Native test IDs that may identify scroll containers.
+   * @returns {Promise<void>} Resolves after Appium performs the gesture.
+   */
+  async scrollNativeViewportDown(scrollState, scrollContainerTestIDs) {
+    const windowRect = /** @type {NativeWindowRect} */ (await this.getWebDriver().manage().window().getRect())
+    const horizontalInset = Math.max(1, Math.floor(windowRect.width * 0.1))
+    const top = Math.max(1, Math.floor(windowRect.height * 0.2))
+    const width = Math.max(1, windowRect.width - horizontalInset * 2)
+    const height = Math.max(1, Math.floor(windowRect.height * 0.6))
+
+    if (scrollState.tryElementScroll && scrollContainerTestIDs.length > 0) {
+      for (const scrollContainerTestID of scrollContainerTestIDs) {
+        try {
+          const didScroll = await this.scrollNativeElementDown(scrollContainerTestID)
+          if (didScroll) return
+        } catch (error) {
+          scrollState.tryElementScroll = false
+          if (!isUnsupportedMobileGestureError(error)) throw error
+        }
+      }
+
+      scrollState.tryElementScroll = false
+    }
+
+    if (scrollState.tryViewportScroll) {
+      try {
+        const didScroll = await this.getWebDriver().executeScript("mobile: scrollGesture", {
+          direction: "down",
+          height,
+          left: horizontalInset,
+          percent: 0.75,
+          top,
+          width
+        })
+        if (didScroll === true) return
+        scrollState.tryViewportScroll = false
+      } catch (error) {
+        scrollState.tryViewportScroll = false
+        if (!isUnsupportedMobileGestureError(error)) throw error
+      }
+    }
+
+    const centerX = Math.floor(windowRect.x + windowRect.width / 2)
+    const startY = Math.floor(windowRect.y + windowRect.height * 0.78)
+    const endY = Math.floor(windowRect.y + windowRect.height * 0.28)
+
+    await this.getWebDriver()
+      .actions({async: true})
+      .move({origin: Origin.VIEWPORT, x: centerX, y: startY})
+      .press()
+      .move({duration: 250, origin: Origin.VIEWPORT, x: centerX, y: endY})
+      .release()
+      .perform()
+  }
+
+  /**
+   * Scrolls a specific native Android element by test id when Appium exposes it as a scroll container.
+   * @param {string} testId Stable native resource id suffix.
+   * @returns {Promise<boolean>} Whether Appium reported more content to scroll.
+   */
+  async scrollNativeElementDown(testId) {
+    const elements = await this.getWebDriver().findElements(new By("-android uiautomator", androidResourceIdSelector(testId)))
+    const scrollElement = elements[0]
+
+    if (!scrollElement) return false
+
+    const didScroll = await this.getWebDriver().executeScript("mobile: scrollGesture", {
+      direction: "down",
+      elementId: await scrollElement.getId(),
+      percent: 0.75
+    })
+
+    return didScroll === true
+  }
+
+  /**
+   * Moves an offscreen Android control into a ScrollView-backed native hierarchy.
+   * @param {string} uiSelector UiAutomator selector for the target control.
+   * @param {string[]} scrollContainerTestIDs Native test IDs that may identify scroll containers.
+   * @returns {Promise<void>} Resolves after UiAutomator attempts the scroll.
+   */
+  async scrollNativeUiSelectorIntoView(uiSelector, scrollContainerTestIDs) {
+    const scrollableSelectors = [
+      ...scrollContainerTestIDs.map((scrollContainerTestID) => androidResourceIdSelector(scrollContainerTestID)),
+      "new UiSelector().scrollable(true)"
+    ]
+    /** @type {unknown} */
+    let lastError
+
+    for (const scrollableSelector of scrollableSelectors) {
+      try {
+        const elements = await this.getWebDriver().findElements(new By("-android uiautomator", `new UiScrollable(${scrollableSelector}).scrollIntoView(${uiSelector})`))
+        if (elements.length > 0) return
+      } catch (error) {
+        lastError = error
+      }
+    }
+
+    if (lastError) throw lastError
   }
 
   /**

@@ -106,4 +106,34 @@ describe("SystemTestBrowserHelper command events", () => {
       jasmine.clock().uninstall()
     }
   })
+
+  it("keeps retrying the client websocket connection beyond thirty seconds", () => {
+    const originalStartScoundrel = SystemTestBrowserHelper.prototype.startScoundrel
+    const originalWebSocket = globalThis.WebSocket
+
+    jasmine.clock().install()
+
+    try {
+      SystemTestBrowserHelper.prototype.startScoundrel = function () {}
+      globalThis.WebSocket = FakeWebSocket
+      FakeWebSocket.instances = []
+
+      const browserHelper = new SystemTestBrowserHelper()
+      const onError = spyOn(browserHelper.communicator, "onError")
+
+      browserHelper.connectWebSocket()
+
+      for (let attempt = 0; attempt < 121; attempt += 1) {
+        FakeWebSocket.instances[FakeWebSocket.instances.length - 1].emit("close")
+        jasmine.clock().tick(250)
+      }
+
+      expect(FakeWebSocket.instances.length).toEqual(122)
+      expect(onError).not.toHaveBeenCalled()
+    } finally {
+      globalThis.WebSocket = originalWebSocket
+      SystemTestBrowserHelper.prototype.startScoundrel = originalStartScoundrel
+      jasmine.clock().uninstall()
+    }
+  })
 })

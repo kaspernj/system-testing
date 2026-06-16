@@ -106,6 +106,7 @@ function shouldIgnoreBrowserLogEntry(entry, message) {
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
  * @property {"actions" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context (skips WebDriver's pointer synthesis entirely — useful when the default click is dropped by a framework responder that refuses synthetic WebDriver pointer events).
  * @property {boolean} [scrollTo] Whether to scroll found elements into view before returning them.
+ * @property {string[]} [scrollContainerTestIDs] Native test IDs that should be tried as scroll containers before falling back to viewport gestures.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 /**
@@ -427,7 +428,8 @@ export default class WebDriverDriver {
    * @returns {Promise<import("selenium-webdriver").WebElement[]>}
    */
   async all(selector, args = {}) {
-    const {scrollTo = false, visible = true, timeout, useBaseSelector = true, ...restArgs} = args
+    const {scrollContainerTestIDs, scrollTo = false, visible = true, timeout, useBaseSelector = true, ...restArgs} = args
+    void scrollContainerTestIDs
     const restArgsKeys = Object.keys(restArgs)
     let actualTimeout
 
@@ -549,6 +551,17 @@ export default class WebDriverDriver {
    */
   async findByTestID(testID, args) {
     return await this.find(`[data-testid='${testID}']`, args)
+  }
+
+  /**
+   * Finds native Android visible text or an accessibility label.
+   * @param {string} expectedText Text to locate.
+   * @param {FindArgs} [args] Optional lookup settings.
+   * @returns {Promise<import("selenium-webdriver").WebElement>} Matching native element.
+   */
+  async findByNativeText(expectedText, args = {}) {
+    void args
+    throw new Error(`findByNativeText is only supported for native Appium sessions: ${expectedText}`)
   }
 
   /**
