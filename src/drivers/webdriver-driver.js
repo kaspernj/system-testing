@@ -516,7 +516,13 @@ export default class WebDriverDriver {
    * @returns {Promise<boolean>}
    */
   async exists(selector, args = {}) {
-    return (await this.all(selector, args)).length > 0
+    try {
+      return (await this.all(selector, args)).length > 0
+    } catch (error) {
+      if (isElementLookupTimeoutError(error)) return false
+
+      throw error
+    }
   }
 
   /**
