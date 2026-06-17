@@ -188,6 +188,110 @@ describeIfWeb("SystemTest finders", () => {
     })
   })
 
+  it("exists returns false when a default-timeout selector lookup times out", async () => {
+    await SystemTest.run(async (runningSystemTest) => {
+      const originalTimeouts = runningSystemTest.getTimeouts()
+
+      try {
+        await runningSystemTest.setTimeouts(100)
+
+        const result = await runningSystemTest.exists("#does-not-exist", {useBaseSelector: false})
+
+        expect(result).toBe(false)
+      } finally {
+        await runningSystemTest.setTimeouts(originalTimeouts)
+      }
+    })
+  })
+
+  it("checks registered browser errors before and after exists", async () => {
+    await SystemTest.run(async (runningSystemTest) => {
+      const driverAdapter = runningSystemTest.getDriverAdapter()
+      const originalExists = driverAdapter.exists.bind(driverAdapter)
+      let existsCalls = 0
+
+      driverAdapter.exists = async () => {
+        existsCalls += 1
+
+        return true
+      }
+      runningSystemTest.registerBrowserError({message: "exists fail fast"})
+
+      try {
+        await expectAsync(
+          runningSystemTest.exists("[data-testid='blankText']", {useBaseSelector: false, timeout: 0})
+        ).toBeRejectedWithError(/Browser error: exists fail fast/)
+
+        expect(existsCalls).toEqual(0)
+      } finally {
+        driverAdapter.exists = originalExists
+      }
+    })
+
+    await SystemTest.run(async (runningSystemTest) => {
+      const driverAdapter = runningSystemTest.getDriverAdapter()
+      const originalExists = driverAdapter.exists.bind(driverAdapter)
+
+      driverAdapter.exists = async () => {
+        runningSystemTest.registerBrowserError({message: "exists fail after adapter"})
+
+        return true
+      }
+
+      try {
+        await expectAsync(
+          runningSystemTest.exists("[data-testid='blankText']", {useBaseSelector: false, timeout: 0})
+        ).toBeRejectedWithError(/Browser error: exists fail after adapter/)
+      } finally {
+        driverAdapter.exists = originalExists
+      }
+    })
+  })
+
+  it("checks registered browser errors before and after text", async () => {
+    await SystemTest.run(async (runningSystemTest) => {
+      const driverAdapter = runningSystemTest.getDriverAdapter()
+      const originalText = driverAdapter.text.bind(driverAdapter)
+      let textCalls = 0
+
+      driverAdapter.text = async () => {
+        textCalls += 1
+
+        return "Blank"
+      }
+      runningSystemTest.registerBrowserError({message: "text fail fast"})
+
+      try {
+        await expectAsync(
+          runningSystemTest.text("[data-testid='blankText']", {useBaseSelector: false, timeout: 0})
+        ).toBeRejectedWithError(/Browser error: text fail fast/)
+
+        expect(textCalls).toEqual(0)
+      } finally {
+        driverAdapter.text = originalText
+      }
+    })
+
+    await SystemTest.run(async (runningSystemTest) => {
+      const driverAdapter = runningSystemTest.getDriverAdapter()
+      const originalText = driverAdapter.text.bind(driverAdapter)
+
+      driverAdapter.text = async () => {
+        runningSystemTest.registerBrowserError({message: "text fail after adapter"})
+
+        return "Blank"
+      }
+
+      try {
+        await expectAsync(
+          runningSystemTest.text("[data-testid='blankText']", {useBaseSelector: false, timeout: 0})
+        ).toBeRejectedWithError(/Browser error: text fail after adapter/)
+      } finally {
+        driverAdapter.text = originalText
+      }
+    })
+  })
+
   it("can scroll found elements into view before returning them", async () => {
     await SystemTest.run(async (runningSystemTest) => {
       const driverAdapter = runningSystemTest.getDriverAdapter()

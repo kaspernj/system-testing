@@ -511,6 +511,21 @@ export default class WebDriverDriver {
   }
 
   /**
+   * @param {string} selector
+   * @param {FindArgs} [args]
+   * @returns {Promise<boolean>}
+   */
+  async exists(selector, args = {}) {
+    try {
+      return (await this.all(selector, args)).length > 0
+    } catch (error) {
+      if (isElementLookupTimeoutError(error)) return false
+
+      throw error
+    }
+  }
+
+  /**
    * Finds a single element by CSS selector
    * @param {string} selector
    * @param {FindArgs} [args]
@@ -541,6 +556,15 @@ export default class WebDriverDriver {
     }
 
     return elements[0]
+  }
+
+  /**
+   * @param {string} selector
+   * @param {FindArgs} [args]
+   * @returns {Promise<string>}
+   */
+  async text(selector, args = {}) {
+    return await (await this.find(selector, args)).getText()
   }
 
   /**

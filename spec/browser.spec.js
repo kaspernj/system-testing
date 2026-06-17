@@ -115,6 +115,42 @@ describe("Browser", () => {
     await browser.expectTestIDCssColor("panel", "background-color", "30, 41, 59", "255, 255, 255", "panel")
   })
 
+  it("reads visible text through the driver adapter", async () => {
+    const browser = new Browser()
+    const textCalls = []
+
+    browser.driverAdapter = /** @type {any} */ ({
+      text: async (selector, args) => {
+        textCalls.push([selector, args])
+
+        return "Visible text"
+      }
+    })
+
+    expect(await browser.text("body", {visible: null})).toEqual("Visible text")
+    expect(textCalls).toEqual([["body", {visible: null}]])
+  })
+
+  it("checks selector existence through the driver adapter", async () => {
+    const browser = new Browser()
+    const existsCalls = []
+
+    browser.driverAdapter = /** @type {any} */ ({
+      exists: async (selector, args) => {
+        existsCalls.push([selector, args])
+
+        return selector === "#present"
+      }
+    })
+
+    expect(await browser.exists("#present", {timeout: 0})).toEqual(true)
+    expect(await browser.exists("#missing", {timeout: 0})).toEqual(false)
+    expect(existsCalls).toEqual([
+      ["#present", {timeout: 0}],
+      ["#missing", {timeout: 0}]
+    ])
+  })
+
   it("rejects CSS color substring matches by test id", async () => {
     const browser = new Browser()
 

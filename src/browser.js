@@ -342,6 +342,15 @@ export default class Browser {
   /**
    * @param {string} selector
    * @param {import("./system-test.js").FindArgs} [args]
+   * @returns {Promise<boolean>}
+   */
+  async exists(selector, args = {}) {
+    return await this.getDriverAdapter().exists(selector, args)
+  }
+
+  /**
+   * @param {string} selector
+   * @param {import("./system-test.js").FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
   async find(selector, args = {}) {
@@ -374,6 +383,15 @@ export default class Browser {
    */
   async findNoWait(selector, args = {}) {
     return await this.getDriverAdapter().findNoWait(selector, args)
+  }
+
+  /**
+   * @param {string} selector
+   * @param {import("./system-test.js").FindArgs} [args]
+   * @returns {Promise<string>}
+   */
+  async text(selector, args = {}) {
+    return await this.getDriverAdapter().text(selector, args)
   }
 
   /**

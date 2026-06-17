@@ -433,6 +433,34 @@ export default class SystemTest extends Browser {
   }
 
   /**
+   * Checks whether a CSS selector matches an element.
+   * @param {string} selector
+   * @param {FindArgs} [args]
+   * @returns {Promise<boolean>}
+   */
+  async exists(selector, args = {}) {
+    this.throwRegisteredBrowserError()
+    const result = await this.getDriverAdapter().exists(selector, args)
+    this.throwRegisteredBrowserError()
+
+    return result
+  }
+
+  /**
+   * Reads visible text from a CSS selector.
+   * @param {string} selector
+   * @param {FindArgs} [args]
+   * @returns {Promise<string>}
+   */
+  async text(selector, args = {}) {
+    this.throwRegisteredBrowserError()
+    const result = await this.getDriverAdapter().text(selector, args)
+    this.throwRegisteredBrowserError()
+
+    return result
+  }
+
+  /**
    * Clicks an element that has children which fills out the element and would otherwise have caused a ElementClickInterceptedError
    * @param {string|import("selenium-webdriver").WebElement} elementOrIdentifier
    * @returns {Promise<void>}
