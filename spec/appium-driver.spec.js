@@ -182,6 +182,105 @@ describe("AppiumDriver", () => {
     expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
   })
 
+  it("searches upward when a native id is above the retained viewport offset", async () => {
+    const element = {getId: async () => "native-id-element"}
+    const targetSelector = androidResourceIdSelector("userShowScreen/email/row")
+    const driver = new AppiumDriver({
+      browser: {
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      },
+      options: {
+        capabilities: {
+          platformName: "Android"
+        }
+      }
+    })
+    const scrollDirections = []
+    let scrolledUp = false
+    const findElements = jasmine.createSpy("findElements").and.callFake(async (locator) => {
+      if (locator.value === targetSelector) return scrolledUp ? [element] : []
+
+      return []
+    })
+
+    driver.setWebDriver(/** @type {import("selenium-webdriver").WebDriver} */ ({
+      executeScript: jasmine.createSpy("executeScript").and.callFake(async (script, args) => {
+        if (script !== "mobile: scrollGesture") return undefined
+
+        scrollDirections.push(args.direction)
+        if (args.direction === "up") scrolledUp = true
+        return true
+      }),
+      findElements,
+      manage: () => ({
+        getTimeouts: async () => ({implicit: 5000}),
+        setTimeouts: async () => {},
+        window: () => ({
+          getRect: async () => ({x: 0, y: 0, width: 400, height: 800})
+        })
+      })
+    }))
+
+    await expectAsync(driver.findById("userShowScreen/email/row", {
+      scrollTo: true,
+      timeout: 0
+    })).toBeResolvedTo(element)
+
+    expect(scrollDirections).toEqual(["up"])
+  })
+
+  it("continues downward after upward native viewport scanning misses", async () => {
+    const element = {getId: async () => "native-id-element"}
+    const targetSelector = androidResourceIdSelector("organizationShowScreen/project-1/title")
+    const driver = new AppiumDriver({
+      browser: {
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      },
+      options: {
+        capabilities: {
+          platformName: "Android"
+        }
+      }
+    })
+    const scrollDirections = []
+    let downScrolls = 0
+    const findElements = jasmine.createSpy("findElements").and.callFake(async (locator) => {
+      if (locator.value === targetSelector) return downScrolls >= 2 ? [element] : []
+
+      return []
+    })
+
+    driver.setWebDriver(/** @type {import("selenium-webdriver").WebDriver} */ ({
+      executeScript: jasmine.createSpy("executeScript").and.callFake(async (script, args) => {
+        if (script !== "mobile: scrollGesture") return undefined
+
+        scrollDirections.push(args.direction)
+        if (args.direction === "down") downScrolls += 1
+        return true
+      }),
+      findElements,
+      manage: () => ({
+        getTimeouts: async () => ({implicit: 5000}),
+        setTimeouts: async () => {},
+        window: () => ({
+          getRect: async () => ({x: 0, y: 0, width: 400, height: 800})
+        })
+      })
+    }))
+
+    await expectAsync(driver.findById("organizationShowScreen/project-1/title", {
+      scrollTo: true,
+      timeout: 0
+    })).toBeResolvedTo(element)
+
+    expect(scrollDirections).toContain("up")
+    expect(scrollDirections.filter((direction) => direction === "down").length).toEqual(2)
+  })
+
   it("falls back to W3C actions when native mobile scroll gestures are unsupported", async () => {
     let actionsCommand
     const execute = jasmine.createSpy("execute").and.callFake(async (command) => {

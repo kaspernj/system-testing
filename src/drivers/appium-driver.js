@@ -7,6 +7,8 @@ import {wait} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
 import WebDriverDriver from "./webdriver-driver.js"
 
+const MAX_NATIVE_VIEWPORT_SCROLL_STEPS = 8
+
 /**
  * Appium timeout values returned by Selenium.
  * @typedef {{implicit: number, pageLoad?: number, script?: number}} NativeTimeouts
@@ -22,6 +24,10 @@ import WebDriverDriver from "./webdriver-driver.js"
 /**
  * Tracks native scroll fallbacks that already reported no movement.
  * @typedef {{tryElementScroll: boolean, tryViewportScroll: boolean}} NativeViewportScrollState
+ */
+/**
+ * Native viewport scroll direction.
+ * @typedef {"down"|"up"} NativeViewportScrollDirection
  */
 /**
  * Native Android lookup work executed by the scrolling poller.
@@ -650,10 +656,6 @@ export default class AppiumDriver extends WebDriverDriver {
   async findNativeControlWithScrolling(lookup, args = {}) {
     const {scrollContainerTestIDs = [], scrollTo = true, timeout = 10000} = args
     const startTime = Date.now()
-    const viewportScrollState = {
-      tryElementScroll: true,
-      tryViewportScroll: true
-    }
     let attemptedUiSelectorScroll = false
     /** @type {unknown} */
     let lastError
@@ -685,10 +687,8 @@ export default class AppiumDriver extends WebDriverDriver {
           void error
         }
 
-        await this.scrollNativeViewportDown(viewportScrollState, scrollContainerTestIDs)
-
         try {
-          return await lookup.directFind()
+          return await this.findNativeControlWithViewportScan(lookup.directFind, scrollContainerTestIDs)
         } catch (error) {
           if (!isNativeControlLookupMiss(error)) throw error
           lastError = error
@@ -701,6 +701,51 @@ export default class AppiumDriver extends WebDriverDriver {
 
     const elapsedSeconds = (Date.now() - startTime) / 1000
     throw errorWithCause(`Element couldn't be found after ${elapsedSeconds.toFixed(2)}s by ${lookup.description}`, lastError)
+  }
+
+  /**
+   * Searches native content from the top down so retained scroll offsets do not
+   * make controls above the current viewport unreachable.
+   * @param {() => Promise<import("selenium-webdriver").WebElement>} directFind Lookup to retry after each scroll.
+   * @param {string[]} scrollContainerTestIDs Native test IDs that may identify scroll containers.
+   * @returns {Promise<import("selenium-webdriver").WebElement>} Matching control.
+   */
+  async findNativeControlWithViewportScan(directFind, scrollContainerTestIDs) {
+    const upScrollState = this.newNativeViewportScrollState()
+
+    for (let index = 0; index < MAX_NATIVE_VIEWPORT_SCROLL_STEPS; index += 1) {
+      await this.scrollNativeViewport(upScrollState, scrollContainerTestIDs, "up")
+
+      try {
+        return await directFind()
+      } catch (error) {
+        if (!isNativeControlLookupMiss(error)) throw error
+      }
+    }
+
+    const downScrollState = this.newNativeViewportScrollState()
+
+    for (let index = 0; index < MAX_NATIVE_VIEWPORT_SCROLL_STEPS; index += 1) {
+      await this.scrollNativeViewport(downScrollState, scrollContainerTestIDs, "down")
+
+      try {
+        return await directFind()
+      } catch (error) {
+        if (!isNativeControlLookupMiss(error)) throw error
+      }
+    }
+
+    throw new Error("Element couldn't be found after native viewport scan")
+  }
+
+  /**
+   * @returns {NativeViewportScrollState} Fresh scroll fallback state.
+   */
+  newNativeViewportScrollState() {
+    return {
+      tryElementScroll: true,
+      tryViewportScroll: true
+    }
   }
 
   /**
@@ -722,12 +767,13 @@ export default class AppiumDriver extends WebDriverDriver {
   }
 
   /**
-   * Scrolls the visible native viewport down when UiScrollable cannot identify the owning ScrollView.
+   * Scrolls the visible native viewport when UiScrollable cannot identify the owning ScrollView.
    * @param {NativeViewportScrollState} scrollState Per-lookup Appium scroll state.
    * @param {string[]} scrollContainerTestIDs Native test IDs that may identify scroll containers.
+   * @param {NativeViewportScrollDirection} direction Direction to scroll the content.
    * @returns {Promise<void>} Resolves after Appium performs the gesture.
    */
-  async scrollNativeViewportDown(scrollState, scrollContainerTestIDs) {
+  async scrollNativeViewport(scrollState, scrollContainerTestIDs, direction) {
     const windowRect = /** @type {NativeWindowRect} */ (await this.getWebDriver().manage().window().getRect())
     const horizontalInset = Math.max(1, Math.floor(windowRect.width * 0.1))
     const top = Math.max(1, Math.floor(windowRect.height * 0.2))
@@ -737,7 +783,7 @@ export default class AppiumDriver extends WebDriverDriver {
     if (scrollState.tryElementScroll && scrollContainerTestIDs.length > 0) {
       for (const scrollContainerTestID of scrollContainerTestIDs) {
         try {
-          const didScroll = await this.scrollNativeElementDown(scrollContainerTestID)
+          const didScroll = await this.scrollNativeElement(scrollContainerTestID, direction)
           if (didScroll) return
         } catch (error) {
           scrollState.tryElementScroll = false
@@ -751,7 +797,7 @@ export default class AppiumDriver extends WebDriverDriver {
     if (scrollState.tryViewportScroll) {
       try {
         const didScroll = await this.getWebDriver().executeScript("mobile: scrollGesture", {
-          direction: "down",
+          direction,
           height,
           left: horizontalInset,
           percent: 0.75,
@@ -767,8 +813,8 @@ export default class AppiumDriver extends WebDriverDriver {
     }
 
     const centerX = Math.floor(windowRect.x + windowRect.width / 2)
-    const startY = Math.floor(windowRect.y + windowRect.height * 0.78)
-    const endY = Math.floor(windowRect.y + windowRect.height * 0.28)
+    const startY = Math.floor(windowRect.y + windowRect.height * (direction === "down" ? 0.78 : 0.28))
+    const endY = Math.floor(windowRect.y + windowRect.height * (direction === "down" ? 0.28 : 0.78))
 
     await this.getWebDriver().execute(new Command(Name.ACTIONS).setParameter("actions", [
       {
@@ -790,16 +836,17 @@ export default class AppiumDriver extends WebDriverDriver {
   /**
    * Scrolls a specific native Android element by test id when Appium exposes it as a scroll container.
    * @param {string} testId Stable native resource id suffix.
+   * @param {NativeViewportScrollDirection} direction Direction to scroll the content.
    * @returns {Promise<boolean>} Whether Appium reported more content to scroll.
    */
-  async scrollNativeElementDown(testId) {
+  async scrollNativeElement(testId, direction) {
     const elements = await this.getWebDriver().findElements(new By("-android uiautomator", androidResourceIdSelector(testId)))
     const scrollElement = elements[0]
 
     if (!scrollElement) return false
 
     const didScroll = await this.getWebDriver().executeScript("mobile: scrollGesture", {
-      direction: "down",
+      direction,
       elementId: await scrollElement.getId(),
       percent: 0.75
     })
