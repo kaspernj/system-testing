@@ -183,12 +183,10 @@ describe("AppiumDriver", () => {
   })
 
   it("falls back to W3C actions when native mobile scroll gestures are unsupported", async () => {
-    const actionChain = {
-      move: jasmine.createSpy("move").and.callFake(() => actionChain),
-      press: jasmine.createSpy("press").and.callFake(() => actionChain),
-      release: jasmine.createSpy("release").and.callFake(() => actionChain),
-      perform: jasmine.createSpy("perform").and.resolveTo()
-    }
+    let actionsCommand
+    const execute = jasmine.createSpy("execute").and.callFake(async (command) => {
+      actionsCommand = command
+    })
     const driver = new AppiumDriver({
       browser: {
         driver: undefined,
@@ -203,7 +201,7 @@ describe("AppiumDriver", () => {
     })
 
     driver.setWebDriver(/** @type {import("selenium-webdriver").WebDriver} */ ({
-      actions: () => actionChain,
+      execute,
       executeScript: jasmine.createSpy("executeScript").and.rejectWith(new Error("Unknown mobile command")),
       findElements: jasmine.createSpy("findElements").and.resolveTo([]),
       manage: () => ({
@@ -216,7 +214,11 @@ describe("AppiumDriver", () => {
     }))
 
     await expectAsync(driver.findByNativeText("Missing text", {timeout: 0})).toBeRejectedWithError(/Element couldn't be found/)
-    expect(actionChain.perform).toHaveBeenCalled()
+    if (!actionsCommand) throw new Error("Expected W3C actions command")
+    const pointerAction = actionsCommand.getParameter("actions")[0]
+
+    expect(pointerAction.parameters.pointerType).toEqual("touch")
+    expect(pointerAction.actions.map((action) => action.type)).toEqual(["pointerMove", "pointerDown", "pointerMove", "pointerUp"])
   })
 
   it("cleans up the generated Chrome user-data-dir on stop", async () => {

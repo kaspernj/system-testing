@@ -1,6 +1,7 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import {Builder, By} from "selenium-webdriver"
+import {Command, Name} from "selenium-webdriver/lib/command.js"
 import {Origin} from "selenium-webdriver/lib/input.js"
 import {wait} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
@@ -769,13 +770,21 @@ export default class AppiumDriver extends WebDriverDriver {
     const startY = Math.floor(windowRect.y + windowRect.height * 0.78)
     const endY = Math.floor(windowRect.y + windowRect.height * 0.28)
 
-    await this.getWebDriver()
-      .actions({async: true})
-      .move({origin: Origin.VIEWPORT, x: centerX, y: startY})
-      .press()
-      .move({duration: 250, origin: Origin.VIEWPORT, x: centerX, y: endY})
-      .release()
-      .perform()
+    await this.getWebDriver().execute(new Command(Name.ACTIONS).setParameter("actions", [
+      {
+        actions: [
+          {duration: 100, origin: Origin.VIEWPORT, type: "pointerMove", x: centerX, y: startY},
+          {button: 0, type: "pointerDown"},
+          {duration: 250, origin: Origin.VIEWPORT, type: "pointerMove", x: centerX, y: endY},
+          {button: 0, type: "pointerUp"}
+        ],
+        id: "native scroll finger",
+        parameters: {
+          pointerType: "touch"
+        },
+        type: "pointer"
+      }
+    ]))
   }
 
   /**
