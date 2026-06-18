@@ -224,6 +224,7 @@ describeIfWeb("SystemTest finders", () => {
 
         expect(existsCalls).toEqual(0)
       } finally {
+        clearRegisteredBrowserErrors(runningSystemTest)
         driverAdapter.exists = originalExists
       }
     })
@@ -243,6 +244,7 @@ describeIfWeb("SystemTest finders", () => {
           runningSystemTest.exists("[data-testid='blankText']", {useBaseSelector: false, timeout: 0})
         ).toBeRejectedWithError(/Browser error: exists fail after adapter/)
       } finally {
+        clearRegisteredBrowserErrors(runningSystemTest)
         driverAdapter.exists = originalExists
       }
     })
@@ -268,6 +270,7 @@ describeIfWeb("SystemTest finders", () => {
 
         expect(textCalls).toEqual(0)
       } finally {
+        clearRegisteredBrowserErrors(runningSystemTest)
         driverAdapter.text = originalText
       }
     })
@@ -287,6 +290,7 @@ describeIfWeb("SystemTest finders", () => {
           runningSystemTest.text("[data-testid='blankText']", {useBaseSelector: false, timeout: 0})
         ).toBeRejectedWithError(/Browser error: text fail after adapter/)
       } finally {
+        clearRegisteredBrowserErrors(runningSystemTest)
         driverAdapter.text = originalText
       }
     })
@@ -318,9 +322,13 @@ describeIfWeb("SystemTest finders", () => {
     await SystemTest.run(async (runningSystemTest) => {
       runningSystemTest.registerBrowserError({message: "finder fail fast"})
 
-      await expectAsync(
-        runningSystemTest.findByTestID("blankText", {useBaseSelector: false, timeout: 0})
-      ).toBeRejectedWithError(/Browser error: finder fail fast/)
+      try {
+        await expectAsync(
+          runningSystemTest.findByTestID("blankText", {useBaseSelector: false, timeout: 0})
+        ).toBeRejectedWithError(/Browser error: finder fail fast/)
+      } finally {
+        clearRegisteredBrowserErrors(runningSystemTest)
+      }
     })
   })
 
@@ -328,9 +336,13 @@ describeIfWeb("SystemTest finders", () => {
     await SystemTest.run(async (runningSystemTest) => {
       runningSystemTest.handleError({message: "finder rejection fail fast"})
 
-      await expectAsync(
-        runningSystemTest.findByTestID("blankText", {useBaseSelector: false, timeout: 0})
-      ).toBeRejectedWithError(/Browser error: finder rejection fail fast/)
+      try {
+        await expectAsync(
+          runningSystemTest.findByTestID("blankText", {useBaseSelector: false, timeout: 0})
+        ).toBeRejectedWithError(/Browser error: finder rejection fail fast/)
+      } finally {
+        clearRegisteredBrowserErrors(runningSystemTest)
+      }
     })
   })
 
@@ -374,3 +386,12 @@ describeIfWeb("SystemTest finders", () => {
     })
   })
 })
+
+/**
+ * Clears expected synthetic browser errors registered by fail-fast assertions.
+ * @param {SystemTest} systemTest Running system-test instance.
+ * @returns {void}
+ */
+function clearRegisteredBrowserErrors(systemTest) {
+  systemTest._browserErrors = []
+}
