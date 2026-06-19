@@ -74,14 +74,16 @@ describe("Browser", () => {
   it("waits for text on elements by test id", async () => {
     const browser = new Browser()
     const findArgs = []
+    const waitForTextCalls = []
     const texts = [
-      "Loading",
-      "Ready",
       "Removing stale text",
       "Fresh text"
     ]
 
     browser.driverAdapter = /** @type {any} */ ({
+      waitForTestIDText: async (testID, expectedText, args) => {
+        waitForTextCalls.push([testID, expectedText, args])
+      },
       findByTestID: async (_testID, args) => {
         findArgs.push(args)
 
@@ -95,9 +97,8 @@ describe("Browser", () => {
     await browser.waitForTestIDText("statusText", "Ready")
     await browser.waitForTestIDTextExcludes("statusText", "stale")
 
+    expect(waitForTextCalls).toEqual([["statusText", "Ready", {timeout: 500}]])
     expect(findArgs).toEqual([
-      {timeout: 0},
-      {timeout: 0},
       {timeout: 0},
       {timeout: 0}
     ])
