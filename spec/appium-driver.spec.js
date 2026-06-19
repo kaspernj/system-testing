@@ -135,6 +135,41 @@ describe("AppiumDriver", () => {
     expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
   })
 
+  it("waits for native text scoped to a test id", async () => {
+    const element = {getId: async () => "native-test-id-text-element"}
+    const driver = new AppiumDriver({
+      browser: {
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      },
+      options: {
+        capabilities: {
+          platformName: "Android"
+        }
+      }
+    })
+    const setTimeouts = jasmine.createSpy("setTimeouts").and.resolveTo()
+    const findElements = jasmine.createSpy("findElements").and.callFake(async (locator) => {
+      if (locator.value === 'new UiSelector().resourceIdMatches("(^|.*:id/)userShowScreen/email/row$").childSelector(new UiSelector().textContains("native@example.com"))') {
+        return [element]
+      }
+
+      return []
+    })
+
+    driver.setWebDriver(/** @type {import("selenium-webdriver").WebDriver} */ ({
+      findElements,
+      manage: () => ({
+        getTimeouts: async () => ({implicit: 5000}),
+        setTimeouts
+      })
+    }))
+
+    await expectAsync(driver.waitForTestIDText("userShowScreen/email/row", "native@example.com", {timeout: 0})).toBeResolved()
+    expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
+  })
+
   it("scrolls native id lookups with caller-provided scroll containers", async () => {
     const element = {getId: async () => "native-id-element"}
     const targetSelector = androidResourceIdSelector("projectShowScreen/editButton")
@@ -277,7 +312,7 @@ describe("AppiumDriver", () => {
       timeout: 0
     })).toBeResolvedTo(element)
 
-    expect(scrollDirections).toContain("up")
+    expect(scrollDirections.slice(0, 4)).toEqual(["up", "down", "up", "down"])
     expect(scrollDirections.filter((direction) => direction === "down").length).toEqual(2)
   })
 

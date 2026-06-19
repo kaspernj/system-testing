@@ -115,6 +115,89 @@ function isUnsupportedMobileGestureError(error) {
 }
 
 /**
+ * Adds a UiAutomator text predicate to a resource-id selector.
+ * @param {string} resourceSelector UiAutomator resource-id selector.
+ * @param {string} filterSelector UiAutomator text or description selector.
+ * @returns {string} Combined selector.
+ */
+function combineAndroidSelectors(resourceSelector, filterSelector) {
+  const prefix = "new UiSelector()"
+
+  if (!filterSelector.startsWith(prefix)) {
+    throw new Error(`Expected Android selector to start with ${prefix}, got ${filterSelector}`)
+  }
+
+  return `${resourceSelector}${filterSelector.slice(prefix.length)}`
+}
+
+/**
+ * Adds a UiAutomator child predicate to a resource-id selector.
+ * @param {string} resourceSelector UiAutomator resource-id selector.
+ * @param {string} childSelector UiAutomator child selector.
+ * @returns {string} Combined selector.
+ */
+function childAndroidSelector(resourceSelector, childSelector) {
+  return `${resourceSelector}.childSelector(${childSelector})`
+}
+
+/**
+ * Escapes text for use as an XPath string literal.
+ * @param {string} value Unescaped XPath text.
+ * @returns {string} Quoted literal or concat expression safe for XPath.
+ */
+function xpathStringLiteral(value) {
+  if (!value.includes('"')) return `"${value}"`
+  if (!value.includes("'")) return `'${value}'`
+
+  return `concat(${value.split('"').map((part) => `"${part}"`).join(", '\"', ")})`
+}
+
+/**
+ * Builds an XPath selector for text under one native Android resource id.
+ * @param {string} testId Resource id suffix to scope under.
+ * @param {string} expectedText Text to locate inside that scope.
+ * @returns {string} XPath selector source.
+ */
+function androidScopedTextXpath(testId, expectedText) {
+  const resourceId = xpathStringLiteral(testId)
+  const text = xpathStringLiteral(expectedText)
+  const resourcePredicate = `(@resource-id = ${resourceId} or substring(@resource-id, string-length(@resource-id) - string-length(${resourceId}) + 1) = ${resourceId})`
+  const textPredicate = `(contains(@text, ${text}) or contains(@content-desc, ${text}))`
+
+  return `//*[${resourcePredicate} and ${textPredicate}] | //*[${resourcePredicate}]//*[${textPredicate}]`
+}
+
+/**
+ * Builds selectors that scope text matching to one native resource id.
+ * @param {string} testId Stable test id.
+ * @param {string} expectedText Text that must appear on that element.
+ * @returns {string[]} UiAutomator selectors.
+ */
+function nativeTestIDTextSelectors(testId, expectedText) {
+  const resourceSelector = androidResourceIdSelector(testId)
+
+  return [
+    combineAndroidSelectors(resourceSelector, androidTextContainsSelector(expectedText)),
+    combineAndroidSelectors(resourceSelector, androidDescriptionContainsSelector(expectedText)),
+    childAndroidSelector(resourceSelector, androidTextContainsSelector(expectedText)),
+    childAndroidSelector(resourceSelector, androidDescriptionContainsSelector(expectedText))
+  ]
+}
+
+/**
+ * Builds native Android scroll selectors for a scoped text assertion.
+ * @param {string} testId Stable test id.
+ * @param {string} expectedText Text that must appear on that element.
+ * @returns {string[]} UiAutomator selectors.
+ */
+function nativeTestIDTextScrollSelectors(testId, expectedText) {
+  return [
+    ...nativeTestIDTextSelectors(testId, expectedText),
+    androidResourceIdSelector(testId)
+  ]
+}
+
+/**
  * Ensures Chrome Appium capabilities use a caller-owned user-data directory.
  * This avoids repeated sessions leaking temp profiles under `/tmp` in CI.
  * @param {object} args
@@ -630,6 +713,46 @@ export default class AppiumDriver extends WebDriverDriver {
   }
 
   /**
+   * Waits until a test id owns expected visible text or an accessibility label.
+   * @param {string} testId Stable native resource id suffix.
+   * @param {string} expectedText Text that must appear under the test id.
+   * @param {FindArgs} [args] Optional lookup settings.
+   * @returns {Promise<void>}
+   */
+  async waitForTestIDText(testId, expectedText, args = {}) {
+    if (!this.isAndroidNativeAppContext()) {
+      await super.waitForTestIDText(testId, expectedText, args)
+      return
+    }
+
+    const selectors = nativeTestIDTextSelectors(testId, expectedText)
+    const scopedTextXpath = androidScopedTextXpath(testId, expectedText)
+    const directFind = async () => {
+      for (const selector of selectors) {
+        const elements = await this.getWebDriver().findElements(new By("-android uiautomator", selector))
+
+        if (elements.length > 1) {
+          throw new Error(`More than 1 elements (${elements.length}) were found by id ${testId} with text ${expectedText}`)
+        }
+        if (elements[0]) return elements[0]
+      }
+
+      const scopedTextElements = await this.getWebDriver().findElements(By.xpath(scopedTextXpath))
+      if (scopedTextElements[0]) return scopedTextElements[0]
+
+      throw new Error(`Element couldn't be found by id ${testId} with text ${expectedText}`)
+    }
+
+    await this.withNativeImplicitWait(0, async () => {
+      await this.findNativeControlWithScrolling({
+        description: `id ${testId} with text ${expectedText}`,
+        directFind,
+        scrollSelectors: nativeTestIDTextScrollSelectors(testId, expectedText)
+      }, {...args, scrollTo: args.scrollTo ?? true})
+    })
+  }
+
+  /**
    * Finds a native Android control by resource id, scrolling it into view first when requested.
    * @param {string} testId Stable native resource id suffix.
    * @param {FindArgs} [args] Optional lookup settings.
@@ -704,14 +827,15 @@ export default class AppiumDriver extends WebDriverDriver {
   }
 
   /**
-   * Searches native content from the top down so retained scroll offsets do not
-   * make controls above the current viewport unreachable.
+   * Searches native content around the current viewport so retained offsets and
+   * below-fold targets are both reachable without exhausting the timeout budget.
    * @param {() => Promise<import("selenium-webdriver").WebElement>} directFind Lookup to retry after each scroll.
    * @param {string[]} scrollContainerTestIDs Native test IDs that may identify scroll containers.
    * @returns {Promise<import("selenium-webdriver").WebElement>} Matching control.
    */
   async findNativeControlWithViewportScan(directFind, scrollContainerTestIDs) {
     const upScrollState = this.newNativeViewportScrollState()
+    const downScrollState = this.newNativeViewportScrollState()
 
     for (let index = 0; index < MAX_NATIVE_VIEWPORT_SCROLL_STEPS; index += 1) {
       await this.scrollNativeViewport(upScrollState, scrollContainerTestIDs, "up")
@@ -721,11 +845,7 @@ export default class AppiumDriver extends WebDriverDriver {
       } catch (error) {
         if (!isNativeControlLookupMiss(error)) throw error
       }
-    }
 
-    const downScrollState = this.newNativeViewportScrollState()
-
-    for (let index = 0; index < MAX_NATIVE_VIEWPORT_SCROLL_STEPS; index += 1) {
       await this.scrollNativeViewport(downScrollState, scrollContainerTestIDs, "down")
 
       try {
