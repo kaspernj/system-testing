@@ -135,6 +135,41 @@ describe("AppiumDriver", () => {
     expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
   })
 
+  it("waits for native text scoped to a test id", async () => {
+    const element = {getId: async () => "native-test-id-text-element"}
+    const driver = new AppiumDriver({
+      browser: {
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      },
+      options: {
+        capabilities: {
+          platformName: "Android"
+        }
+      }
+    })
+    const setTimeouts = jasmine.createSpy("setTimeouts").and.resolveTo()
+    const findElements = jasmine.createSpy("findElements").and.callFake(async (locator) => {
+      if (locator.value === 'new UiSelector().resourceIdMatches("(^|.*:id/)userShowScreen/email/row$").childSelector(new UiSelector().textContains("native@example.com"))') {
+        return [element]
+      }
+
+      return []
+    })
+
+    driver.setWebDriver(/** @type {import("selenium-webdriver").WebDriver} */ ({
+      findElements,
+      manage: () => ({
+        getTimeouts: async () => ({implicit: 5000}),
+        setTimeouts
+      })
+    }))
+
+    await expectAsync(driver.waitForTestIDText("userShowScreen/email/row", "native@example.com", {timeout: 0})).toBeResolved()
+    expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
+  })
+
   it("scrolls native id lookups with caller-provided scroll containers", async () => {
     const element = {getId: async () => "native-id-element"}
     const targetSelector = androidResourceIdSelector("projectShowScreen/editButton")
@@ -182,13 +217,110 @@ describe("AppiumDriver", () => {
     expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
   })
 
+  it("searches upward when a native id is above the retained viewport offset", async () => {
+    const element = {getId: async () => "native-id-element"}
+    const targetSelector = androidResourceIdSelector("userShowScreen/email/row")
+    const driver = new AppiumDriver({
+      browser: {
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      },
+      options: {
+        capabilities: {
+          platformName: "Android"
+        }
+      }
+    })
+    const scrollDirections = []
+    let scrolledUp = false
+    const findElements = jasmine.createSpy("findElements").and.callFake(async (locator) => {
+      if (locator.value === targetSelector) return scrolledUp ? [element] : []
+
+      return []
+    })
+
+    driver.setWebDriver(/** @type {import("selenium-webdriver").WebDriver} */ ({
+      executeScript: jasmine.createSpy("executeScript").and.callFake(async (script, args) => {
+        if (script !== "mobile: scrollGesture") return undefined
+
+        scrollDirections.push(args.direction)
+        if (args.direction === "up") scrolledUp = true
+        return true
+      }),
+      findElements,
+      manage: () => ({
+        getTimeouts: async () => ({implicit: 5000}),
+        setTimeouts: async () => {},
+        window: () => ({
+          getRect: async () => ({x: 0, y: 0, width: 400, height: 800})
+        })
+      })
+    }))
+
+    await expectAsync(driver.findById("userShowScreen/email/row", {
+      scrollTo: true,
+      timeout: 0
+    })).toBeResolvedTo(element)
+
+    expect(scrollDirections).toEqual(["up"])
+  })
+
+  it("continues downward after upward native viewport scanning misses", async () => {
+    const element = {getId: async () => "native-id-element"}
+    const targetSelector = androidResourceIdSelector("organizationShowScreen/project-1/title")
+    const driver = new AppiumDriver({
+      browser: {
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      },
+      options: {
+        capabilities: {
+          platformName: "Android"
+        }
+      }
+    })
+    const scrollDirections = []
+    let downScrolls = 0
+    const findElements = jasmine.createSpy("findElements").and.callFake(async (locator) => {
+      if (locator.value === targetSelector) return downScrolls >= 2 ? [element] : []
+
+      return []
+    })
+
+    driver.setWebDriver(/** @type {import("selenium-webdriver").WebDriver} */ ({
+      executeScript: jasmine.createSpy("executeScript").and.callFake(async (script, args) => {
+        if (script !== "mobile: scrollGesture") return undefined
+
+        scrollDirections.push(args.direction)
+        if (args.direction === "down") downScrolls += 1
+        return true
+      }),
+      findElements,
+      manage: () => ({
+        getTimeouts: async () => ({implicit: 5000}),
+        setTimeouts: async () => {},
+        window: () => ({
+          getRect: async () => ({x: 0, y: 0, width: 400, height: 800})
+        })
+      })
+    }))
+
+    await expectAsync(driver.findById("organizationShowScreen/project-1/title", {
+      scrollTo: true,
+      timeout: 0
+    })).toBeResolvedTo(element)
+
+    expect(scrollDirections.slice(0, 4)).toEqual(["up", "down", "up", "down"])
+    expect(scrollDirections.filter((direction) => direction === "down").length).toEqual(2)
+  })
+
   it("falls back to W3C actions when native mobile scroll gestures are unsupported", async () => {
-    const actionChain = {
-      move: jasmine.createSpy("move").and.callFake(() => actionChain),
-      press: jasmine.createSpy("press").and.callFake(() => actionChain),
-      release: jasmine.createSpy("release").and.callFake(() => actionChain),
-      perform: jasmine.createSpy("perform").and.resolveTo()
-    }
+    let actionsCommand
+    const execute = jasmine.createSpy("execute").and.callFake(async (command) => {
+      actionsCommand = command
+    })
     const driver = new AppiumDriver({
       browser: {
         driver: undefined,
@@ -203,7 +335,7 @@ describe("AppiumDriver", () => {
     })
 
     driver.setWebDriver(/** @type {import("selenium-webdriver").WebDriver} */ ({
-      actions: () => actionChain,
+      execute,
       executeScript: jasmine.createSpy("executeScript").and.rejectWith(new Error("Unknown mobile command")),
       findElements: jasmine.createSpy("findElements").and.resolveTo([]),
       manage: () => ({
@@ -216,7 +348,11 @@ describe("AppiumDriver", () => {
     }))
 
     await expectAsync(driver.findByNativeText("Missing text", {timeout: 0})).toBeRejectedWithError(/Element couldn't be found/)
-    expect(actionChain.perform).toHaveBeenCalled()
+    if (!actionsCommand) throw new Error("Expected W3C actions command")
+    const pointerAction = actionsCommand.getParameter("actions")[0]
+
+    expect(pointerAction.parameters.pointerType).toEqual("touch")
+    expect(pointerAction.actions.map((action) => action.type)).toEqual(["pointerMove", "pointerDown", "pointerMove", "pointerUp"])
   })
 
   it("cleans up the generated Chrome user-data-dir on stop", async () => {

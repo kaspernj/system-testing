@@ -1,6 +1,6 @@
 import {By, error as SeleniumError} from "selenium-webdriver"
 import logging from "selenium-webdriver/lib/logging.js"
-import {wait} from "awaitery"
+import {wait, waitFor} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
 
 /**
@@ -590,6 +590,26 @@ export default class WebDriverDriver {
   async findByNativeText(expectedText, args = {}) {
     void args
     throw new Error(`findByNativeText is only supported for native Appium sessions: ${expectedText}`)
+  }
+
+  /**
+   * Waits until a test id contains expected visible text.
+   * @param {string} testID Element test id to inspect.
+   * @param {string} expectedText Fragment that must appear in the element text.
+   * @param {FindArgs} [args] Optional timeout and lookup settings.
+   * @returns {Promise<void>}
+   */
+  async waitForTestIDText(testID, expectedText, args = {}) {
+    const {timeout: waitTimeout = this.getTimeouts(), ...findArgs} = args
+
+    await waitFor({timeout: waitTimeout}, async () => {
+      const element = await this.findByTestID(testID, {...findArgs, timeout: 0})
+      const actualText = await element.getText()
+
+      if (!actualText.includes(expectedText)) {
+        throw new Error(`Timed out waiting for text ${expectedText}. Last text was ${actualText}`)
+      }
+    })
   }
 
   /**

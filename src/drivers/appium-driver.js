@@ -1,10 +1,13 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import {Builder, By} from "selenium-webdriver"
+import {Command, Name} from "selenium-webdriver/lib/command.js"
 import {Origin} from "selenium-webdriver/lib/input.js"
 import {wait} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
 import WebDriverDriver from "./webdriver-driver.js"
+
+const MAX_NATIVE_VIEWPORT_SCROLL_STEPS = 8
 
 /**
  * Appium timeout values returned by Selenium.
@@ -21,6 +24,10 @@ import WebDriverDriver from "./webdriver-driver.js"
 /**
  * Tracks native scroll fallbacks that already reported no movement.
  * @typedef {{tryElementScroll: boolean, tryViewportScroll: boolean}} NativeViewportScrollState
+ */
+/**
+ * Native viewport scroll direction.
+ * @typedef {"down"|"up"} NativeViewportScrollDirection
  */
 /**
  * Native Android lookup work executed by the scrolling poller.
@@ -105,6 +112,89 @@ function isUnsupportedMobileGestureError(error) {
   return error.message.includes("NotYetImplementedError") ||
     error.message.includes("Method has not yet been implemented") ||
     error.message.includes("Unknown mobile command")
+}
+
+/**
+ * Adds a UiAutomator text predicate to a resource-id selector.
+ * @param {string} resourceSelector UiAutomator resource-id selector.
+ * @param {string} filterSelector UiAutomator text or description selector.
+ * @returns {string} Combined selector.
+ */
+function combineAndroidSelectors(resourceSelector, filterSelector) {
+  const prefix = "new UiSelector()"
+
+  if (!filterSelector.startsWith(prefix)) {
+    throw new Error(`Expected Android selector to start with ${prefix}, got ${filterSelector}`)
+  }
+
+  return `${resourceSelector}${filterSelector.slice(prefix.length)}`
+}
+
+/**
+ * Adds a UiAutomator child predicate to a resource-id selector.
+ * @param {string} resourceSelector UiAutomator resource-id selector.
+ * @param {string} childSelector UiAutomator child selector.
+ * @returns {string} Combined selector.
+ */
+function childAndroidSelector(resourceSelector, childSelector) {
+  return `${resourceSelector}.childSelector(${childSelector})`
+}
+
+/**
+ * Escapes text for use as an XPath string literal.
+ * @param {string} value Unescaped XPath text.
+ * @returns {string} Quoted literal or concat expression safe for XPath.
+ */
+function xpathStringLiteral(value) {
+  if (!value.includes('"')) return `"${value}"`
+  if (!value.includes("'")) return `'${value}'`
+
+  return `concat(${value.split('"').map((part) => `"${part}"`).join(", '\"', ")})`
+}
+
+/**
+ * Builds an XPath selector for text under one native Android resource id.
+ * @param {string} testId Resource id suffix to scope under.
+ * @param {string} expectedText Text to locate inside that scope.
+ * @returns {string} XPath selector source.
+ */
+function androidScopedTextXpath(testId, expectedText) {
+  const resourceId = xpathStringLiteral(testId)
+  const text = xpathStringLiteral(expectedText)
+  const resourcePredicate = `(@resource-id = ${resourceId} or substring(@resource-id, string-length(@resource-id) - string-length(${resourceId}) + 1) = ${resourceId})`
+  const textPredicate = `(contains(@text, ${text}) or contains(@content-desc, ${text}))`
+
+  return `//*[${resourcePredicate} and ${textPredicate}] | //*[${resourcePredicate}]//*[${textPredicate}]`
+}
+
+/**
+ * Builds selectors that scope text matching to one native resource id.
+ * @param {string} testId Stable test id.
+ * @param {string} expectedText Text that must appear on that element.
+ * @returns {string[]} UiAutomator selectors.
+ */
+function nativeTestIDTextSelectors(testId, expectedText) {
+  const resourceSelector = androidResourceIdSelector(testId)
+
+  return [
+    combineAndroidSelectors(resourceSelector, androidTextContainsSelector(expectedText)),
+    combineAndroidSelectors(resourceSelector, androidDescriptionContainsSelector(expectedText)),
+    childAndroidSelector(resourceSelector, androidTextContainsSelector(expectedText)),
+    childAndroidSelector(resourceSelector, androidDescriptionContainsSelector(expectedText))
+  ]
+}
+
+/**
+ * Builds native Android scroll selectors for a scoped text assertion.
+ * @param {string} testId Stable test id.
+ * @param {string} expectedText Text that must appear on that element.
+ * @returns {string[]} UiAutomator selectors.
+ */
+function nativeTestIDTextScrollSelectors(testId, expectedText) {
+  return [
+    ...nativeTestIDTextSelectors(testId, expectedText),
+    androidResourceIdSelector(testId)
+  ]
 }
 
 /**
@@ -623,6 +713,46 @@ export default class AppiumDriver extends WebDriverDriver {
   }
 
   /**
+   * Waits until a test id owns expected visible text or an accessibility label.
+   * @param {string} testId Stable native resource id suffix.
+   * @param {string} expectedText Text that must appear under the test id.
+   * @param {FindArgs} [args] Optional lookup settings.
+   * @returns {Promise<void>}
+   */
+  async waitForTestIDText(testId, expectedText, args = {}) {
+    if (!this.isAndroidNativeAppContext()) {
+      await super.waitForTestIDText(testId, expectedText, args)
+      return
+    }
+
+    const selectors = nativeTestIDTextSelectors(testId, expectedText)
+    const scopedTextXpath = androidScopedTextXpath(testId, expectedText)
+    const directFind = async () => {
+      for (const selector of selectors) {
+        const elements = await this.getWebDriver().findElements(new By("-android uiautomator", selector))
+
+        if (elements.length > 1) {
+          throw new Error(`More than 1 elements (${elements.length}) were found by id ${testId} with text ${expectedText}`)
+        }
+        if (elements[0]) return elements[0]
+      }
+
+      const scopedTextElements = await this.getWebDriver().findElements(By.xpath(scopedTextXpath))
+      if (scopedTextElements[0]) return scopedTextElements[0]
+
+      throw new Error(`Element couldn't be found by id ${testId} with text ${expectedText}`)
+    }
+
+    await this.withNativeImplicitWait(0, async () => {
+      await this.findNativeControlWithScrolling({
+        description: `id ${testId} with text ${expectedText}`,
+        directFind,
+        scrollSelectors: nativeTestIDTextScrollSelectors(testId, expectedText)
+      }, {...args, scrollTo: args.scrollTo ?? true})
+    })
+  }
+
+  /**
    * Finds a native Android control by resource id, scrolling it into view first when requested.
    * @param {string} testId Stable native resource id suffix.
    * @param {FindArgs} [args] Optional lookup settings.
@@ -649,10 +779,6 @@ export default class AppiumDriver extends WebDriverDriver {
   async findNativeControlWithScrolling(lookup, args = {}) {
     const {scrollContainerTestIDs = [], scrollTo = true, timeout = 10000} = args
     const startTime = Date.now()
-    const viewportScrollState = {
-      tryElementScroll: true,
-      tryViewportScroll: true
-    }
     let attemptedUiSelectorScroll = false
     /** @type {unknown} */
     let lastError
@@ -684,10 +810,8 @@ export default class AppiumDriver extends WebDriverDriver {
           void error
         }
 
-        await this.scrollNativeViewportDown(viewportScrollState, scrollContainerTestIDs)
-
         try {
-          return await lookup.directFind()
+          return await this.findNativeControlWithViewportScan(lookup.directFind, scrollContainerTestIDs)
         } catch (error) {
           if (!isNativeControlLookupMiss(error)) throw error
           lastError = error
@@ -700,6 +824,48 @@ export default class AppiumDriver extends WebDriverDriver {
 
     const elapsedSeconds = (Date.now() - startTime) / 1000
     throw errorWithCause(`Element couldn't be found after ${elapsedSeconds.toFixed(2)}s by ${lookup.description}`, lastError)
+  }
+
+  /**
+   * Searches native content around the current viewport so retained offsets and
+   * below-fold targets are both reachable without exhausting the timeout budget.
+   * @param {() => Promise<import("selenium-webdriver").WebElement>} directFind Lookup to retry after each scroll.
+   * @param {string[]} scrollContainerTestIDs Native test IDs that may identify scroll containers.
+   * @returns {Promise<import("selenium-webdriver").WebElement>} Matching control.
+   */
+  async findNativeControlWithViewportScan(directFind, scrollContainerTestIDs) {
+    const upScrollState = this.newNativeViewportScrollState()
+    const downScrollState = this.newNativeViewportScrollState()
+
+    for (let index = 0; index < MAX_NATIVE_VIEWPORT_SCROLL_STEPS; index += 1) {
+      await this.scrollNativeViewport(upScrollState, scrollContainerTestIDs, "up")
+
+      try {
+        return await directFind()
+      } catch (error) {
+        if (!isNativeControlLookupMiss(error)) throw error
+      }
+
+      await this.scrollNativeViewport(downScrollState, scrollContainerTestIDs, "down")
+
+      try {
+        return await directFind()
+      } catch (error) {
+        if (!isNativeControlLookupMiss(error)) throw error
+      }
+    }
+
+    throw new Error("Element couldn't be found after native viewport scan")
+  }
+
+  /**
+   * @returns {NativeViewportScrollState} Fresh scroll fallback state.
+   */
+  newNativeViewportScrollState() {
+    return {
+      tryElementScroll: true,
+      tryViewportScroll: true
+    }
   }
 
   /**
@@ -721,12 +887,13 @@ export default class AppiumDriver extends WebDriverDriver {
   }
 
   /**
-   * Scrolls the visible native viewport down when UiScrollable cannot identify the owning ScrollView.
+   * Scrolls the visible native viewport when UiScrollable cannot identify the owning ScrollView.
    * @param {NativeViewportScrollState} scrollState Per-lookup Appium scroll state.
    * @param {string[]} scrollContainerTestIDs Native test IDs that may identify scroll containers.
+   * @param {NativeViewportScrollDirection} direction Direction to scroll the content.
    * @returns {Promise<void>} Resolves after Appium performs the gesture.
    */
-  async scrollNativeViewportDown(scrollState, scrollContainerTestIDs) {
+  async scrollNativeViewport(scrollState, scrollContainerTestIDs, direction) {
     const windowRect = /** @type {NativeWindowRect} */ (await this.getWebDriver().manage().window().getRect())
     const horizontalInset = Math.max(1, Math.floor(windowRect.width * 0.1))
     const top = Math.max(1, Math.floor(windowRect.height * 0.2))
@@ -736,7 +903,7 @@ export default class AppiumDriver extends WebDriverDriver {
     if (scrollState.tryElementScroll && scrollContainerTestIDs.length > 0) {
       for (const scrollContainerTestID of scrollContainerTestIDs) {
         try {
-          const didScroll = await this.scrollNativeElementDown(scrollContainerTestID)
+          const didScroll = await this.scrollNativeElement(scrollContainerTestID, direction)
           if (didScroll) return
         } catch (error) {
           scrollState.tryElementScroll = false
@@ -750,7 +917,7 @@ export default class AppiumDriver extends WebDriverDriver {
     if (scrollState.tryViewportScroll) {
       try {
         const didScroll = await this.getWebDriver().executeScript("mobile: scrollGesture", {
-          direction: "down",
+          direction,
           height,
           left: horizontalInset,
           percent: 0.75,
@@ -766,31 +933,40 @@ export default class AppiumDriver extends WebDriverDriver {
     }
 
     const centerX = Math.floor(windowRect.x + windowRect.width / 2)
-    const startY = Math.floor(windowRect.y + windowRect.height * 0.78)
-    const endY = Math.floor(windowRect.y + windowRect.height * 0.28)
+    const startY = Math.floor(windowRect.y + windowRect.height * (direction === "down" ? 0.78 : 0.28))
+    const endY = Math.floor(windowRect.y + windowRect.height * (direction === "down" ? 0.28 : 0.78))
 
-    await this.getWebDriver()
-      .actions({async: true})
-      .move({origin: Origin.VIEWPORT, x: centerX, y: startY})
-      .press()
-      .move({duration: 250, origin: Origin.VIEWPORT, x: centerX, y: endY})
-      .release()
-      .perform()
+    await this.getWebDriver().execute(new Command(Name.ACTIONS).setParameter("actions", [
+      {
+        actions: [
+          {duration: 100, origin: Origin.VIEWPORT, type: "pointerMove", x: centerX, y: startY},
+          {button: 0, type: "pointerDown"},
+          {duration: 250, origin: Origin.VIEWPORT, type: "pointerMove", x: centerX, y: endY},
+          {button: 0, type: "pointerUp"}
+        ],
+        id: "native scroll finger",
+        parameters: {
+          pointerType: "touch"
+        },
+        type: "pointer"
+      }
+    ]))
   }
 
   /**
    * Scrolls a specific native Android element by test id when Appium exposes it as a scroll container.
    * @param {string} testId Stable native resource id suffix.
+   * @param {NativeViewportScrollDirection} direction Direction to scroll the content.
    * @returns {Promise<boolean>} Whether Appium reported more content to scroll.
    */
-  async scrollNativeElementDown(testId) {
+  async scrollNativeElement(testId, direction) {
     const elements = await this.getWebDriver().findElements(new By("-android uiautomator", androidResourceIdSelector(testId)))
     const scrollElement = elements[0]
 
     if (!scrollElement) return false
 
     const didScroll = await this.getWebDriver().executeScript("mobile: scrollGesture", {
-      direction: "down",
+      direction,
       elementId: await scrollElement.getId(),
       percent: 0.75
     })

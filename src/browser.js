@@ -449,13 +449,9 @@ export default class Browser {
   async waitForTestIDText(testID, expectedText, args = {}) {
     const {timeout: waitTimeout, ...findArgs} = args
 
-    await waitFor({timeout: this.getCommandTimeout(waitTimeout)}, async () => {
-      const element = await this.findByTestID(testID, {...findArgs, timeout: 0})
-      const actualText = await element.getText()
-
-      if (!actualText.includes(expectedText)) {
-        throw new Error(`Timed out waiting for text ${expectedText}. Last text was ${actualText}`)
-      }
+    await this.getDriverAdapter().waitForTestIDText(testID, expectedText, {
+      ...findArgs,
+      timeout: this.getCommandTimeout(waitTimeout)
     })
   }
 
