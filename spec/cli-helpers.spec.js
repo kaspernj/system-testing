@@ -82,6 +82,31 @@ describe("cli helpers", () => {
     expect(() => resolveBrowserCommand({find: ".card", timeout: "soon"})).toThrowError("Invalid timeout flag: soon")
   })
 
+  it("threads human click flags through convenience click commands", () => {
+    expect(resolveBrowserCommand({
+      click: "iframe[title='Security challenge widget']",
+      "click-offset-x": "32",
+      "click-offset-y": "28",
+      "human-step-delay": "75",
+      "human-steps": "5",
+      method: "human",
+      timeout: "20"
+    })).toEqual({
+      args: {
+        clickOffsetX: 32,
+        clickOffsetY: 28,
+        humanStepDelay: 75,
+        humanSteps: 5,
+        method: "human",
+        selector: "iframe[title='Security challenge widget']",
+        timeout: 20000,
+        useBaseSelector: undefined,
+        visible: undefined
+      },
+      command: "click"
+    })
+  })
+
   it("threads executeScript flags through the generic command path", () => {
     expect(resolveBrowserCommand({
       arg: ["one", "two"],

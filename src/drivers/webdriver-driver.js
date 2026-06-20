@@ -104,7 +104,11 @@ function shouldIgnoreBrowserLogEntry(entry, message) {
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
- * @property {"actions" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context (skips WebDriver's pointer synthesis entirely — useful when the default click is dropped by a framework responder that refuses synthetic WebDriver pointer events).
+ * @property {"actions" | "human" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"human"` uses multiple pointer moves and pauses before clicking; `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context (skips WebDriver's pointer synthesis entirely — useful when the default click is dropped by a framework responder that refuses synthetic WebDriver pointer events).
+ * @property {number} [clickOffsetX] X offset for `actions`/`human` pointer clicks relative to the target element.
+ * @property {number} [clickOffsetY] Y offset for `actions`/`human` pointer clicks relative to the target element.
+ * @property {number} [humanStepDelay] Pause duration in ms between human pointer moves.
+ * @property {number} [humanSteps] Number of intermediate pointer moves before the final click target.
  * @property {boolean} [scrollTo] Whether to scroll found elements into view before returning them.
  * @property {string[]} [scrollContainerTestIDs] Native test IDs that should be tried as scroll containers before falling back to viewport gestures.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
@@ -654,7 +658,8 @@ export default class WebDriverDriver {
    * @returns {Promise<void>}
    */
   async click(elementOrIdentifier, args) {
-    const {method, scrollTo = false, ...findArgs} = args || {}
+    const {clickOffsetX, clickOffsetY, humanStepDelay, humanSteps, method, scrollTo = false, ...findArgs} = args || {}
+    const clickArgs = {clickOffsetX, clickOffsetY, humanStepDelay, humanSteps}
     let tries = 0
 
     while (true) {
@@ -668,7 +673,16 @@ export default class WebDriverDriver {
         }
 
         if (method === "actions") {
-          await this.getWebDriver().actions({async: true}).move({origin: element}).click().perform()
+          /** @type {{origin: import("selenium-webdriver").WebElement, x?: number, y?: number}} */
+          let moveArgs = {origin: element}
+
+          if (clickOffsetX !== undefined || clickOffsetY !== undefined) {
+            moveArgs = {origin: element, x: clickOffsetX ?? 0, y: clickOffsetY ?? 0}
+          }
+
+          await this.getWebDriver().actions({async: true}).move(moveArgs).click().perform()
+        } else if (method === "human") {
+          await this.humanClick(element, clickArgs)
         } else if (method === "js") {
           await this.getWebDriver().executeScript("arguments[0].click()", element)
         } else if (method === undefined) {
@@ -696,6 +710,36 @@ export default class WebDriverDriver {
         }
       }
     }
+  }
+
+  /**
+   * @param {import("selenium-webdriver").WebElement} element
+   * @param {{clickOffsetX?: number, clickOffsetY?: number, humanStepDelay?: number, humanSteps?: number}} [args]
+   * @returns {Promise<void>}
+   */
+  async humanClick(element, args = {}) {
+    const {clickOffsetX = 0, clickOffsetY = 0, humanStepDelay = 75, humanSteps = 4} = args
+    const steps = Math.max(1, Math.floor(humanSteps))
+    const actions = this.getWebDriver().actions({async: true})
+
+    for (let index = 0; index < steps; index++) {
+      const progress = (index + 1) / (steps + 1)
+      const wobble = index % 2 === 0 ? 6 : -4
+
+      actions
+        .move({
+          origin: element,
+          x: Math.round(clickOffsetX - ((1 - progress) * 80) + wobble),
+          y: Math.round(clickOffsetY - ((1 - progress) * 35) - wobble)
+        })
+        .pause(humanStepDelay)
+    }
+
+    await actions
+      .move({origin: element, x: clickOffsetX, y: clickOffsetY})
+      .pause(humanStepDelay)
+      .click()
+      .perform()
   }
 
   /**

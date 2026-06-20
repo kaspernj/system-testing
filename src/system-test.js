@@ -47,7 +47,11 @@ export function defaultClientWebSocketConnectTimeout() {
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
- * @property {"actions" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context (skips WebDriver's pointer synthesis entirely — useful when the default click is dropped by a framework responder that refuses synthetic WebDriver pointer events).
+ * @property {"actions" | "human" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"human"` uses multiple pointer moves and pauses before clicking; `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context (skips WebDriver's pointer synthesis entirely — useful when the default click is dropped by a framework responder that refuses synthetic WebDriver pointer events).
+ * @property {number} [clickOffsetX] X offset for `actions`/`human` pointer clicks relative to the target element.
+ * @property {number} [clickOffsetY] Y offset for `actions`/`human` pointer clicks relative to the target element.
+ * @property {number} [humanStepDelay] Pause duration in ms between human pointer moves.
+ * @property {number} [humanSteps] Number of intermediate pointer moves before the final click target.
  * @property {boolean} [scrollTo] Whether to scroll found elements into view before returning them.
  * @property {string[]} [scrollContainerTestIDs] Native test IDs that should be tried as scroll containers before falling back to viewport gestures.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
