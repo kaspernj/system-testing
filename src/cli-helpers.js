@@ -81,6 +81,40 @@ function resolveCliTimeout(timeoutFlag) {
 }
 
 /**
+ * @param {any} numberFlag
+ * @param {string} flagName
+ * @returns {number | undefined}
+ */
+function resolveCliNumber(numberFlag, flagName) {
+  if (numberFlag === undefined) return undefined
+  const numberValue = Number(numberFlag)
+
+  if (Number.isNaN(numberValue)) {
+    throw new Error(`Invalid ${flagName} flag: ${numberFlag}`)
+  }
+
+  return numberValue
+}
+
+/**
+ * @param {Record<string, any>} flags
+ * @param {Record<string, any>} args
+ * @returns {void}
+ */
+function applyPointerFlags(flags, args) {
+  const clickOffsetX = resolveCliNumber(flags["click-offset-x"], "click-offset-x")
+  const clickOffsetY = resolveCliNumber(flags["click-offset-y"], "click-offset-y")
+  const humanStepDelay = resolveCliNumber(flags["human-step-delay"], "human-step-delay")
+  const humanSteps = resolveCliNumber(flags["human-steps"], "human-steps")
+
+  if (flags.method !== undefined) args.method = flags.method
+  if (clickOffsetX !== undefined) args.clickOffsetX = clickOffsetX
+  if (clickOffsetY !== undefined) args.clickOffsetY = clickOffsetY
+  if (humanStepDelay !== undefined) args.humanStepDelay = humanStepDelay
+  if (humanSteps !== undefined) args.humanSteps = humanSteps
+}
+
+/**
  * @param {Record<string, any>} flags
  * @returns {{command: string, args: Record<string, any>}}
  */
@@ -155,6 +189,7 @@ export function resolveBrowserCommand(flags) {
       useBaseSelector: flags["use-base-selector"],
       visible: flags.visible
     }
+    applyPointerFlags(flags, args)
 
     if (flags["scroll-to"] !== undefined) {
       args.scrollTo = flags["scroll-to"]
@@ -217,6 +252,7 @@ export function resolveBrowserCommand(flags) {
     if (flags["test-id"]) args.testID = flags["test-id"]
     if (flags.method) args.methodName = flags.method
     if (flags.arg) args.args = Array.isArray(flags.arg) ? flags.arg : [flags.arg]
+    if (flags.command !== "interact") applyPointerFlags(flags, args)
     if (flags["with-fallback"] !== undefined) args.withFallback = flags["with-fallback"]
     if (timeout !== undefined) args.timeout = timeout
     if (flags["scroll-to"] !== undefined) args.scrollTo = flags["scroll-to"]

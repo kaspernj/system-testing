@@ -15,6 +15,22 @@ function parseCookieBoolean(fieldName, rawValue) {
   throw new Error(`addCookie ${fieldName} must be true or false, got ${JSON.stringify(rawValue)}`)
 }
 
+/**
+ * @param {string} fieldName
+ * @param {unknown} rawValue
+ * @returns {number | undefined}
+ */
+function parseOptionalNumber(fieldName, rawValue) {
+  if (rawValue === undefined) return undefined
+  const numberValue = Number(rawValue)
+
+  if (Number.isNaN(numberValue)) {
+    throw new Error(`${fieldName} must be a number, got ${JSON.stringify(rawValue)}`)
+  }
+
+  return numberValue
+}
+
 /** Runs browser commands across CLI and WebSocket transports. */
 export default class BrowserCommandRunner {
   /**
@@ -75,6 +91,18 @@ export default class BrowserCommandRunner {
         findArgs.scrollTo = commandArgs.scrollTo === "true"
       }
     }
+
+    if ("method" in commandArgs && commandArgs.method !== undefined) findArgs.method = commandArgs.method
+
+    const clickOffsetX = parseOptionalNumber("clickOffsetX", commandArgs.clickOffsetX)
+    const clickOffsetY = parseOptionalNumber("clickOffsetY", commandArgs.clickOffsetY)
+    const humanStepDelay = parseOptionalNumber("humanStepDelay", commandArgs.humanStepDelay)
+    const humanSteps = parseOptionalNumber("humanSteps", commandArgs.humanSteps)
+
+    if (clickOffsetX !== undefined) findArgs.clickOffsetX = clickOffsetX
+    if (clickOffsetY !== undefined) findArgs.clickOffsetY = clickOffsetY
+    if (humanStepDelay !== undefined) findArgs.humanStepDelay = humanStepDelay
+    if (humanSteps !== undefined) findArgs.humanSteps = humanSteps
 
     return findArgs
   }

@@ -424,6 +424,38 @@ describe("WebDriverDriver interact", () => {
     expect(actions.perform).toHaveBeenCalled()
   })
 
+  it("uses multiple pointer moves and pauses for human click interactions", async () => {
+    const element = {
+      getId: async () => "webdriver-element-id"
+    }
+    /** @type {{click: jasmine.Spy, move: jasmine.Spy, pause: jasmine.Spy, perform: jasmine.Spy}} */
+    const actions = /** @type {any} */ ({})
+    actions.click = jasmine.createSpy("click").and.returnValue(actions)
+    actions.move = jasmine.createSpy("move").and.returnValue(actions)
+    actions.pause = jasmine.createSpy("pause").and.returnValue(actions)
+    actions.perform = jasmine.createSpy("perform").and.resolveTo(undefined)
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver._findElement = async () => /** @type {any} */ (element)
+    driver.setWebDriver(/** @type {any} */ ({
+      actions: jasmine.createSpy("actions").and.returnValue(actions)
+    }))
+
+    await driver.click(element, {clickOffsetX: 32, clickOffsetY: 28, humanStepDelay: 75, humanSteps: 5, method: "human"})
+
+    expect(actions.move.calls.count()).toBeGreaterThan(1)
+    expect(actions.move.calls.mostRecent().args).toEqual([{origin: element, x: 32, y: 28}])
+    expect(actions.pause).toHaveBeenCalledWith(75)
+    expect(actions.click).toHaveBeenCalled()
+    expect(actions.perform).toHaveBeenCalled()
+  })
+
   it("dispatches element.click() via executeScript when method is 'js'", async () => {
     const element = {
       getId: async () => "webdriver-element-id"
