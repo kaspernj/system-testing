@@ -1,8 +1,53 @@
 // @ts-check
 
 import SystemTest from "../src/system-test.js"
+import SystemTestHttpServer from "../src/system-test-http-server.js"
 
 describe("SystemTest root path", () => {
+  const originalSystemTestHost = process.env.SYSTEM_TEST_HOST
+
+  afterEach(() => {
+    process.env.SYSTEM_TEST_HOST = originalSystemTestHost
+  })
+
+  it("waits for the initial root path navigation when Android Chrome reports host routing is not ready", async () => {
+    process.env.SYSTEM_TEST_HOST = "dist"
+    const adapter = {
+      getTimeouts: () => 100,
+      setBaseUrl: jasmine.createSpy("setBaseUrl"),
+      setTimeouts: jasmine.createSpy("setTimeouts").and.resolveTo(undefined),
+      start: jasmine.createSpy("start").and.resolveTo(undefined)
+    }
+    const visitAttempts = []
+
+    spyOn(SystemTestHttpServer.prototype, "start").and.resolveTo(undefined)
+    spyOn(SystemTestHttpServer.prototype, "assertReachable").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "getDriverAdapter").and.returnValue(/** @type {any} */ (adapter))
+    spyOn(SystemTest.prototype, "startScoundrel").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "startWebSocketServer").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "waitForClientWebSocket").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "find").and.resolveTo(/** @type {any} */ ({}))
+    spyOn(SystemTest.prototype, "findByTestID").and.resolveTo(/** @type {any} */ ({}))
+    spyOn(SystemTest.prototype, "driverVisit").and.callFake(async (path) => {
+      visitAttempts.push(path)
+
+      if (visitAttempts.length === 1) {
+        throw new Error("unknown error: net::ERR_ADDRESS_UNREACHABLE")
+      }
+    })
+
+    await new SystemTest({
+      httpConnectHost: "10.0.2.2",
+      httpHost: "0.0.0.0",
+      httpPort: 1984
+    }).start()
+
+    expect(visitAttempts).toEqual([
+      "/blank?systemTest=true",
+      "/blank?systemTest=true"
+    ])
+  })
+
   it("propagates custom websocket ports into the browser URL", () => {
     spyOn(SystemTest.prototype, "startScoundrel").and.callFake(() => {})
 
