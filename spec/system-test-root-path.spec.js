@@ -32,12 +32,14 @@ describe("SystemTest root path", () => {
     spyOn(SystemTest.prototype, "waitForClientWebSocket").and.resolveTo(undefined)
     spyOn(SystemTest.prototype, "find").and.resolveTo(/** @type {any} */ ({}))
     spyOn(SystemTest.prototype, "findByTestID").and.resolveTo(/** @type {any} */ ({}))
-    spyOn(SystemTest.prototype, "driverVisit").and.callFake(async (path) => {
+    spyOn(SystemTest.prototype, "driverVisit").and.callFake((path) => {
       visitAttempts.push(path)
 
       if (visitAttempts.length === 1) {
-        throw new Error("unknown error: net::ERR_ADDRESS_UNREACHABLE")
+        return Promise.reject("unknown error: net::ERR_ADDRESS_UNREACHABLE")
       }
+
+      return Promise.resolve()
     })
 
     await new SystemTest({

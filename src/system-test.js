@@ -7,6 +7,7 @@ import SystemTestCommunicator from "./system-test-communicator.js"
 import SystemTestHttpServer from "./system-test-http-server.js"
 import {wait, waitFor} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
+import {ensureError} from "typanic"
 import {WebSocketServer} from "ws"
 import Browser from "./browser.js"
 
@@ -798,11 +799,12 @@ export default class SystemTest extends Browser {
         await this.driverVisit(rootPath)
         return
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const visitError = ensureError(error, "initial root path visit error")
+        const message = visitError.message
         const retryableNetworkError = message.includes("net::ERR_ADDRESS_UNREACHABLE") || message.includes("net::ERR_CONNECTION_REFUSED")
 
         if (!retryableNetworkError || Date.now() >= deadline) {
-          throw error
+          throw visitError
         }
 
         this.debugLog(`Initial root path visit waiting for driver network readiness: ${message}`)
