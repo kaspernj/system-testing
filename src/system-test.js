@@ -271,6 +271,9 @@ export default class SystemTest extends Browser {
           teardownError = error
         }
       }
+
+      systemTest._browserErrors = []
+      systemTest.applyArgs({errorFilter: undefined, failOnBrowserError: true, failOnConsoleError: false})
     }
 
     if (runError) {
