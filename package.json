@@ -59,6 +59,7 @@
     "qs": "^6.14.1",
     "scoundrel-remote-eval": "^1.0.28",
     "set-state-compare": "^1.0.72",
+    "typanic": "^1.0.6",
     "ws": "^8.18.3",
     "ya-use-event-emitter": "^0.1.2"
   },

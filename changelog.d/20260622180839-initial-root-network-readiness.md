@@ -1,0 +1,1 @@
+- Retry the initial non-native root navigation when a browser driver reports transient network bootstrap errors such as Android Chrome `net::ERR_ADDRESS_UNREACHABLE`, so dist/Appium runs wait for emulator host routing instead of failing before specs start.

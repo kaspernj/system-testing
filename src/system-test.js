@@ -5,12 +5,14 @@ import Server from "scoundrel-remote-eval/build/server/index.js"
 import ServerWebSocket from "scoundrel-remote-eval/build/server/connections/web-socket/index.js"
 import SystemTestCommunicator from "./system-test-communicator.js"
 import SystemTestHttpServer from "./system-test-http-server.js"
-import {waitFor} from "awaitery"
+import {wait, waitFor} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
+import {ensureError} from "typanic"
 import {WebSocketServer} from "ws"
 import Browser from "./browser.js"
 
 const CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 30000
+const INITIAL_ROOT_VISIT_RETRY_DELAY_MS = 100
 const NATIVE_CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 120000
 
 /** @returns {number} */
@@ -269,6 +271,9 @@ export default class SystemTest extends Browser {
           teardownError = error
         }
       }
+
+      systemTest._browserErrors = []
+      systemTest.applyArgs({errorFilter: undefined, failOnBrowserError: true, failOnConsoleError: false})
     }
 
     if (runError) {
@@ -736,7 +741,7 @@ export default class SystemTest extends Browser {
       // Visit the root page and wait for Expo to be loaded and the app to appear
       this.debugLog("Visiting root path")
       const rootPath = this.getRootPath()
-      await this.driverVisit(rootPath)
+      await this.visitInitialRootPath(rootPath)
       this.debugLog(`Visited root path ${rootPath}`)
 
       try {
@@ -782,6 +787,33 @@ export default class SystemTest extends Browser {
       this.debugLog("Base selector set")
     }
     this.debugLog("Start completed")
+  }
+
+  /**
+   * Waits for the browser driver to reach the root route after startup.
+   * @param {string} rootPath Initial app route.
+   * @returns {Promise<void>}
+   */
+  async visitInitialRootPath(rootPath) {
+    const deadline = Date.now() + this.getTimeouts()
+
+    while (true) {
+      try {
+        await this.driverVisit(rootPath)
+        return
+      } catch (error) {
+        const visitError = ensureError(error, "initial root path visit error")
+        const message = visitError.message
+        const retryableNetworkError = message.includes("net::ERR_ADDRESS_UNREACHABLE") || message.includes("net::ERR_CONNECTION_REFUSED")
+
+        if (!retryableNetworkError || Date.now() >= deadline) {
+          throw visitError
+        }
+
+        this.debugLog(`Initial root path visit waiting for driver network readiness: ${message}`)
+        await wait(Math.min(INITIAL_ROOT_VISIT_RETRY_DELAY_MS, Math.max(0, deadline - Date.now())))
+      }
+    }
   }
 
   /**
