@@ -48,7 +48,7 @@
     "eslint": "eslint --max-warnings 0"
   },
   "dependencies": {
-    "appium": "3.5.0",
+    "appium": "3.5.2",
     "awaitery": "^1.0.12",
     "diggerize": "^1.0.9",
     "eventemitter3": "^5.0.1",
