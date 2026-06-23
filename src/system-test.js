@@ -217,17 +217,7 @@ export default class SystemTest extends Browser {
     systemTest.debugLog("getRootPath")
     const rootPath = systemTest.getRootPath()
 
-    systemTest.debugLog(`Visit rootPath with dismissTo: ${rootPath}`)
-    await systemTest.dismissTo(rootPath)
-    systemTest.debugLog(`Dismissed to root path ${rootPath}`)
-
-    if (!systemTest.ws || systemTest.ws.readyState !== 1) {
-      systemTest.debugLog("WebSocket not connected after dismissTo, waiting for reconnection")
-      systemTest.ws = null
-      systemTest.getCommunicator().ws = null
-      await systemTest.waitForClientWebSocket()
-      systemTest.debugLog("Client websocket reconnected")
-    }
+    await systemTest.resetToRootPathForRun(rootPath)
 
     systemTest.debugLog("Run started - send initialize")
     await timeout({timeout: 10_000, errorMessage: "Sending intialize to useSystemTest() timed out"}, async () => {
@@ -307,6 +297,28 @@ export default class SystemTest extends Browser {
 
       throw teardownError
     }
+  }
+
+  /**
+   * Resets the app to the root test route before each run.
+   * @param {string} rootPath
+   * @returns {Promise<void>}
+   */
+  async resetToRootPathForRun(rootPath) {
+    if (process.env.SYSTEM_TEST_HOST === "native") {
+      this.debugLog(`Visit rootPath with dismissTo: ${rootPath}`)
+      await this.dismissTo(rootPath)
+      this.debugLog(`Dismissed to root path ${rootPath}`)
+      return
+    }
+
+    this.debugLog(`Visit rootPath with driver navigation: ${rootPath}`)
+    this.ws = null
+    this.getCommunicator().ws = null
+    await this.driverVisit(rootPath)
+    this.debugLog(`Driver visited root path ${rootPath}`)
+    await this.waitForClientWebSocket()
+    this.debugLog("Client websocket reconnected after root path driver navigation")
   }
 
   /**
