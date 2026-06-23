@@ -49,7 +49,7 @@ export function defaultClientWebSocketConnectTimeout() {
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
- * @property {"actions" | "human" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"human"` uses multiple pointer moves and pauses before clicking; `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context (skips WebDriver's pointer synthesis entirely — useful when the default click is dropped by a framework responder that refuses synthetic WebDriver pointer events).
+ * @property {"actions" | "human" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"human"` uses multiple pointer moves and pauses before clicking; `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context and is for diagnostics only, not committed stabilization fixes.
  * @property {number} [clickOffsetX] X offset for `actions`/`human` pointer clicks relative to the target element.
  * @property {number} [clickOffsetY] Y offset for `actions`/`human` pointer clicks relative to the target element.
  * @property {number} [humanStepDelay] Pause duration in ms between human pointer moves.
@@ -99,6 +99,8 @@ export default class SystemTest extends Browser {
   /** @type {Error[]} */
   _browserErrors = []
   _scoundrelPort = 8090
+  /** @type {number} */
+  _ignoredScoundrelClientCount = 0
   /** @type {WebSocketServer | undefined} */
   scoundrelWss = undefined
   /** @type {WebSocketServer | undefined} */
@@ -313,12 +315,23 @@ export default class SystemTest extends Browser {
     }
 
     this.debugLog(`Visit rootPath with driver navigation: ${rootPath}`)
+    this.ignoreExistingScoundrelClients()
     this.ws = null
     this.getCommunicator().ws = null
     await this.driverVisit(rootPath)
     this.debugLog(`Driver visited root path ${rootPath}`)
     await this.waitForClientWebSocket()
     this.debugLog("Client websocket reconnected after root path driver navigation")
+  }
+
+  /** @returns {void} */
+  ignoreExistingScoundrelClients() {
+    if (!this.server) {
+      throw new Error("Scoundrel server is not started")
+    }
+
+    this._ignoredScoundrelClientCount = this.server.getClients().length
+    this.debugLog(`Ignoring ${this._ignoredScoundrelClientCount} Scoundrel client(s) from previous browser contexts`)
   }
 
   /**
@@ -402,14 +415,15 @@ export default class SystemTest extends Browser {
      */
     const isOpenClient = (client) => client?.backend?.ws?.readyState === 1
 
-    const existingClients = this.server.getClients?.()
-    const openExistingClients = existingClients?.filter(isOpenClient)
+    const existingClients = this.server.getClients()
+    const currentClients = existingClients.slice(this._ignoredScoundrelClientCount)
+    const openExistingClients = currentClients.filter(isOpenClient)
 
-    if (openExistingClients && openExistingClients.length > 0) {
+    if (openExistingClients.length > 0) {
       this.debugLog(`getScoundrelClient: using existing open client (${openExistingClients.length} available)`)
       return openExistingClients[openExistingClients.length - 1]
     }
-    this.debugLog(`getScoundrelClient: no open cached clients, waiting for new connection (cached total: ${existingClients?.length ?? 0})`)
+    this.debugLog(`getScoundrelClient: no open cached clients, waiting for new connection (cached total: ${existingClients.length}, ignored: ${this._ignoredScoundrelClientCount})`)
 
     if (!this.server.events?.on) {
       throw new Error("Scoundrel server events are unavailable")
@@ -1078,6 +1092,7 @@ export default class SystemTest extends Browser {
     this.scoundrelWss = undefined
     this.server = undefined
     this.serverWebSocket = undefined
+    this._ignoredScoundrelClientCount = 0
     this.systemTestHttpServer = undefined
     this._httpServerError = undefined
     this.waitForClientWebSocketPromiseReject = undefined

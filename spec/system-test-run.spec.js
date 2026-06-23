@@ -10,11 +10,16 @@ function createSystemTestRunDouble() {
     sendCommand: jasmine.createSpy("sendCommand").and.resolveTo(undefined),
     ws: {readyState: 1}
   }
+  const scoundrelClients = [
+    {backend: {ws: {readyState: 1}}},
+    {backend: {ws: {readyState: 1}}}
+  ]
   const systemTest = {
     _browserErrors: [],
     _errorFilter: undefined,
     _failOnBrowserError: true,
     _failOnConsoleError: false,
+    _ignoredScoundrelClientCount: 0,
     debugLog: jasmine.createSpy("debugLog"),
     deleteAllCookies: jasmine.createSpy("deleteAllCookies").and.resolveTo(undefined),
     dismissTo: jasmine.createSpy("dismissTo").and.resolveTo(undefined),
@@ -22,8 +27,12 @@ function createSystemTestRunDouble() {
     findByTestID: jasmine.createSpy("findByTestID").and.resolveTo(undefined),
     getCommunicator: jasmine.createSpy("getCommunicator").and.returnValue(communicator),
     getRootPath: jasmine.createSpy("getRootPath").and.returnValue("/blank?systemTest=true"),
+    ignoreExistingScoundrelClients: SystemTest.prototype.ignoreExistingScoundrelClients,
     reinitialize: jasmine.createSpy("reinitialize").and.resolveTo(undefined),
     resetToRootPathForRun: SystemTest.prototype.resetToRootPathForRun,
+    server: {
+      getClients: jasmine.createSpy("getClients").and.callFake(() => scoundrelClients)
+    },
     takeScreenshot: jasmine.createSpy("takeScreenshot").and.resolveTo(undefined),
     waitForClientWebSocket: jasmine.createSpy("waitForClientWebSocket"),
     ws: {readyState: 1}
@@ -69,6 +78,7 @@ describe("SystemTest.run", () => {
     expect(systemTest.driverVisit).toHaveBeenCalledOnceWith("/blank?systemTest=true")
     expect(systemTest.waitForClientWebSocket).toHaveBeenCalledTimes(1)
     expect(systemTest.dismissTo).not.toHaveBeenCalled()
+    expect(systemTest._ignoredScoundrelClientCount).toEqual(2)
   })
 
   it("uses in-app dismissTo before each native run", async () => {
@@ -80,6 +90,27 @@ describe("SystemTest.run", () => {
 
     expect(systemTest.dismissTo).toHaveBeenCalledOnceWith("/blank?systemTest=true")
     expect(systemTest.driverVisit).not.toHaveBeenCalled()
+  })
+
+  it("ignores pre-reload Scoundrel clients when resolving the current browser client", async () => {
+    const oldClient = {backend: {ws: {readyState: 1}}}
+    const currentClient = {backend: {ws: {readyState: 1}}}
+    /** @type {Record<string, any>} */
+    const systemTest = {
+      _ignoredScoundrelClientCount: 1,
+      debugLog: jasmine.createSpy("debugLog"),
+      getCommunicator: jasmine.createSpy("getCommunicator").and.returnValue({
+        sendCommand: jasmine.createSpy("sendCommand").and.resolveTo(undefined)
+      }),
+      getScoundrelClient: SystemTest.prototype.getScoundrelClient,
+      server: {
+        getClients: jasmine.createSpy("getClients").and.returnValue([oldClient, currentClient])
+      }
+    }
+
+    const client = await systemTest.getScoundrelClient()
+
+    expect(client).toBe(currentClient)
   })
 
   it("reinitializes the system test after a failed callback by default", async () => {
