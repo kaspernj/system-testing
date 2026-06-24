@@ -423,15 +423,19 @@ export default class Browser {
     let actualValue
 
     for (let attempt = 1; attempt <= 3; attempt++) {
+      const tagName = String(await this.interact(elementOrIdentifier, "getTagName")).toLowerCase()
       const currentValue = await this.interact(elementOrIdentifier, "getProperty", "value")
 
       await this.interact(this.textEntryClickTarget(elementOrIdentifier), "click")
 
-      if (currentValue !== "") {
-        await this.sendFocusedKeys(Key.chord(Key.CONTROL, "a"), Key.BACK_SPACE)
+      if ((tagName === "input" || tagName === "textarea") && currentValue !== "") {
+        await this.interact(elementOrIdentifier, "clear")
+      } else if (tagName !== "input" && tagName !== "textarea") {
+        await this.interact(elementOrIdentifier, "sendKeys", Key.chord(Key.CONTROL, "a"))
+        await this.interact(elementOrIdentifier, "sendKeys", Key.BACK_SPACE)
       }
 
-      await this.sendFocusedKeys(nextValue)
+      await this.interact(elementOrIdentifier, "sendKeys", nextValue)
 
       actualValue = await this.interact(elementOrIdentifier, "getProperty", "value")
 
@@ -443,15 +447,6 @@ export default class Browser {
     const actualLength = typeof actualValue == "string" ? actualValue.length : "missing"
 
     throw new Error(`Input replacement did not update the element value after 3 attempts. Expected length ${nextValue.length}, got ${actualLength}.`)
-  }
-
-  /**
-   * Sends keyboard input to the currently focused element through WebDriver actions.
-   * @param {...string} keys
-   * @returns {Promise<void>}
-   */
-  async sendFocusedKeys(...keys) {
-    await this.getDriver().actions({async: true}).sendKeys(...keys).perform()
   }
 
   /**
