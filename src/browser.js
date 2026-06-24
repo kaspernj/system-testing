@@ -424,13 +424,12 @@ export default class Browser {
 
     for (let attempt = 1; attempt <= 3; attempt++) {
       const tagName = String(await this.interact(elementOrIdentifier, "getTagName")).toLowerCase()
-      const currentValue = await this.interact(elementOrIdentifier, "getProperty", "value")
 
       await this.interact(this.textEntryClickTarget(elementOrIdentifier), "click")
 
-      if ((tagName === "input" || tagName === "textarea") && currentValue !== "") {
+      if (tagName === "input" || tagName === "textarea") {
         await this.interact(elementOrIdentifier, "clear")
-      } else if (tagName !== "input" && tagName !== "textarea") {
+      } else {
         await this.interact(elementOrIdentifier, "sendKeys", Key.chord(Key.CONTROL, "a"))
         await this.interact(elementOrIdentifier, "sendKeys", Key.BACK_SPACE)
       }
