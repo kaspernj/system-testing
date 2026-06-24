@@ -1,4 +1,4 @@
-import {By, error as SeleniumError} from "selenium-webdriver"
+import {By, Origin, error as SeleniumError} from "selenium-webdriver"
 import logging from "selenium-webdriver/lib/logging.js"
 import {wait, waitFor} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
@@ -719,14 +719,7 @@ export default class WebDriverDriver {
         }
 
         if (method === "actions") {
-          /** @type {{origin: import("selenium-webdriver").WebElement, x?: number, y?: number}} */
-          let moveArgs = {origin: element}
-
-          if (clickOffsetX !== undefined || clickOffsetY !== undefined) {
-            moveArgs = {origin: element, x: clickOffsetX ?? 0, y: clickOffsetY ?? 0}
-          }
-
-          await this.getWebDriver().actions({async: true}).move(moveArgs).click().perform()
+          await this.viewportClick(element, clickArgs)
         } else if (method === "human") {
           await this.humanClick(element, clickArgs)
         } else if (method === "js") {
@@ -767,6 +760,7 @@ export default class WebDriverDriver {
     const {clickOffsetX = 0, clickOffsetY = 0, humanStepDelay = 75, humanSteps = 4} = args
     const steps = Math.max(1, Math.floor(humanSteps))
     const actions = this.getWebDriver().actions({async: true})
+    const clickPoint = await this.elementViewportClickPoint(element, {clickOffsetX, clickOffsetY})
 
     for (let index = 0; index < steps; index++) {
       const progress = (index + 1) / (steps + 1)
@@ -774,18 +768,65 @@ export default class WebDriverDriver {
 
       actions
         .move({
-          origin: element,
-          x: Math.round(clickOffsetX - ((1 - progress) * 80) + wobble),
-          y: Math.round(clickOffsetY - ((1 - progress) * 35) - wobble)
+          origin: Origin.VIEWPORT,
+          x: Math.round(clickPoint.x - ((1 - progress) * 80) + wobble),
+          y: Math.round(clickPoint.y - ((1 - progress) * 35) - wobble)
         })
         .pause(humanStepDelay)
     }
 
     await actions
-      .move({origin: element, x: clickOffsetX, y: clickOffsetY})
+      .move({origin: Origin.VIEWPORT, x: clickPoint.x, y: clickPoint.y})
       .pause(humanStepDelay)
       .click()
       .perform()
+  }
+
+  /**
+   * @param {import("selenium-webdriver").WebElement} element
+   * @param {{clickOffsetX?: number, clickOffsetY?: number}} [args]
+   * @returns {Promise<void>}
+   */
+  async viewportClick(element, args = {}) {
+    const clickPoint = await this.elementViewportClickPoint(element, args)
+
+    await this.getWebDriver()
+      .actions({async: true})
+      .move({origin: Origin.VIEWPORT, x: clickPoint.x, y: clickPoint.y})
+      .click()
+      .perform()
+  }
+
+  /**
+   * Calculates a target click point in viewport coordinates.
+   * @param {import("selenium-webdriver").WebElement} element
+   * @param {{clickOffsetX?: number, clickOffsetY?: number}} [args]
+   * @returns {Promise<{x: number, y: number}>}
+   */
+  async elementViewportClickPoint(element, args = {}) {
+    const {clickOffsetX = 0, clickOffsetY = 0} = args
+    const clickPoint = await this.getWebDriver().executeScript(`
+      const element = arguments[0]
+      const clickOffsetX = arguments[1]
+      const clickOffsetY = arguments[2]
+      const rect = element.getBoundingClientRect()
+
+      return {
+        x: Math.round(rect.left + (rect.width / 2) + clickOffsetX),
+        y: Math.round(rect.top + (rect.height / 2) + clickOffsetY)
+      }
+    `, element, clickOffsetX, clickOffsetY)
+
+    if (
+      !clickPoint ||
+      typeof clickPoint !== "object" ||
+      typeof clickPoint.x !== "number" ||
+      typeof clickPoint.y !== "number"
+    ) {
+      throw new Error(`Could not calculate viewport click point: ${JSON.stringify(clickPoint)}`)
+    }
+
+    return clickPoint
   }
 
   /**

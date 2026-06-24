@@ -1,6 +1,6 @@
 // @ts-check
 
-import {Key, error as SeleniumError} from "selenium-webdriver"
+import {Key, Origin, error as SeleniumError} from "selenium-webdriver"
 import WebDriverDriver from "../src/drivers/webdriver-driver.js"
 
 describe("WebDriverDriver interact", () => {
@@ -345,17 +345,19 @@ describe("WebDriverDriver interact", () => {
     const clickSpy = jasmine.createSpy("click").and.returnValue({perform: performSpy})
     const moveSpy = jasmine.createSpy("move").and.returnValue({click: clickSpy})
     const actionsSpy = jasmine.createSpy("actions").and.returnValue({move: moveSpy})
+    const executeScriptSpy = jasmine.createSpy("executeScript").and.resolveTo({x: 25, y: 35})
 
     driver._findElement = /** @type {any} */ (findElementSpy)
     driver.scrollElementIntoView = /** @type {any} */ (scrollSpy)
-    driver.setWebDriver(/** @type {any} */ ({actions: actionsSpy}))
+    driver.setWebDriver(/** @type {any} */ ({actions: actionsSpy, executeScript: executeScriptSpy}))
 
     await driver.click("[data-testid='project-environment-agent-submit']", {method: "actions", scrollTo: true, visible: false})
 
     expect(findElementSpy).toHaveBeenCalledWith("[data-testid='project-environment-agent-submit']", {visible: false})
     expect(scrollSpy).toHaveBeenCalledWith(element)
     expect(actionsSpy).toHaveBeenCalledWith({async: true})
-    expect(moveSpy).toHaveBeenCalledWith({origin: element})
+    expect(executeScriptSpy).toHaveBeenCalled()
+    expect(moveSpy).toHaveBeenCalledWith({origin: Origin.VIEWPORT, x: 25, y: 35})
     expect(clickSpy).toHaveBeenCalled()
     expect(performSpy).toHaveBeenCalled()
     expect(element.click).not.toHaveBeenCalled()
@@ -370,6 +372,7 @@ describe("WebDriverDriver interact", () => {
     actions.click = jasmine.createSpy("click").and.returnValue(actions)
     actions.move = jasmine.createSpy("move").and.returnValue(actions)
     actions.perform = jasmine.createSpy("perform").and.resolveTo(undefined)
+    const executeScriptSpy = jasmine.createSpy("executeScript").and.resolveTo({x: 25, y: 35})
     const driver = new WebDriverDriver({
       browser: /** @type {any} */ ({
         driver: undefined,
@@ -382,13 +385,15 @@ describe("WebDriverDriver interact", () => {
     driver._findElement = async () => /** @type {any} */ (element)
     driver.scrollElementIntoView = /** @type {any} */ (scrollSpy)
     driver.setWebDriver(/** @type {any} */ ({
-      actions: () => actions
+      actions: () => actions,
+      executeScript: executeScriptSpy
     }))
 
     await driver.click(element, {method: "actions"})
 
     expect(scrollSpy).not.toHaveBeenCalled()
-    expect(actions.move).toHaveBeenCalledWith({origin: element})
+    expect(executeScriptSpy).toHaveBeenCalled()
+    expect(actions.move).toHaveBeenCalledWith({origin: Origin.VIEWPORT, x: 25, y: 35})
     expect(actions.click).toHaveBeenCalled()
     expect(actions.perform).toHaveBeenCalled()
   })
@@ -402,6 +407,7 @@ describe("WebDriverDriver interact", () => {
     actions.click = jasmine.createSpy("click").and.returnValue(actions)
     actions.move = jasmine.createSpy("move").and.returnValue(actions)
     actions.perform = jasmine.createSpy("perform").and.resolveTo(undefined)
+    const executeScriptSpy = jasmine.createSpy("executeScript").and.resolveTo({x: 25, y: 35})
     const driver = new WebDriverDriver({
       browser: /** @type {any} */ ({
         driver: undefined,
@@ -414,13 +420,15 @@ describe("WebDriverDriver interact", () => {
     driver._findElement = async () => /** @type {any} */ (element)
     driver.scrollElementIntoView = /** @type {any} */ (scrollSpy)
     driver.setWebDriver(/** @type {any} */ ({
-      actions: () => actions
+      actions: () => actions,
+      executeScript: executeScriptSpy
     }))
 
     await driver.click(element, {method: "actions", scrollTo: true})
 
     expect(scrollSpy).toHaveBeenCalledWith(element)
-    expect(actions.move).toHaveBeenCalledWith({origin: element})
+    expect(executeScriptSpy).toHaveBeenCalled()
+    expect(actions.move).toHaveBeenCalledWith({origin: Origin.VIEWPORT, x: 25, y: 35})
     expect(actions.click).toHaveBeenCalled()
     expect(actions.perform).toHaveBeenCalled()
   })
@@ -435,6 +443,7 @@ describe("WebDriverDriver interact", () => {
     actions.move = jasmine.createSpy("move").and.returnValue(actions)
     actions.pause = jasmine.createSpy("pause").and.returnValue(actions)
     actions.perform = jasmine.createSpy("perform").and.resolveTo(undefined)
+    const executeScriptSpy = jasmine.createSpy("executeScript").and.resolveTo({x: 100, y: 80})
     const driver = new WebDriverDriver({
       browser: /** @type {any} */ ({
         driver: undefined,
@@ -445,13 +454,15 @@ describe("WebDriverDriver interact", () => {
 
     driver._findElement = async () => /** @type {any} */ (element)
     driver.setWebDriver(/** @type {any} */ ({
-      actions: jasmine.createSpy("actions").and.returnValue(actions)
+      actions: jasmine.createSpy("actions").and.returnValue(actions),
+      executeScript: executeScriptSpy
     }))
 
     await driver.click(element, {clickOffsetX: 32, clickOffsetY: 28, humanStepDelay: 75, humanSteps: 5, method: "human"})
 
+    expect(executeScriptSpy).toHaveBeenCalled()
     expect(actions.move.calls.count()).toBeGreaterThan(1)
-    expect(actions.move.calls.mostRecent().args).toEqual([{origin: element, x: 32, y: 28}])
+    expect(actions.move.calls.mostRecent().args).toEqual([{origin: Origin.VIEWPORT, x: 100, y: 80}])
     expect(actions.pause).toHaveBeenCalledWith(75)
     expect(actions.click).toHaveBeenCalled()
     expect(actions.perform).toHaveBeenCalled()
