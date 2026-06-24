@@ -921,6 +921,10 @@ export default class SystemTest extends Browser {
       }
     }
 
+    if (!url.searchParams.has("systemTest")) {
+      appendParam("systemTest", "true")
+    }
+
     if (!url.searchParams.has("systemTestClientWsPort") && this._clientWsPort !== 1985) {
       appendParam("systemTestClientWsPort", this._clientWsPort)
     }

@@ -108,7 +108,7 @@ describe("SystemTest.run", () => {
 
     await systemTest.visit("/sign-in?from=test")
 
-    expect(systemTest.driverVisit).toHaveBeenCalledOnceWith("/sign-in?from=test&velociousTest=true&systemTestClientWsPort=5233&systemTestScoundrelPort=5234")
+    expect(systemTest.driverVisit).toHaveBeenCalledOnceWith("/sign-in?from=test&velociousTest=true&systemTest=true&systemTestClientWsPort=5233&systemTestScoundrelPort=5234")
     expect(systemTest.waitForClientWebSocket).toHaveBeenCalledTimes(1)
     expect(communicator.sendCommand).not.toHaveBeenCalled()
     expect(systemTest._ignoredScoundrelClientCount).toEqual(2)
