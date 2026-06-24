@@ -20,6 +20,7 @@ function createSystemTestRunDouble() {
     _failOnBrowserError: true,
     _failOnConsoleError: false,
     _ignoredScoundrelClientCount: 0,
+    _reinitializeAfterSuccess: false,
     _clientWsPort: 5233,
     _scoundrelPort: 5234,
     _urlArgs: {velociousTest: true},
@@ -60,6 +61,7 @@ function createSystemTestRunDouble() {
     if ("errorFilter" in args) systemTest._errorFilter = args.errorFilter
     if ("failOnBrowserError" in args) systemTest._failOnBrowserError = args.failOnBrowserError ?? true
     if ("failOnConsoleError" in args) systemTest._failOnConsoleError = args.failOnConsoleError ?? false
+    if ("reinitializeAfterSuccess" in args) systemTest._reinitializeAfterSuccess = args.reinitializeAfterSuccess ?? false
   })
 
   return {
@@ -177,6 +179,25 @@ describe("SystemTest.run", () => {
     await SystemTest.run(async () => {})
 
     expect(systemTest.reinitialize).not.toHaveBeenCalled()
+  })
+
+  it("can reinitialize the system test after a successful callback", async () => {
+    const {systemTest} = createSystemTestRunDouble()
+    spyOn(SystemTest, "current").and.returnValue(/** @type {SystemTest} */ (systemTest))
+
+    await SystemTest.run({reinitializeAfterSuccess: true}, async () => {})
+
+    expect(systemTest.reinitialize).toHaveBeenCalledTimes(1)
+  })
+
+  it("honors instance-level successful callback reinitialization", async () => {
+    const {systemTest} = createSystemTestRunDouble()
+    systemTest._reinitializeAfterSuccess = true
+    spyOn(SystemTest, "current").and.returnValue(/** @type {SystemTest} */ (systemTest))
+
+    await SystemTest.run(async () => {})
+
+    expect(systemTest.reinitialize).toHaveBeenCalledTimes(1)
   })
 
   it("clears run-scoped browser error state after a successful callback", async () => {
