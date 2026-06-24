@@ -222,9 +222,7 @@ export default class SystemTest extends Browser {
     await systemTest.resetToRootPathForRun(rootPath)
 
     systemTest.debugLog("Run started - send initialize")
-    await timeout({timeout: 10_000, errorMessage: "Sending intialize to useSystemTest() timed out"}, async () => {
-      await systemTest.getCommunicator().sendCommand({type: "initialize"})
-    })
+    await systemTest.initializeBrowserContext()
 
     /** @type {unknown} */
     let runError = undefined
@@ -333,8 +331,18 @@ export default class SystemTest extends Browser {
 
     await timeout(
       {timeout: this.getCommandTimeout(args.timeout), errorMessage: `timeout while visiting path: ${path}`},
-      async () => await this.visitPathWithDriverAndReconnect(path)
+      async () => {
+        await this.visitPathWithDriverAndReconnect(path)
+        await this.initializeBrowserContext()
+      }
     )
+  }
+
+  /** @returns {Promise<void>} */
+  async initializeBrowserContext() {
+    await timeout({timeout: 10_000, errorMessage: "Sending initialize to useSystemTest() timed out"}, async () => {
+      await this.getCommunicator().sendCommand({type: "initialize"})
+    })
   }
 
   /**

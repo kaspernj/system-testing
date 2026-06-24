@@ -35,6 +35,7 @@ function createSystemTestRunDouble() {
     getCommunicator: jasmine.createSpy("getCommunicator").and.returnValue(communicator),
     getRootPath: jasmine.createSpy("getRootPath").and.returnValue("/blank?systemTest=true"),
     ignoreExistingScoundrelClients: SystemTest.prototype.ignoreExistingScoundrelClients,
+    initializeBrowserContext: SystemTest.prototype.initializeBrowserContext,
     reinitialize: jasmine.createSpy("reinitialize").and.resolveTo(undefined),
     resetToRootPathForRun: SystemTest.prototype.resetToRootPathForRun,
     sendBrowserCommand: SystemTest.prototype.sendBrowserCommand,
@@ -102,7 +103,7 @@ describe("SystemTest.run", () => {
     expect(systemTest.driverVisit).not.toHaveBeenCalled()
   })
 
-  it("reloads web visits through the driver with system-test query params", async () => {
+  it("reloads web visits through the driver with system-test query params and initializes the new page", async () => {
     process.env.SYSTEM_TEST_HOST = "expo-dev-server"
     const {communicator, systemTest} = createSystemTestRunDouble()
 
@@ -110,7 +111,7 @@ describe("SystemTest.run", () => {
 
     expect(systemTest.driverVisit).toHaveBeenCalledOnceWith("/sign-in?from=test&velociousTest=true&systemTest=true&systemTestClientWsPort=5233&systemTestScoundrelPort=5234")
     expect(systemTest.waitForClientWebSocket).toHaveBeenCalledTimes(1)
-    expect(communicator.sendCommand).not.toHaveBeenCalled()
+    expect(communicator.sendCommand).toHaveBeenCalledOnceWith({type: "initialize"})
     expect(systemTest._ignoredScoundrelClientCount).toEqual(2)
   })
 
