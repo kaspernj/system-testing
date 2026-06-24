@@ -173,6 +173,7 @@ describe("Browser", () => {
     browser.interact = /** @type {any} */ (async (...args) => {
       calls.push(args)
 
+      if (args[1] === "getTagName") return "input"
       if (args[1] === "getProperty") return "Next value"
 
       return undefined
@@ -186,13 +187,26 @@ describe("Browser", () => {
         selector: "[data-testid=\"name\\\"Input\"]",
         timeout: 250
       },
+      "getTagName"
+    ])
+    expect(calls[1]).toEqual([
+      {
+        selector: "[data-testid=\"name\\\"Input\"]",
+        timeout: 250
+      },
       "click"
     ])
-    expect(calls[1][0]).toEqual({
+    expect(calls[2]).toEqual([
+      {
+        selector: "[data-testid=\"name\\\"Input\"]",
+        timeout: 250
+      },
+      "clear"
+    ])
+    expect(calls[3][0]).toEqual({
       selector: "[data-testid=\"name\\\"Input\"]",
       timeout: 250
     })
-    expect(calls[1][1]).toEqual("sendKeys")
     expect(calls[3][1]).toEqual("sendKeys")
     expect(calls[3][2]).toEqual("Next value")
     expect(calls[4]).toEqual([

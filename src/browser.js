@@ -423,9 +423,17 @@ export default class Browser {
     let actualValue
 
     for (let attempt = 1; attempt <= 3; attempt++) {
+      const tagName = String(await this.interact(elementOrIdentifier, "getTagName")).toLowerCase()
+
       await this.interact(elementOrIdentifier, "click")
-      await this.interact(elementOrIdentifier, "sendKeys", Key.chord(Key.CONTROL, "a"))
-      await this.interact(elementOrIdentifier, "sendKeys", Key.BACK_SPACE)
+
+      if (tagName === "input" || tagName === "textarea") {
+        await this.interact(elementOrIdentifier, "clear")
+      } else {
+        await this.interact(elementOrIdentifier, "sendKeys", Key.chord(Key.CONTROL, "a"))
+        await this.interact(elementOrIdentifier, "sendKeys", Key.BACK_SPACE)
+      }
+
       await this.interact(elementOrIdentifier, "sendKeys", nextValue)
 
       actualValue = await this.interact(elementOrIdentifier, "getProperty", "value")
