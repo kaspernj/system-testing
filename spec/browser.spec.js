@@ -191,6 +191,7 @@ describe("Browser", () => {
     ])
     expect(calls[1]).toEqual([
       {
+        method: "actions",
         selector: "[data-testid=\"name\\\"Input\"]",
         timeout: 250
       },

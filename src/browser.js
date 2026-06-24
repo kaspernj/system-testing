@@ -425,7 +425,7 @@ export default class Browser {
     for (let attempt = 1; attempt <= 3; attempt++) {
       const tagName = String(await this.interact(elementOrIdentifier, "getTagName")).toLowerCase()
 
-      await this.interact(elementOrIdentifier, "click")
+      await this.interact(this.textEntryClickTarget(elementOrIdentifier), "click")
 
       if (tagName === "input" || tagName === "textarea") {
         await this.interact(elementOrIdentifier, "clear")
@@ -446,6 +446,22 @@ export default class Browser {
     const actualLength = typeof actualValue == "string" ? actualValue.length : "missing"
 
     throw new Error(`Input replacement did not update the element value after 3 attempts. Expected length ${nextValue.length}, got ${actualLength}.`)
+  }
+
+  /**
+   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
+   * @returns {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs}
+   */
+  textEntryClickTarget(elementOrIdentifier) {
+    if (typeof elementOrIdentifier === "string") {
+      return {selector: elementOrIdentifier, method: "actions"}
+    }
+
+    if (typeof elementOrIdentifier === "object" && elementOrIdentifier !== null && "selector" in elementOrIdentifier) {
+      return {...elementOrIdentifier, method: "actions"}
+    }
+
+    return elementOrIdentifier
   }
 
   /**

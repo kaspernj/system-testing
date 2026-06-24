@@ -229,7 +229,7 @@ describe("SystemTest interact", () => {
     await systemTest.clearAndSendKeys("#replace-target", "new value")
 
     expect(interactSpy.calls.argsFor(0)).toEqual(["#replace-target", "getTagName"])
-    expect(interactSpy.calls.argsFor(1)).toEqual(["#replace-target", "click"])
+    expect(interactSpy.calls.argsFor(1)).toEqual([{selector: "#replace-target", method: "actions"}, "click"])
     expect(interactSpy.calls.argsFor(2)).toEqual(["#replace-target", "clear"])
     expect(interactSpy.calls.argsFor(3)).toEqual(["#replace-target", "sendKeys", "new value"])
     expect(interactSpy.calls.argsFor(4)).toEqual(["#replace-target", "getProperty", "value"])
@@ -247,7 +247,7 @@ describe("SystemTest interact", () => {
     await systemTest.clearAndSendKeys("#replace-target", "new value")
 
     expect(interactSpy.calls.argsFor(0)).toEqual(["#replace-target", "getTagName"])
-    expect(interactSpy.calls.argsFor(1)).toEqual(["#replace-target", "click"])
+    expect(interactSpy.calls.argsFor(1)).toEqual([{selector: "#replace-target", method: "actions"}, "click"])
     expect(interactSpy.calls.argsFor(2)).toEqual(["#replace-target", "sendKeys", Key.chord(Key.CONTROL, "a")])
     expect(interactSpy.calls.argsFor(3)).toEqual(["#replace-target", "sendKeys", Key.BACK_SPACE])
     expect(interactSpy.calls.argsFor(4)).toEqual(["#replace-target", "sendKeys", "new value"])
