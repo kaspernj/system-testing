@@ -217,11 +217,11 @@ describe("SystemTest interact", () => {
     })
   })
 
-  it("clears input elements through retryable interactions before sending replacement keys", async () => {
+  it("replaces existing text through focused keyboard actions", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const observedValues = ["old value", "new value"]
+    const sendFocusedKeysSpy = spyOn(systemTest, "sendFocusedKeys").and.resolveTo(undefined)
     const interactSpy = spyOn(systemTest, "interact").and.callFake(async (_selector, methodName) => {
-      if (methodName === "getTagName") return "input"
       if (methodName === "getProperty") return observedValues.shift()
 
       return undefined
@@ -229,19 +229,18 @@ describe("SystemTest interact", () => {
 
     await systemTest.clearAndSendKeys("#replace-target", "new value")
 
-    expect(interactSpy.calls.argsFor(0)).toEqual(["#replace-target", "getTagName"])
-    expect(interactSpy.calls.argsFor(1)).toEqual(["#replace-target", "getProperty", "value"])
-    expect(interactSpy.calls.argsFor(2)).toEqual([{selector: "#replace-target", method: "actions"}, "click"])
-    expect(interactSpy.calls.argsFor(3)).toEqual(["#replace-target", "clear"])
-    expect(interactSpy.calls.argsFor(4)).toEqual(["#replace-target", "sendKeys", "new value"])
-    expect(interactSpy.calls.argsFor(5)).toEqual(["#replace-target", "getProperty", "value"])
+    expect(interactSpy.calls.argsFor(0)).toEqual(["#replace-target", "getProperty", "value"])
+    expect(interactSpy.calls.argsFor(1)).toEqual([{selector: "#replace-target", method: "actions"}, "click"])
+    expect(interactSpy.calls.argsFor(2)).toEqual(["#replace-target", "getProperty", "value"])
+    expect(sendFocusedKeysSpy.calls.argsFor(0)).toEqual([Key.chord(Key.CONTROL, "a"), Key.BACK_SPACE])
+    expect(sendFocusedKeysSpy.calls.argsFor(1)).toEqual(["new value"])
   })
 
-  it("does not clear input elements when they are already empty", async () => {
+  it("does not clear focused text when the field is already empty", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const observedValues = ["", "new value"]
+    const sendFocusedKeysSpy = spyOn(systemTest, "sendFocusedKeys").and.resolveTo(undefined)
     const interactSpy = spyOn(systemTest, "interact").and.callFake(async (_selector, methodName) => {
-      if (methodName === "getTagName") return "input"
       if (methodName === "getProperty") return observedValues.shift()
 
       return undefined
@@ -249,35 +248,18 @@ describe("SystemTest interact", () => {
 
     await systemTest.clearAndSendKeys("#replace-target", "new value")
 
-    expect(interactSpy.calls.allArgs()).not.toContain(["#replace-target", "clear"])
-    expect(interactSpy.calls.argsFor(3)).toEqual(["#replace-target", "sendKeys", "new value"])
-  })
-
-  it("clears non-input elements with select-all and backspace before sending replacement keys", async () => {
-    const systemTest = systemTestHelper.getSystemTest()
-    const interactSpy = spyOn(systemTest, "interact").and.callFake(async (_selector, methodName) => {
-      if (methodName === "getTagName") return "div"
-      if (methodName === "getProperty") return "new value"
-
-      return undefined
-    })
-
-    await systemTest.clearAndSendKeys("#replace-target", "new value")
-
-    expect(interactSpy.calls.argsFor(0)).toEqual(["#replace-target", "getTagName"])
-    expect(interactSpy.calls.argsFor(1)).toEqual(["#replace-target", "getProperty", "value"])
-    expect(interactSpy.calls.argsFor(2)).toEqual([{selector: "#replace-target", method: "actions"}, "click"])
-    expect(interactSpy.calls.argsFor(3)).toEqual(["#replace-target", "sendKeys", Key.chord(Key.CONTROL, "a")])
-    expect(interactSpy.calls.argsFor(4)).toEqual(["#replace-target", "sendKeys", Key.BACK_SPACE])
-    expect(interactSpy.calls.argsFor(5)).toEqual(["#replace-target", "sendKeys", "new value"])
-    expect(interactSpy.calls.argsFor(6)).toEqual(["#replace-target", "getProperty", "value"])
+    expect(interactSpy.calls.argsFor(0)).toEqual(["#replace-target", "getProperty", "value"])
+    expect(interactSpy.calls.argsFor(1)).toEqual([{selector: "#replace-target", method: "actions"}, "click"])
+    expect(interactSpy.calls.argsFor(2)).toEqual(["#replace-target", "getProperty", "value"])
+    expect(sendFocusedKeysSpy.calls.count()).toEqual(1)
+    expect(sendFocusedKeysSpy.calls.argsFor(0)).toEqual(["new value"])
   })
 
   it("retries clear and replacement keys until the requested value is visible", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const observedValues = ["", "", "", "new value"]
+    spyOn(systemTest, "sendFocusedKeys").and.resolveTo(undefined)
     const interactSpy = spyOn(systemTest, "interact").and.callFake(async (_selector, methodName) => {
-      if (methodName === "getTagName") return "input"
       if (methodName === "getProperty") return observedValues.shift()
 
       return undefined
@@ -285,9 +267,9 @@ describe("SystemTest interact", () => {
 
     await systemTest.clearAndSendKeys("#replace-target", "new value")
 
-    expect(interactSpy.calls.argsFor(0)).toEqual(["#replace-target", "getTagName"])
-    expect(interactSpy.calls.argsFor(5)).toEqual(["#replace-target", "getTagName"])
-    expect(interactSpy.calls.argsFor(9)).toEqual(["#replace-target", "getProperty", "value"])
+    expect(interactSpy.calls.argsFor(0)).toEqual(["#replace-target", "getProperty", "value"])
+    expect(interactSpy.calls.argsFor(3)).toEqual(["#replace-target", "getProperty", "value"])
+    expect(interactSpy.calls.argsFor(5)).toEqual(["#replace-target", "getProperty", "value"])
   })
 
   it("delegates test ID scrolling to the driver adapter", async () => {

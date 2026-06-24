@@ -3,6 +3,7 @@
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import {Key} from "selenium-webdriver"
 import Browser from "../src/browser.js"
 
 describe("Browser", () => {
@@ -169,11 +170,11 @@ describe("Browser", () => {
   it("replaces input values by test id through shared retryable interactions", async () => {
     const browser = new Browser()
     const calls = []
+    const sendFocusedKeysSpy = spyOn(browser, "sendFocusedKeys").and.resolveTo(undefined)
 
     browser.interact = /** @type {any} */ (async (...args) => {
       calls.push(args)
 
-      if (args[1] === "getTagName") return "input"
       if (args[1] === "getProperty") return calls.filter((call) => call[1] === "getProperty").length === 1 ? "Old value" : "Next value"
 
       return undefined
@@ -181,15 +182,8 @@ describe("Browser", () => {
 
     await browser.replaceTestIDInputValue("name\"Input", "Next value", {timeout: 250})
 
-    expect(calls.length).toEqual(6)
+    expect(calls.length).toEqual(3)
     expect(calls[0]).toEqual([
-      {
-        selector: "[data-testid=\"name\\\"Input\"]",
-        timeout: 250
-      },
-      "getTagName"
-    ])
-    expect(calls[1]).toEqual([
       {
         selector: "[data-testid=\"name\\\"Input\"]",
         timeout: 250
@@ -197,7 +191,7 @@ describe("Browser", () => {
       "getProperty",
       "value"
     ])
-    expect(calls[2]).toEqual([
+    expect(calls[1]).toEqual([
       {
         method: "actions",
         selector: "[data-testid=\"name\\\"Input\"]",
@@ -205,20 +199,7 @@ describe("Browser", () => {
       },
       "click"
     ])
-    expect(calls[3]).toEqual([
-      {
-        selector: "[data-testid=\"name\\\"Input\"]",
-        timeout: 250
-      },
-      "clear"
-    ])
-    expect(calls[4][0]).toEqual({
-      selector: "[data-testid=\"name\\\"Input\"]",
-      timeout: 250
-    })
-    expect(calls[4][1]).toEqual("sendKeys")
-    expect(calls[4][2]).toEqual("Next value")
-    expect(calls[5]).toEqual([
+    expect(calls[2]).toEqual([
       {
         selector: "[data-testid=\"name\\\"Input\"]",
         timeout: 250
@@ -226,6 +207,8 @@ describe("Browser", () => {
       "getProperty",
       "value"
     ])
+    expect(sendFocusedKeysSpy.calls.argsFor(0)).toEqual([Key.chord(Key.CONTROL, "a"), Key.BACK_SPACE])
+    expect(sendFocusedKeysSpy.calls.argsFor(1)).toEqual(["Next value"])
   })
 
   it("deletes all cookies through the driver adapter", async () => {
