@@ -209,46 +209,7 @@ describe("Browser", () => {
     expect(deleteAllCookiesCalls).toEqual(1)
   })
 
-  it("uses driver navigation for web visits and helper navigation for dismissTo", async () => {
-    const originalSystemTestHost = process.env.SYSTEM_TEST_HOST
-    const sentCommands = []
-    const visitedPaths = []
-    const browser = new Browser({
-      communicator: /** @type {any} */ ({
-        sendCommand: async (command) => {
-          sentCommands.push(command)
-        }
-      })
-    })
-
-    browser.driverAdapter = /** @type {any} */ ({
-      driverVisit: async (path) => {
-        visitedPaths.push(path)
-      },
-      getTimeouts: () => 500
-    })
-
-    try {
-      delete process.env.SYSTEM_TEST_HOST
-
-      await browser.visit("/spa-route")
-      await browser.dismissTo("/reset")
-
-      expect(visitedPaths).toEqual(["/spa-route"])
-      expect(sentCommands).toEqual([
-        {type: "dismissTo", path: "/reset"}
-      ])
-    } finally {
-      if (originalSystemTestHost === undefined) {
-        delete process.env.SYSTEM_TEST_HOST
-      } else {
-        process.env.SYSTEM_TEST_HOST = originalSystemTestHost
-      }
-    }
-  })
-
-  it("uses the injected communicator for native helper-driven navigation", async () => {
-    const originalSystemTestHost = process.env.SYSTEM_TEST_HOST
+  it("uses the injected communicator for helper-driven navigation", async () => {
     const sentCommands = []
     const browser = new Browser({
       communicator: /** @type {any} */ ({
@@ -265,23 +226,39 @@ describe("Browser", () => {
       getTimeouts: () => 500
     })
 
-    try {
-      process.env.SYSTEM_TEST_HOST = "native"
+    await browser.visit("/spa-route")
+    await browser.dismissTo("/reset")
 
-      await browser.visit("/spa-route", {timeout: 1500})
-      await browser.dismissTo("/reset", {timeout: 2500})
+    expect(sentCommands).toEqual([
+      {type: "visit", path: "/spa-route"},
+      {type: "dismissTo", path: "/reset"}
+    ])
+  })
 
-      expect(sentCommands).toEqual([
-        {type: "visit", path: "/spa-route"},
-        {type: "dismissTo", path: "/reset"}
-      ])
-    } finally {
-      if (originalSystemTestHost === undefined) {
-        delete process.env.SYSTEM_TEST_HOST
-      } else {
-        process.env.SYSTEM_TEST_HOST = originalSystemTestHost
-      }
-    }
+  it("uses per-command timeout overrides for helper-driven navigation", async () => {
+    const sentCommands = []
+    const browser = new Browser({
+      communicator: /** @type {any} */ ({
+        sendCommand: async (command) => {
+          sentCommands.push(command)
+        }
+      })
+    })
+
+    browser.driverAdapter = /** @type {any} */ ({
+      driverVisit: async () => {
+        throw new Error("driverVisit should not be called when communicator is injected")
+      },
+      getTimeouts: () => 500
+    })
+
+    await browser.visit("/spa-route", {timeout: 1500})
+    await browser.dismissTo("/reset", {timeout: 2500})
+
+    expect(sentCommands).toEqual([
+      {type: "visit", path: "/spa-route"},
+      {type: "dismissTo", path: "/reset"}
+    ])
   })
 
   it("writes screenshot, logs, and HTML artifacts", async () => {

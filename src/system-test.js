@@ -315,13 +315,41 @@ export default class SystemTest extends Browser {
     }
 
     this.debugLog(`Visit rootPath with driver navigation: ${rootPath}`)
+    await this.visitPathWithDriverAndReconnect(rootPath)
+    this.debugLog(`Driver visited root path ${rootPath}`)
+  }
+
+  /**
+   * Visits a path. Native uses the in-app helper; web reloads through the driver and reconnects the test bridge.
+   * @param {string} path
+   * @param {import("./browser.js").BrowserNavigationArgs} [args]
+   * @returns {Promise<void>}
+   */
+  async visit(path, args = {}) {
+    if (process.env.SYSTEM_TEST_HOST === "native") {
+      await super.visit(path, args)
+      return
+    }
+
+    await timeout(
+      {timeout: this.getCommandTimeout(args.timeout), errorMessage: `timeout while visiting path: ${path}`},
+      async () => await this.visitPathWithDriverAndReconnect(path)
+    )
+  }
+
+  /**
+   * Reloads a web route through the driver and waits for the browser command websocket.
+   * @param {string} path
+   * @returns {Promise<void>}
+   */
+  async visitPathWithDriverAndReconnect(path) {
     this.ignoreExistingScoundrelClients()
     this.ws = null
     this.getCommunicator().ws = null
-    await this.driverVisit(rootPath)
-    this.debugLog(`Driver visited root path ${rootPath}`)
+    await this.driverVisit(this.buildSystemTestPath(path))
+    this.debugLog(`Driver visited path ${path}`)
     await this.waitForClientWebSocket()
-    this.debugLog("Client websocket reconnected after root path driver navigation")
+    this.debugLog("Client websocket reconnected after driver navigation")
   }
 
   /** @returns {void} */
@@ -861,7 +889,21 @@ export default class SystemTest extends Browser {
    * @returns {string}
    */
   buildRootPath() {
-    const url = new URL(SystemTest.rootPath, "http://localhost")
+    const rootPath = this.buildSystemTestPath(SystemTest.rootPath)
+
+    this.debugLog(`buildRootPath rootPath: ${rootPath}`)
+
+    return rootPath
+  }
+
+  /**
+   * Adds system-test query params to a path that will reload the web app.
+   * @param {string} path
+   * @returns {string}
+   */
+  buildSystemTestPath(path) {
+    const isAbsoluteUrl = /^[a-z]+:\/\//i.test(path)
+    const url = new URL(path, "http://localhost")
     const appendParam = (/** @type {string} */ key, /** @type {any} */ value) => {
       if (value === undefined || value === null) return
       url.searchParams.append(key, String(value))
@@ -887,11 +929,9 @@ export default class SystemTest extends Browser {
       appendParam("systemTestScoundrelPort", this._scoundrelPort)
     }
 
-    const rootPath =  `${url.pathname}${url.search}${url.hash}`
+    if (isAbsoluteUrl) return url.href
 
-    this.debugLog(`buildRootPath rootPath: ${rootPath}`)
-
-    return rootPath
+    return `${url.pathname}${url.search}${url.hash}`
   }
 
   /**

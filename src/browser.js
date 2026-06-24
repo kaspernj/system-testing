@@ -642,13 +642,13 @@ export default class Browser {
   }
 
   /**
-   * Visits a path. Native apps use the injected helper; web apps navigate with the driver.
+   * Visits a path using the injected browser helper when available, otherwise navigates directly with the driver.
    * @param {string} path
    * @param {BrowserNavigationArgs} [args]
    * @returns {Promise<void>}
    */
   async visit(path, args = {}) {
-    if (process.env.SYSTEM_TEST_HOST === "native" && this.communicatorExists() && (!this.communicator?.ws || this.communicator.ws.readyState === 1)) {
+    if (this.communicatorExists() && (!this.communicator?.ws || this.communicator.ws.readyState === 1)) {
       await this.sendBrowserCommand("visit", path, args)
     } else {
       await timeout(

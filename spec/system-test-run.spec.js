@@ -20,20 +20,30 @@ function createSystemTestRunDouble() {
     _failOnBrowserError: true,
     _failOnConsoleError: false,
     _ignoredScoundrelClientCount: 0,
+    _clientWsPort: 5233,
+    _scoundrelPort: 5234,
+    _urlArgs: {velociousTest: true},
+    buildSystemTestPath: SystemTest.prototype.buildSystemTestPath,
+    communicator,
+    communicatorExists: jasmine.createSpy("communicatorExists").and.returnValue(true),
     debugLog: jasmine.createSpy("debugLog"),
     deleteAllCookies: jasmine.createSpy("deleteAllCookies").and.resolveTo(undefined),
     dismissTo: jasmine.createSpy("dismissTo").and.resolveTo(undefined),
     driverVisit: jasmine.createSpy("driverVisit").and.resolveTo(undefined),
     findByTestID: jasmine.createSpy("findByTestID").and.resolveTo(undefined),
+    getCommandTimeout: jasmine.createSpy("getCommandTimeout").and.callFake((timeout) => timeout ?? 500),
     getCommunicator: jasmine.createSpy("getCommunicator").and.returnValue(communicator),
     getRootPath: jasmine.createSpy("getRootPath").and.returnValue("/blank?systemTest=true"),
     ignoreExistingScoundrelClients: SystemTest.prototype.ignoreExistingScoundrelClients,
     reinitialize: jasmine.createSpy("reinitialize").and.resolveTo(undefined),
     resetToRootPathForRun: SystemTest.prototype.resetToRootPathForRun,
+    sendBrowserCommand: SystemTest.prototype.sendBrowserCommand,
     server: {
       getClients: jasmine.createSpy("getClients").and.callFake(() => scoundrelClients)
     },
     takeScreenshot: jasmine.createSpy("takeScreenshot").and.resolveTo(undefined),
+    visit: SystemTest.prototype.visit,
+    visitPathWithDriverAndReconnect: SystemTest.prototype.visitPathWithDriverAndReconnect,
     waitForClientWebSocket: jasmine.createSpy("waitForClientWebSocket"),
     ws: {readyState: 1}
   }
@@ -75,7 +85,7 @@ describe("SystemTest.run", () => {
 
     await SystemTest.run(async () => {})
 
-    expect(systemTest.driverVisit).toHaveBeenCalledOnceWith("/blank?systemTest=true")
+    expect(systemTest.driverVisit).toHaveBeenCalledOnceWith("/blank?systemTest=true&velociousTest=true&systemTestClientWsPort=5233&systemTestScoundrelPort=5234")
     expect(systemTest.waitForClientWebSocket).toHaveBeenCalledTimes(1)
     expect(systemTest.dismissTo).not.toHaveBeenCalled()
     expect(systemTest._ignoredScoundrelClientCount).toEqual(2)
@@ -89,6 +99,28 @@ describe("SystemTest.run", () => {
     await SystemTest.run(async () => {})
 
     expect(systemTest.dismissTo).toHaveBeenCalledOnceWith("/blank?systemTest=true")
+    expect(systemTest.driverVisit).not.toHaveBeenCalled()
+  })
+
+  it("reloads web visits through the driver with system-test query params", async () => {
+    process.env.SYSTEM_TEST_HOST = "expo-dev-server"
+    const {communicator, systemTest} = createSystemTestRunDouble()
+
+    await systemTest.visit("/sign-in?from=test")
+
+    expect(systemTest.driverVisit).toHaveBeenCalledOnceWith("/sign-in?from=test&velociousTest=true&systemTestClientWsPort=5233&systemTestScoundrelPort=5234")
+    expect(systemTest.waitForClientWebSocket).toHaveBeenCalledTimes(1)
+    expect(communicator.sendCommand).not.toHaveBeenCalled()
+    expect(systemTest._ignoredScoundrelClientCount).toEqual(2)
+  })
+
+  it("uses in-app navigation for native visits", async () => {
+    process.env.SYSTEM_TEST_HOST = "native"
+    const {communicator, systemTest} = createSystemTestRunDouble()
+
+    await systemTest.visit("/sign-in", {timeout: 1500})
+
+    expect(communicator.sendCommand).toHaveBeenCalledOnceWith({type: "visit", path: "/sign-in"})
     expect(systemTest.driverVisit).not.toHaveBeenCalled()
   })
 
