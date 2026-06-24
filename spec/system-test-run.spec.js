@@ -20,7 +20,6 @@ function createSystemTestRunDouble() {
     _failOnBrowserError: true,
     _failOnConsoleError: false,
     _ignoredScoundrelClientCount: 0,
-    _reinitializeAfterSuccess: false,
     _clientWsPort: 5233,
     _scoundrelPort: 5234,
     _urlArgs: {velociousTest: true},
@@ -61,7 +60,6 @@ function createSystemTestRunDouble() {
     if ("errorFilter" in args) systemTest._errorFilter = args.errorFilter
     if ("failOnBrowserError" in args) systemTest._failOnBrowserError = args.failOnBrowserError ?? true
     if ("failOnConsoleError" in args) systemTest._failOnConsoleError = args.failOnConsoleError ?? false
-    if ("reinitializeAfterSuccess" in args) systemTest._reinitializeAfterSuccess = args.reinitializeAfterSuccess ?? false
   })
 
   return {
@@ -81,21 +79,8 @@ describe("SystemTest.run", () => {
     }
   })
 
-  it("reloads the root path through the driver before each web run", async () => {
+  it("uses in-app dismissTo before each run without reloading an open web session", async () => {
     process.env.SYSTEM_TEST_HOST = "expo-dev-server"
-    const {systemTest} = createSystemTestRunDouble()
-    spyOn(SystemTest, "current").and.returnValue(/** @type {SystemTest} */ (systemTest))
-
-    await SystemTest.run(async () => {})
-
-    expect(systemTest.driverVisit).toHaveBeenCalledOnceWith("/blank?systemTest=true&velociousTest=true&systemTestClientWsPort=5233&systemTestScoundrelPort=5234")
-    expect(systemTest.waitForClientWebSocket).toHaveBeenCalledTimes(1)
-    expect(systemTest.dismissTo).not.toHaveBeenCalled()
-    expect(systemTest._ignoredScoundrelClientCount).toEqual(2)
-  })
-
-  it("uses in-app dismissTo before each native run", async () => {
-    process.env.SYSTEM_TEST_HOST = "native"
     const {systemTest} = createSystemTestRunDouble()
     spyOn(SystemTest, "current").and.returnValue(/** @type {SystemTest} */ (systemTest))
 
@@ -103,6 +88,21 @@ describe("SystemTest.run", () => {
 
     expect(systemTest.dismissTo).toHaveBeenCalledOnceWith("/blank?systemTest=true")
     expect(systemTest.driverVisit).not.toHaveBeenCalled()
+    expect(systemTest.waitForClientWebSocket).not.toHaveBeenCalled()
+    expect(systemTest._ignoredScoundrelClientCount).toEqual(0)
+  })
+
+  it("waits for websocket reconnection after in-app run reset closes the current websocket", async () => {
+    process.env.SYSTEM_TEST_HOST = "expo-dev-server"
+    const {systemTest} = createSystemTestRunDouble()
+    systemTest.ws = {readyState: 3}
+    spyOn(SystemTest, "current").and.returnValue(/** @type {SystemTest} */ (systemTest))
+
+    await SystemTest.run(async () => {})
+
+    expect(systemTest.dismissTo).toHaveBeenCalledOnceWith("/blank?systemTest=true")
+    expect(systemTest.driverVisit).not.toHaveBeenCalled()
+    expect(systemTest.waitForClientWebSocket).toHaveBeenCalledTimes(1)
   })
 
   it("reloads web visits through the driver with system-test query params and initializes the new page", async () => {
@@ -179,25 +179,6 @@ describe("SystemTest.run", () => {
     await SystemTest.run(async () => {})
 
     expect(systemTest.reinitialize).not.toHaveBeenCalled()
-  })
-
-  it("can reinitialize the system test after a successful callback", async () => {
-    const {systemTest} = createSystemTestRunDouble()
-    spyOn(SystemTest, "current").and.returnValue(/** @type {SystemTest} */ (systemTest))
-
-    await SystemTest.run({reinitializeAfterSuccess: true}, async () => {})
-
-    expect(systemTest.reinitialize).toHaveBeenCalledTimes(1)
-  })
-
-  it("honors instance-level successful callback reinitialization", async () => {
-    const {systemTest} = createSystemTestRunDouble()
-    systemTest._reinitializeAfterSuccess = true
-    spyOn(SystemTest, "current").and.returnValue(/** @type {SystemTest} */ (systemTest))
-
-    await SystemTest.run(async () => {})
-
-    expect(systemTest.reinitialize).toHaveBeenCalledTimes(1)
   })
 
   it("clears run-scoped browser error state after a successful callback", async () => {

@@ -36,7 +36,6 @@ export function defaultClientWebSocketConnectTimeout() {
  * @property {number} [scoundrelPort] Port for the Scoundrel WebSocket server.
  * @property {Record<string, any>} [urlArgs] Query params appended to the root path.
  * @property {SystemTestDriverConfig} [driver] Driver configuration.
- * @property {boolean} [reinitializeAfterSuccess] Recreate the browser session after each successful `SystemTest.run`.
  */
 /**
  * @typedef {SystemTestArgs & {reinitializeAfterFailure?: boolean}} SystemTestRunArgs
@@ -95,7 +94,6 @@ export default class SystemTest extends Browser {
   _httpPort = 1984
   _failOnBrowserError = true
   _failOnConsoleError = false
-  _reinitializeAfterSuccess = false
   /** @type {((error: any) => boolean) | undefined} */
   _errorFilter = undefined
   /** @type {Error[]} */
@@ -133,7 +131,6 @@ export default class SystemTest extends Browser {
     if ("errorFilter" in args) this._errorFilter = args.errorFilter
     if ("failOnBrowserError" in args) this._failOnBrowserError = args.failOnBrowserError ?? true
     if ("failOnConsoleError" in args) this._failOnConsoleError = args.failOnConsoleError ?? false
-    if ("reinitializeAfterSuccess" in args) this._reinitializeAfterSuccess = args.reinitializeAfterSuccess ?? false
   }
 
   /** @returns {SystemTestCommunicator} */
@@ -205,9 +202,8 @@ export default class SystemTest extends Browser {
    */
   static async run(args, callback) {
     const resolvedCallback = typeof args === "function" ? args : callback
-    const {reinitializeAfterFailure = true, reinitializeAfterSuccess, ...systemTestArgs} = /** @type {SystemTestRunArgs} */ (typeof args === "function" ? {} : args || {})
+    const {reinitializeAfterFailure = true, ...systemTestArgs} = /** @type {SystemTestRunArgs} */ (typeof args === "function" ? {} : args || {})
     const systemTest = this.current(systemTestArgs)
-    const shouldReinitializeAfterSuccess = reinitializeAfterSuccess ?? systemTest._reinitializeAfterSuccess
 
     if (!resolvedCallback) {
       throw new Error("SystemTest.run requires a callback")
@@ -301,12 +297,6 @@ export default class SystemTest extends Browser {
 
       throw teardownError
     }
-
-    if (shouldReinitializeAfterSuccess) {
-      systemTest.debugLog("Run succeeded - reinitialize SystemTest")
-      await systemTest.reinitialize()
-      systemTest.debugLog("Reinitialized SystemTest after successful run")
-    }
   }
 
   /**
@@ -315,16 +305,17 @@ export default class SystemTest extends Browser {
    * @returns {Promise<void>}
    */
   async resetToRootPathForRun(rootPath) {
-    if (process.env.SYSTEM_TEST_HOST === "native") {
-      this.debugLog(`Visit rootPath with dismissTo: ${rootPath}`)
-      await this.dismissTo(rootPath)
-      this.debugLog(`Dismissed to root path ${rootPath}`)
-      return
-    }
+    this.debugLog(`Visit rootPath with dismissTo: ${rootPath}`)
+    await this.dismissTo(rootPath)
+    this.debugLog(`Dismissed to root path ${rootPath}`)
 
-    this.debugLog(`Visit rootPath with driver navigation: ${rootPath}`)
-    await this.visitPathWithDriverAndReconnect(rootPath)
-    this.debugLog(`Driver visited root path ${rootPath}`)
+    if (!this.ws || this.ws.readyState !== 1) {
+      this.debugLog("WebSocket not connected after dismissTo, waiting for reconnection")
+      this.ws = null
+      this.getCommunicator().ws = null
+      await this.waitForClientWebSocket()
+      this.debugLog("Client websocket reconnected")
+    }
   }
 
   /**
@@ -384,7 +375,7 @@ export default class SystemTest extends Browser {
    * Creates a new SystemTest instance
    * @param {SystemTestArgs} [args]
    */
-  constructor({clientWsPort = 1985, clientWsConnectTimeout, host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, httpConnectHost, debug = false, errorFilter, failOnBrowserError = true, failOnConsoleError = false, reinitializeAfterSuccess = false, scoundrelPort = 8090, urlArgs, driver, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
+  constructor({clientWsPort = 1985, clientWsConnectTimeout, host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, httpConnectHost, debug = false, errorFilter, failOnBrowserError = true, failOnConsoleError = false, scoundrelPort = 8090, urlArgs, driver, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
     super({debug, driver})
 
     const restArgsKeys = Object.keys(restArgs)
@@ -404,7 +395,6 @@ export default class SystemTest extends Browser {
     this._errorFilter = errorFilter
     this._failOnBrowserError = failOnBrowserError
     this._failOnConsoleError = failOnConsoleError
-    this._reinitializeAfterSuccess = reinitializeAfterSuccess
     this._scoundrelPort = scoundrelPort
     this._urlArgs = urlArgs
     this._rootPath = this.buildRootPath()
