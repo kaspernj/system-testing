@@ -328,6 +328,29 @@ export default class WebDriverDriver {
   }
 
   /**
+   * Runs a callback with Selenium's implicit wait temporarily changed. Finder
+   * methods do their own explicit polling, so leaving Selenium's implicit wait
+   * enabled would make short lookup timeouts block for the global driver wait.
+   * @template T
+   * @param {number} implicitTimeout
+   * @param {() => Promise<T>} callback
+   * @returns {Promise<T>}
+   */
+  async withTemporaryImplicitTimeout(implicitTimeout, callback) {
+    const originalImplicitTimeout = this._driverTimeouts
+
+    if (originalImplicitTimeout === implicitTimeout) return await callback()
+
+    await this.getWebDriver().manage().setTimeouts({implicit: implicitTimeout})
+
+    try {
+      return await callback()
+    } finally {
+      await this.getWebDriver().manage().setTimeouts({implicit: originalImplicitTimeout})
+    }
+  }
+
+  /**
    * @returns {Promise<void>}
    */
   async restoreTimeouts() {
@@ -471,40 +494,43 @@ export default class WebDriverDriver {
     /** @type {import("selenium-webdriver").WebElement[]} */
     let elements = []
 
-    while (true) {
-      const timeLeft = actualTimeout == 0 ? 0 : getTimeLeft()
+    await this.withTemporaryImplicitTimeout(0, async () => {
+      while (true) {
+        const timeLeft = actualTimeout == 0 ? 0 : getTimeLeft()
 
-      try {
-        if (timeLeft == 0) {
-          elements = await getElements()
-        } else {
-          await this.getWebDriver().wait(async () => {
+        try {
+          if (timeLeft == 0) {
             elements = await getElements()
+          } else {
+            await this.getWebDriver().wait(async () => {
+              elements = await getElements()
 
-            return elements.length > 0
-          }, timeLeft)
+              return elements.length > 0
+            }, timeLeft)
+          }
+
+          break
+        } catch (error) {
+          let isStaleElementError = false
+
+          if (error instanceof SeleniumError.StaleElementReferenceError) {
+            isStaleElementError = true
+          } else if (error instanceof WebDriverError && error.message.toLowerCase().includes("stale element reference")) {
+            isStaleElementError = true
+          }
+
+          if (
+            (error instanceof SeleniumError.TimeoutError || isStaleElementError)
+            && getTimeLeft() > 0
+          ) {
+            continue
+          }
+
+          throw errorWithCause(`Couldn't get elements with selector: ${actualSelector}: ${error instanceof Error ? error.message : error}`, error)
         }
-
-        break
-      } catch (error) {
-        let isStaleElementError = false
-
-        if (error instanceof SeleniumError.StaleElementReferenceError) {
-          isStaleElementError = true
-        } else if (error instanceof WebDriverError && error.message.toLowerCase().includes("stale element reference")) {
-          isStaleElementError = true
-        }
-
-        if (
-          (error instanceof SeleniumError.TimeoutError || isStaleElementError)
-          && getTimeLeft() > 0
-        ) {
-          continue
-        }
-
-        throw errorWithCause(`Couldn't get elements with selector: ${actualSelector}: ${error instanceof Error ? error.message : error}`, error)
       }
-    }
+    })
+
     if (scrollTo) {
       for (const element of elements) {
         await this.scrollElementIntoView(element)

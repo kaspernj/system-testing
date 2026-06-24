@@ -75,4 +75,42 @@ describe("WebDriverDriver lifecycle", () => {
     expect(process.listenerCount("SIGTERM")).toBe(before.sigterm)
     expect(process.listenerCount("beforeExit")).toBe(before.beforeExit)
   })
+
+  it("disables implicit waits during explicit selector lookups and restores them afterwards", async () => {
+    const calls = []
+    let implicitTimeout = 10000
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver._driverTimeouts = implicitTimeout
+    driver.setWebDriver(/** @type {any} */ ({
+      findElements: async () => {
+        calls.push(["findElements", implicitTimeout])
+
+        return []
+      },
+      manage: () => ({
+        setTimeouts: async ({implicit}) => {
+          implicitTimeout = implicit
+          calls.push(["setTimeouts", implicit])
+        }
+      })
+    }))
+
+    await expectAsync(
+      driver.find("[data-testid='missing']", {timeout: 0, useBaseSelector: false})
+    ).toBeRejectedWithError(/Element couldn't be found/)
+
+    expect(calls).toEqual([
+      ["setTimeouts", 0],
+      ["findElements", 0],
+      ["setTimeouts", 10000]
+    ])
+    expect(driver._driverTimeouts).toBe(10000)
+  })
 })
