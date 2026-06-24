@@ -220,7 +220,7 @@ describe("SystemTest interact", () => {
   it("clears and sends replacement keys through retryable interactions", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const interactSpy = spyOn(systemTest, "interact").and.callFake(async (_selector, methodName) => {
-      if (methodName === "getDomProperty") return "new value"
+      if (methodName === "getProperty") return "new value"
 
       return undefined
     })
@@ -231,14 +231,14 @@ describe("SystemTest interact", () => {
     expect(interactSpy.calls.argsFor(1)).toEqual(["#replace-target", "sendKeys", Key.chord(Key.CONTROL, "a")])
     expect(interactSpy.calls.argsFor(2)).toEqual(["#replace-target", "sendKeys", Key.BACK_SPACE])
     expect(interactSpy.calls.argsFor(3)).toEqual(["#replace-target", "sendKeys", "new value"])
-    expect(interactSpy.calls.argsFor(4)).toEqual(["#replace-target", "getDomProperty", "value"])
+    expect(interactSpy.calls.argsFor(4)).toEqual(["#replace-target", "getProperty", "value"])
   })
 
   it("retries clear and replacement keys until the requested value is visible", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const observedValues = ["", "new value"]
     const interactSpy = spyOn(systemTest, "interact").and.callFake(async (_selector, methodName) => {
-      if (methodName === "getDomProperty") return observedValues.shift()
+      if (methodName === "getProperty") return observedValues.shift()
 
       return undefined
     })
@@ -247,7 +247,7 @@ describe("SystemTest interact", () => {
 
     expect(interactSpy.calls.argsFor(0)).toEqual(["#replace-target", "click"])
     expect(interactSpy.calls.argsFor(5)).toEqual(["#replace-target", "click"])
-    expect(interactSpy.calls.argsFor(9)).toEqual(["#replace-target", "getDomProperty", "value"])
+    expect(interactSpy.calls.argsFor(9)).toEqual(["#replace-target", "getProperty", "value"])
   })
 
   it("delegates test ID scrolling to the driver adapter", async () => {

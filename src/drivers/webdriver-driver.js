@@ -1026,10 +1026,10 @@ export default class WebDriverDriver {
    * @returns {Promise<string | undefined>}
    */
   async readInteractableValue(element) {
-    const elementWithDomProperty = /** @type {{getDomProperty?: (name: string) => Promise<unknown>}} */ (element)
+    const elementWithProperty = /** @type {{getProperty?: (name: string) => Promise<unknown>}} */ (element)
 
-    if (typeof elementWithDomProperty.getDomProperty == "function") {
-      const valueProperty = await elementWithDomProperty.getDomProperty("value")
+    if (typeof elementWithProperty.getProperty == "function") {
+      const valueProperty = await elementWithProperty.getProperty("value")
 
       if (typeof valueProperty == "string") {
         return valueProperty

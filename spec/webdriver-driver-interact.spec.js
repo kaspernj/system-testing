@@ -36,12 +36,12 @@ describe("WebDriverDriver interact", () => {
 
   it("does not use the DOM value-setter fallback when sendKeys updates the field value", async () => {
     const element = {
-      getDomPropertyCalls: 0,
+      getPropertyCalls: 0,
       getAttribute: async () => "",
-      getDomProperty: async () => {
-        element.getDomPropertyCalls += 1
+      getProperty: async () => {
+        element.getPropertyCalls += 1
 
-        return element.getDomPropertyCalls === 1 ? "" : "pwd"
+        return element.getPropertyCalls === 1 ? "" : "pwd"
       },
       getText: async () => "",
       sendKeys: async () => null

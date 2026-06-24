@@ -173,7 +173,7 @@ describe("Browser", () => {
     browser.interact = /** @type {any} */ (async (...args) => {
       calls.push(args)
 
-      if (args[1] === "getDomProperty") return "Next value"
+      if (args[1] === "getProperty") return "Next value"
 
       return undefined
     })
@@ -200,7 +200,7 @@ describe("Browser", () => {
         selector: "[data-testid=\"name\\\"Input\"]",
         timeout: 250
       },
-      "getDomProperty",
+      "getProperty",
       "value"
     ])
   })

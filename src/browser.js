@@ -428,7 +428,7 @@ export default class Browser {
       await this.interact(elementOrIdentifier, "sendKeys", Key.BACK_SPACE)
       await this.interact(elementOrIdentifier, "sendKeys", nextValue)
 
-      actualValue = await this.interact(elementOrIdentifier, "getDomProperty", "value")
+      actualValue = await this.interact(elementOrIdentifier, "getProperty", "value")
 
       if (actualValue === nextValue) return
 
