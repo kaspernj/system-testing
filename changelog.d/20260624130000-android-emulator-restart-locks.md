@@ -1,1 +1,2 @@
 - Clean up stale Android emulator instances and AVD locks before CI startup so restarted Appium Android builds do not hang on duplicate AVD launches.
+- Force the Default CI build to run with `SYSTEM_TEST_HOST=dist` so Appium/native environment from another build cannot leak into Selenium checks.
