@@ -26,12 +26,6 @@ export default function useSystemTestExpo({browserHelper, enabled, host, onFirst
     enabled,
     host,
     onDismissTo: ({path}) => {
-      try {
-        router.dismissTo(path)
-      } catch (error) {
-        console.error(`Failed to dismiss to path "${path}": ${error instanceof Error ? error.message : error}`)
-      }
-
       // Pop every other screen off the Stack so previously-visited routes
       // unmount instead of accumulating in DOM with display:none. Without this,
       // react-native-web's global PressResponder gets confused by stale
@@ -45,6 +39,12 @@ export default function useSystemTestExpo({browserHelper, enabled, host, onFirst
         }
       } catch (error) {
         console.error(`Failed to dismiss all stack screens: ${error instanceof Error ? error.message : error}`)
+      }
+
+      try {
+        router.dismissTo(path)
+      } catch (error) {
+        console.error(`Failed to dismiss to path "${path}": ${error instanceof Error ? error.message : error}`)
       }
     },
     onFirstInitialize,
