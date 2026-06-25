@@ -136,6 +136,50 @@ describe("SystemTest root path", () => {
     ])
   })
 
+  it("starts the client WebSocket before launching native Appium sessions even when serving dist", async () => {
+    process.env.SYSTEM_TEST_HOST = "dist"
+    const startupCalls = []
+    const adapter = {
+      getTimeouts: () => 100,
+      setBaseUrl: jasmine.createSpy("setBaseUrl"),
+      setTimeouts: jasmine.createSpy("setTimeouts").and.resolveTo(undefined),
+      start: jasmine.createSpy("start").and.callFake(async () => {
+        startupCalls.push("driver")
+      })
+    }
+
+    spyOn(SystemTestHttpServer.prototype, "start").and.resolveTo(undefined)
+    spyOn(SystemTestHttpServer.prototype, "assertReachable").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "getDriverAdapter").and.returnValue(/** @type {any} */ (adapter))
+    spyOn(SystemTest.prototype, "startScoundrel").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "startWebSocketServer").and.callFake(async () => {
+      startupCalls.push("websocket")
+    })
+    spyOn(SystemTest.prototype, "waitForClientWebSocket").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "find").and.resolveTo(/** @type {any} */ ({}))
+    spyOn(SystemTest.prototype, "findByTestID").and.resolveTo(/** @type {any} */ ({}))
+    spyOn(SystemTest.prototype, "driverVisit").and.resolveTo(undefined)
+
+    await new SystemTest({
+      driver: {
+        type: "appium",
+        options: {
+          capabilities: {
+            app: "spec/dummy/android/app/build/outputs/apk/release/app-release.apk",
+            browserName: ""
+          }
+        }
+      },
+      httpConnectHost: "10.0.2.2",
+      httpHost: "0.0.0.0",
+      httpPort: 1984
+    }).start()
+
+    expect(startupCalls).toEqual(["websocket", "driver"])
+    expect(SystemTestHttpServer.prototype.start).not.toHaveBeenCalled()
+    expect(SystemTest.prototype.driverVisit).not.toHaveBeenCalled()
+  })
+
   it("propagates custom websocket ports into the browser URL", () => {
     spyOn(SystemTest.prototype, "startScoundrel").and.callFake(() => {})
 
