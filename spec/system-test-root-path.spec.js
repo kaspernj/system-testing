@@ -61,6 +61,41 @@ describe("SystemTest root path", () => {
     }
   })
 
+  it("serves exported sibling HTML files before same-name route directories", async () => {
+    const tempRootPath = await fs.mkdtemp(path.join(os.tmpdir(), "system-testing-dist-"))
+
+    try {
+      await fs.mkdir(path.join(tempRootPath, "dist", "events", "[id]"), {recursive: true})
+      await fs.writeFile(path.join(tempRootPath, "dist", "events.html"), "events route")
+      await fs.writeFile(path.join(tempRootPath, "dist", "events", "[id]", "index.html"), "event show route")
+      process.chdir(tempRootPath)
+
+      const response = {
+        body: "",
+        headers: {},
+        statusCode: 0,
+        end(content) {
+          this.body = content.toString()
+        },
+        setHeader(key, value) {
+          this.headers[key] = value
+        }
+      }
+
+      await new SystemTestHttpServer().onHttpServerRequest(
+        /** @type {any} */ ({headers: {host: "localhost:1984"}, url: "/events"}),
+        /** @type {any} */ (response)
+      )
+
+      expect(response.statusCode).toBe(200)
+      expect(response.body).toBe("events route")
+      expect(response.headers["Content-Type"]).toBe("text/html")
+    } finally {
+      process.chdir(previousCwd || tempRootPath)
+      await fs.rm(tempRootPath, {force: true, recursive: true})
+    }
+  })
+
   it("waits for the initial root path navigation when Android Chrome reports host routing is not ready", async () => {
     process.env.SYSTEM_TEST_HOST = "dist"
     const adapter = {
