@@ -1,1 +1,0 @@
-- Detach Android emulator output from CI stdout, stop the emulator after the Appium Android build, and avoid recursive chmod over the SDK cache so green test runs do not keep TensorBuzz jobs open.

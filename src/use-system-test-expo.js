@@ -1,4 +1,5 @@
 import {useNavigationContainerRef, useRouter} from "expo-router"
+import {dismissExpoRouterToPath} from "./expo-router-dismiss-to.js"
 import useSystemTest from "./use-system-test.js"
 
 /**
@@ -26,26 +27,7 @@ export default function useSystemTestExpo({browserHelper, enabled, host, onFirst
     enabled,
     host,
     onDismissTo: ({path}) => {
-      // Pop every other screen off the Stack so previously-visited routes
-      // unmount instead of accumulating in DOM with display:none. Without this,
-      // react-native-web's global PressResponder gets confused by stale
-      // Pressables that share the same testID as the visible one and Selenium
-      // clicks fail to fire onPress.
-      try {
-        const navigation = navigationContainerRef.current
-
-        if (navigation && navigation.canGoBack()) {
-          router.dismissAll()
-        }
-      } catch (error) {
-        console.error(`Failed to dismiss all stack screens: ${error instanceof Error ? error.message : error}`)
-      }
-
-      try {
-        router.dismissTo(path)
-      } catch (error) {
-        console.error(`Failed to dismiss to path "${path}": ${error instanceof Error ? error.message : error}`)
-      }
+      dismissExpoRouterToPath({navigationContainerRef, path, router})
     },
     onFirstInitialize,
     onInitialize,

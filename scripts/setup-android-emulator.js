@@ -4,13 +4,6 @@ import {spawn, spawnSync} from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 
-const stage = process.env.ANDROID_EMULATOR_STAGE ?? "full"
-const validStages = new Set(["full", "install", "start", "stop"])
-
-if (!validStages.has(stage)) {
-  throw new Error(`Unsupported ANDROID_EMULATOR_STAGE: ${stage}`)
-}
-
 const sdkRoot = ensureSdkRoot()
 console.log(`[android] Using SDK root: ${sdkRoot}`)
 const {sdkmanagerPath, avdmanagerPath} = ensureCmdlineTools(sdkRoot)
@@ -22,7 +15,6 @@ const avdName = process.env.ANDROID_AVD_NAME ?? "system-test-android"
 const systemImage = process.env.ANDROID_SYSTEM_IMAGE ?? "system-images;android-33;google_apis;x86_64"
 const avdDevice = process.env.ANDROID_AVD_DEVICE ?? "pixel_5"
 const avdHome = process.env.ANDROID_AVD_HOME ?? "/tmp/android-avd"
-const emulatorLogPath = process.env.ANDROID_EMULATOR_LOG_PATH ?? path.join(process.cwd(), "tmp", "android-emulator", `${avdName}.log`)
 const ndkVersion = process.env.ANDROID_NDK_VERSION
 const extraPackages = process.env.ANDROID_SDK_PACKAGES
   ? process.env.ANDROID_SDK_PACKAGES.split(",").map((value) => value.trim()).filter(Boolean)
@@ -38,32 +30,27 @@ const packages = [
 ]
 const useSudoForEmulator = true
 const useSudoForAdb = false
-const sdkManagerInstallAttempts = 3
+const stage = process.env.ANDROID_EMULATOR_STAGE ?? "full"
 
-if (stage === "stop") {
-  stopConnectedEmulatorsForAvd()
-  stopEmulatorProcessesForAvd()
-} else {
-  if (!fs.existsSync(emulatorPath) && stage !== "start") {
+if (!fs.existsSync(emulatorPath) && stage !== "start") {
+  ensurePackages()
+}
+
+if (stage !== "start") {
+  ensurePackages()
+  ensureWritableSdkRoot()
+  ensureAvd()
+}
+
+if (stage !== "install") {
+  if (!fs.existsSync(adbPath)) {
     ensurePackages()
   }
-
-  if (stage !== "start") {
-    ensurePackages()
-    ensureWritableSdkRoot()
-    ensureAvd()
-  }
-
-  if (stage !== "install") {
-    if (!fs.existsSync(adbPath)) {
-      ensurePackages()
-    }
-    ensureAdbServer()
-    prepareEmulatorStart()
-    startEmulator()
-    waitForDevice()
-    ensureBootCompleted()
-  }
+  ensureAdbServer()
+  prepareEmulatorStart()
+  startEmulator()
+  waitForDevice()
+  ensureBootCompleted()
 }
 
 /** @returns {void} */
@@ -75,9 +62,9 @@ function ensurePackages() {
 
 /** @returns {void} */
 function ensureWritableSdkRoot() {
+  run("chmod", ["-R", "777", sdkRoot], {sudo: true})
   const sdkHome = process.env.ANDROID_SDK_HOME ?? path.join(sdkRoot, ".android")
-  ensureWritableDirectory(sdkRoot)
-  ensureWritableDirectory(sdkHome)
+  run("chmod", ["-R", "777", sdkHome], {sudo: true})
 }
 
 /** @returns {void} */
@@ -125,22 +112,13 @@ function startEmulator() {
 
   const command = useSudoForEmulator ? "sudo" : emulatorPath
   const args = useSudoForEmulator ? buildSudoArgs(emulatorPath, emulatorArgs, sdkEnv()) : emulatorArgs
-  const logFd = openEmulatorLog()
   const child = spawn(command, args, {
     env: sdkEnv(),
-    stdio: ["ignore", logFd, logFd],
+    stdio: "inherit",
     detached: true
   })
 
   child.unref()
-  fs.closeSync(logFd)
-}
-
-/** @returns {number} */
-function openEmulatorLog() {
-  console.log(`[android] Emulator log: ${emulatorLogPath}`)
-  fs.mkdirSync(path.dirname(emulatorLogPath), {recursive: true})
-  return fs.openSync(emulatorLogPath, "a")
 }
 
 /** @returns {void} */
@@ -241,85 +219,15 @@ function ensureBootCompleted() {
   }
 }
 
+/** @returns {void} */
 /**
  * @param {string[]} args
  * @param {{sudo: boolean}} options
  * @returns {void}
  */
 function runSdkManager(args, {sudo}) {
-  for (let attempt = 1; attempt <= sdkManagerInstallAttempts; attempt += 1) {
-    const result = runSdkManagerAttempt(args, {sudo})
-
-    if (result.status === 0) return
-
-    if (attempt === sdkManagerInstallAttempts || !isRetryableSdkManagerFailure(result.output)) {
-      throw new Error(`sdkmanager failed with exit code ${result.status ?? "unknown"} after ${attempt} attempt(s): ${args.join(" ")}`)
-    }
-
-    console.log(`[android] sdkmanager failed with a retryable SDK archive/install error on attempt ${attempt}/${sdkManagerInstallAttempts}`)
-    removePartialSdkPackages(args)
-  }
-}
-
-/**
- * @param {string[]} args
- * @param {{sudo: boolean}} options
- * @returns {{status: number | null, output: string}}
- */
-function runSdkManagerAttempt(args, {sudo}) {
-  const fullCommand = sudo ? sudoPrefix({sudo: true}) : sdkmanagerPath
-  const fullArgs = sudo ? buildSudoArgs(sdkmanagerPath, args, sdkEnv()) : args
-  const logPath = path.join(process.env.TMPDIR ?? "/tmp", `system-testing-sdkmanager-${process.pid}-${Date.now()}.log`)
-  const command = `${quoteShellCommand([fullCommand, ...fullArgs])} 2>&1 | tee ${quoteShellArg(logPath)}`
-
-  console.log(`[android] ${fullCommand} ${fullArgs.join(" ")}`)
-  const result = spawnSync("bash", ["-o", "pipefail", "-c", command], {
-    env: sdkEnv(),
-    encoding: "utf-8",
-    stdio: ["ignore", "inherit", "inherit"]
-  })
-  const output = fs.existsSync(logPath) ? fs.readFileSync(logPath, "utf-8") : ""
-  fs.rmSync(logPath, {force: true})
-
-  return {status: result.status, output}
-}
-
-/**
- * @param {string} output
- * @returns {boolean}
- */
-function isRetryableSdkManagerFailure(output) {
-  const lowerOutput = output.toLowerCase()
-
-  return [
-    "error on zipfile",
-    "unknown archive",
-    "zip end header not found",
-    "premature end of file"
-  ].some((message) => lowerOutput.includes(message))
-}
-
-/**
- * @param {string[]} packageNames
- * @returns {void}
- */
-function removePartialSdkPackages(packageNames) {
-  const paths = [
-    path.join(sdkRoot, ".temp"),
-    ...packageNames.map((packageName) => sdkPackagePath(packageName))
-  ]
-  const uniquePaths = [...new Set(paths)]
-
-  console.log(`[android] Removing partial SDK package paths: ${uniquePaths.join(", ")}`)
-  run("rm", ["-rf", ...uniquePaths], {sudo: true})
-}
-
-/**
- * @param {string} packageName
- * @returns {string}
- */
-function sdkPackagePath(packageName) {
-  return path.join(sdkRoot, ...packageName.split(";"))
+  console.log(`[android] sdkmanager ${args.join(" ")}`)
+  run(sdkmanagerPath, args, {sudo, env: sdkEnv()})
 }
 
 /**
@@ -330,7 +238,7 @@ function sdkPackagePath(packageName) {
 function runWithYes(args, {sudo}) {
   const fullCommand = sudo ? sudoPrefix({sudo: true}) : sdkmanagerPath
   const fullArgs = sudo ? buildSudoArgs(sdkmanagerPath, args, sdkEnv()) : args
-  const quotedCommand = quoteShellCommand([fullCommand, ...fullArgs])
+  const quotedCommand = [fullCommand, ...fullArgs].map((part) => `'${part.replaceAll("'", "'\\''")}'`).join(" ")
 
   console.log(`[android] ${fullCommand} ${fullArgs.join(" ")} < yes`)
   const result = spawnSync("sh", ["-c", `yes | ${quotedCommand}`], {
@@ -342,22 +250,6 @@ function runWithYes(args, {sudo}) {
   if (result.status !== 0) {
     throw new Error(`sdkmanager failed with exit code ${result.status}`)
   }
-}
-
-/**
- * @param {string[]} parts
- * @returns {string}
- */
-function quoteShellCommand(parts) {
-  return parts.map((part) => quoteShellArg(part)).join(" ")
-}
-
-/**
- * @param {string} value
- * @returns {string}
- */
-function quoteShellArg(value) {
-  return `'${value.replaceAll("'", "'\\''")}'`
 }
 
 /**
@@ -437,18 +329,17 @@ function getPreferredSdkRoot() {
  * @returns {void}
  */
 function ensureSdkRootDir(root) {
-  ensureWritableDirectory(root)
-  const sdkHome = process.env.ANDROID_SDK_HOME ?? path.join(root, ".android")
-  ensureWritableDirectory(sdkHome)
-}
+  if (fs.existsSync(root)) {
+    run("chmod", ["-R", "777", root], {sudo: true})
+    const sdkHome = process.env.ANDROID_SDK_HOME ?? path.join(root, ".android")
+    run("chmod", ["-R", "777", sdkHome], {sudo: true})
+    return
+  }
 
-/**
- * @param {string} directory
- * @returns {void}
- */
-function ensureWritableDirectory(directory) {
-  run("mkdir", ["-p", directory], {sudo: true})
-  run("chmod", ["777", directory], {sudo: true})
+  run("mkdir", ["-p", root], {sudo: true})
+  const sdkHome = process.env.ANDROID_SDK_HOME ?? path.join(root, ".android")
+  run("mkdir", ["-p", sdkHome], {sudo: true})
+  run("chmod", ["-R", "777", root], {sudo: true})
 }
 
 /** @returns {string | undefined} */
