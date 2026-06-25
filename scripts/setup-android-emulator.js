@@ -4,6 +4,13 @@ import {spawn, spawnSync} from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 
+const stage = process.env.ANDROID_EMULATOR_STAGE ?? "full"
+const validStages = new Set(["full", "install", "start", "stop"])
+
+if (!validStages.has(stage)) {
+  throw new Error(`Unsupported ANDROID_EMULATOR_STAGE: ${stage}`)
+}
+
 const sdkRoot = ensureSdkRoot()
 console.log(`[android] Using SDK root: ${sdkRoot}`)
 const {sdkmanagerPath, avdmanagerPath} = ensureCmdlineTools(sdkRoot)
@@ -15,6 +22,7 @@ const avdName = process.env.ANDROID_AVD_NAME ?? "system-test-android"
 const systemImage = process.env.ANDROID_SYSTEM_IMAGE ?? "system-images;android-33;google_apis;x86_64"
 const avdDevice = process.env.ANDROID_AVD_DEVICE ?? "pixel_5"
 const avdHome = process.env.ANDROID_AVD_HOME ?? "/tmp/android-avd"
+const emulatorLogPath = process.env.ANDROID_EMULATOR_LOG_PATH ?? path.join(process.cwd(), "tmp", "android-emulator", `${avdName}.log`)
 const ndkVersion = process.env.ANDROID_NDK_VERSION
 const extraPackages = process.env.ANDROID_SDK_PACKAGES
   ? process.env.ANDROID_SDK_PACKAGES.split(",").map((value) => value.trim()).filter(Boolean)
@@ -30,28 +38,32 @@ const packages = [
 ]
 const useSudoForEmulator = true
 const useSudoForAdb = false
-const stage = process.env.ANDROID_EMULATOR_STAGE ?? "full"
 const sdkManagerInstallAttempts = 3
 
-if (!fs.existsSync(emulatorPath) && stage !== "start") {
-  ensurePackages()
-}
-
-if (stage !== "start") {
-  ensurePackages()
-  ensureWritableSdkRoot()
-  ensureAvd()
-}
-
-if (stage !== "install") {
-  if (!fs.existsSync(adbPath)) {
+if (stage === "stop") {
+  stopConnectedEmulatorsForAvd()
+  stopEmulatorProcessesForAvd()
+} else {
+  if (!fs.existsSync(emulatorPath) && stage !== "start") {
     ensurePackages()
   }
-  ensureAdbServer()
-  prepareEmulatorStart()
-  startEmulator()
-  waitForDevice()
-  ensureBootCompleted()
+
+  if (stage !== "start") {
+    ensurePackages()
+    ensureWritableSdkRoot()
+    ensureAvd()
+  }
+
+  if (stage !== "install") {
+    if (!fs.existsSync(adbPath)) {
+      ensurePackages()
+    }
+    ensureAdbServer()
+    prepareEmulatorStart()
+    startEmulator()
+    waitForDevice()
+    ensureBootCompleted()
+  }
 }
 
 /** @returns {void} */
@@ -113,13 +125,22 @@ function startEmulator() {
 
   const command = useSudoForEmulator ? "sudo" : emulatorPath
   const args = useSudoForEmulator ? buildSudoArgs(emulatorPath, emulatorArgs, sdkEnv()) : emulatorArgs
+  const logFd = openEmulatorLog()
   const child = spawn(command, args, {
     env: sdkEnv(),
-    stdio: "inherit",
+    stdio: ["ignore", logFd, logFd],
     detached: true
   })
 
   child.unref()
+  fs.closeSync(logFd)
+}
+
+/** @returns {number} */
+function openEmulatorLog() {
+  console.log(`[android] Emulator log: ${emulatorLogPath}`)
+  fs.mkdirSync(path.dirname(emulatorLogPath), {recursive: true})
+  return fs.openSync(emulatorLogPath, "a")
 }
 
 /** @returns {void} */

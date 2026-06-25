@@ -1,5 +1,6 @@
 artifact_dirs:
   - /home/build/project/tmp/screenshots
+  - /home/build/project/tmp/android-emulator
   - /home/build/project/spec/dummy/tmp/screenshots
 before_install:
   - sudo apt-get update && sudo apt-get install -y ca-certificates openjdk-17-jdk wget
@@ -45,3 +46,4 @@ builds:
       - npm run build:apk:dummy
       - npx appium driver update uiautomator2 || npx appium driver install uiautomator2
       - npm test
+      - ANDROID_EMULATOR_STAGE=stop node scripts/setup-android-emulator.js
