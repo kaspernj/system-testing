@@ -1,21 +1,63 @@
 // @ts-check
 
+import fs from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
 import SystemTest from "../src/system-test.js"
 import SystemTestHttpServer from "../src/system-test-http-server.js"
 
 describe("SystemTest root path", () => {
   /** @type {string | undefined} */
   let previousSystemTestHost
+  /** @type {string | undefined} */
+  let previousCwd
 
   beforeEach(() => {
     previousSystemTestHost = process.env.SYSTEM_TEST_HOST
+    previousCwd = process.cwd()
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     if (previousSystemTestHost === undefined) {
       delete process.env.SYSTEM_TEST_HOST
     } else {
       process.env.SYSTEM_TEST_HOST = previousSystemTestHost
+    }
+
+    if (previousCwd) process.chdir(previousCwd)
+  })
+
+  it("serves directory index files for exported static routes without trailing slashes", async () => {
+    const tempRootPath = await fs.mkdtemp(path.join(os.tmpdir(), "system-testing-dist-"))
+
+    try {
+      await fs.mkdir(path.join(tempRootPath, "dist", "admin", "events"), {recursive: true})
+      await fs.writeFile(path.join(tempRootPath, "dist", "admin", "events", "index.html"), "admin events")
+      process.chdir(tempRootPath)
+
+      const response = {
+        body: "",
+        headers: {},
+        statusCode: 0,
+        end(content) {
+          this.body = content.toString()
+        },
+        setHeader(key, value) {
+          this.headers[key] = value
+        }
+      }
+
+      await new SystemTestHttpServer().onHttpServerRequest(
+        /** @type {any} */ ({headers: {host: "localhost:1984"}, url: "/admin/events"}),
+        /** @type {any} */ (response)
+      )
+
+      expect(response.statusCode).toBe(200)
+      expect(response.body).toBe("admin events")
+      expect(response.headers["Content-Type"]).toBe("text/html")
+    } finally {
+      process.chdir(previousCwd || tempRootPath)
+      await fs.rm(tempRootPath, {force: true, recursive: true})
     }
   })
 

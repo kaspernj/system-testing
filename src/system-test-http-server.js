@@ -78,17 +78,16 @@ export default class SystemTestHttpServer {
       filePath += "index.html"
     }
 
-    let fileExists
+    let fileStats
 
     try {
-      await fs.stat(filePath)
-      fileExists = true
+      fileStats = await fs.stat(filePath)
     } catch (_error) { // eslint-disable-line no-unused-vars
-      fileExists = false
+      filePath = `${process.cwd()}/dist/index.html`
     }
 
-    if (!fileExists) {
-      filePath = `${process.cwd()}/dist/index.html`
+    if (fileStats?.isDirectory()) {
+      filePath += "/index.html"
     }
 
     let fileContent
