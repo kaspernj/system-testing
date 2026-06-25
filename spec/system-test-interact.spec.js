@@ -217,7 +217,7 @@ describe("SystemTest interact", () => {
     })
   })
 
-  it("clears input elements through retryable interactions before sending replacement keys", async () => {
+  it("clears input elements with select-all and backspace before sending replacement keys", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const interactSpy = spyOn(systemTest, "interact").and.callFake(async (_selector, methodName) => {
       if (methodName === "getTagName") return "input"
@@ -228,11 +228,28 @@ describe("SystemTest interact", () => {
 
     await systemTest.clearAndSendKeys("#replace-target", "new value")
 
-    expect(interactSpy.calls.argsFor(0)).toEqual(["#replace-target", "getTagName"])
-    expect(interactSpy.calls.argsFor(1)).toEqual([{selector: "#replace-target", method: "actions"}, "click"])
-    expect(interactSpy.calls.argsFor(2)).toEqual(["#replace-target", "clear"])
-    expect(interactSpy.calls.argsFor(3)).toEqual(["#replace-target", "sendKeys", "new value"])
-    expect(interactSpy.calls.argsFor(4)).toEqual(["#replace-target", "getProperty", "value"])
+    expect(interactSpy.calls.argsFor(0)).toEqual([{selector: "#replace-target", method: "actions"}, "click"])
+    expect(interactSpy.calls.argsFor(1)).toEqual(["#replace-target", "sendKeys", Key.chord(Key.CONTROL, "a")])
+    expect(interactSpy.calls.argsFor(2)).toEqual(["#replace-target", "sendKeys", Key.BACK_SPACE])
+    expect(interactSpy.calls.argsFor(3)).toEqual(["#replace-target", "sendKeys", "n"])
+    expect(interactSpy.calls.argsFor(12)).toEqual(["#replace-target", "getProperty", "value"])
+  })
+
+  it("types replacement input text one character at a time", async () => {
+    const systemTest = systemTestHelper.getSystemTest()
+    const interactSpy = spyOn(systemTest, "interact").and.callFake(async (_selector, methodName) => {
+      if (methodName === "getTagName") return "input"
+      if (methodName === "getProperty") return "new"
+
+      return undefined
+    })
+
+    await systemTest.clearAndSendKeys("#replace-target", "new")
+
+    expect(interactSpy.calls.argsFor(3)).toEqual(["#replace-target", "sendKeys", "n"])
+    expect(interactSpy.calls.argsFor(4)).toEqual(["#replace-target", "sendKeys", "e"])
+    expect(interactSpy.calls.argsFor(5)).toEqual(["#replace-target", "sendKeys", "w"])
+    expect(interactSpy.calls.argsFor(6)).toEqual(["#replace-target", "getProperty", "value"])
   })
 
   it("clears non-input elements with select-all and backspace before sending replacement keys", async () => {
@@ -246,12 +263,11 @@ describe("SystemTest interact", () => {
 
     await systemTest.clearAndSendKeys("#replace-target", "new value")
 
-    expect(interactSpy.calls.argsFor(0)).toEqual(["#replace-target", "getTagName"])
-    expect(interactSpy.calls.argsFor(1)).toEqual([{selector: "#replace-target", method: "actions"}, "click"])
-    expect(interactSpy.calls.argsFor(2)).toEqual(["#replace-target", "sendKeys", Key.chord(Key.CONTROL, "a")])
-    expect(interactSpy.calls.argsFor(3)).toEqual(["#replace-target", "sendKeys", Key.BACK_SPACE])
-    expect(interactSpy.calls.argsFor(4)).toEqual(["#replace-target", "sendKeys", "new value"])
-    expect(interactSpy.calls.argsFor(5)).toEqual(["#replace-target", "getProperty", "value"])
+    expect(interactSpy.calls.argsFor(0)).toEqual([{selector: "#replace-target", method: "actions"}, "click"])
+    expect(interactSpy.calls.argsFor(1)).toEqual(["#replace-target", "sendKeys", Key.chord(Key.CONTROL, "a")])
+    expect(interactSpy.calls.argsFor(2)).toEqual(["#replace-target", "sendKeys", Key.BACK_SPACE])
+    expect(interactSpy.calls.argsFor(3)).toEqual(["#replace-target", "sendKeys", "n"])
+    expect(interactSpy.calls.argsFor(12)).toEqual(["#replace-target", "getProperty", "value"])
   })
 
   it("retries clear and replacement keys until the requested value is visible", async () => {
@@ -266,9 +282,13 @@ describe("SystemTest interact", () => {
 
     await systemTest.clearAndSendKeys("#replace-target", "new value")
 
-    expect(interactSpy.calls.argsFor(0)).toEqual(["#replace-target", "getTagName"])
-    expect(interactSpy.calls.argsFor(5)).toEqual(["#replace-target", "getTagName"])
-    expect(interactSpy.calls.argsFor(9)).toEqual(["#replace-target", "getProperty", "value"])
+    const getValueCalls = interactSpy.calls
+      .allArgs()
+      .filter((callArgs) => callArgs[1] === "getProperty")
+
+    expect(interactSpy.calls.argsFor(0)).toEqual([{selector: "#replace-target", method: "actions"}, "click"])
+    expect(interactSpy.calls.argsFor(13)).toEqual([{selector: "#replace-target", method: "actions"}, "click"])
+    expect(getValueCalls.length).toBe(2)
   })
 
   it("delegates test ID scrolling to the driver adapter", async () => {
