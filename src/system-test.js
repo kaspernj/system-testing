@@ -49,7 +49,7 @@ export function defaultClientWebSocketConnectTimeout() {
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
- * @property {"actions" | "human" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"human"` uses multiple pointer moves and pauses before clicking; `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context (skips WebDriver's pointer synthesis entirely — useful when the default click is dropped by a framework responder that refuses synthetic WebDriver pointer events).
+ * @property {"actions" | "human" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"human"` uses multiple pointer moves and pauses before clicking; `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context and is for diagnostics only, not committed stabilization fixes.
  * @property {number} [clickOffsetX] X offset for `actions`/`human` pointer clicks relative to the target element.
  * @property {number} [clickOffsetY] Y offset for `actions`/`human` pointer clicks relative to the target element.
  * @property {number} [humanStepDelay] Pause duration in ms between human pointer moves.
@@ -99,6 +99,8 @@ export default class SystemTest extends Browser {
   /** @type {Error[]} */
   _browserErrors = []
   _scoundrelPort = 8090
+  /** @type {number} */
+  _ignoredScoundrelClientCount = 0
   /** @type {WebSocketServer | undefined} */
   scoundrelWss = undefined
   /** @type {WebSocketServer | undefined} */
@@ -217,22 +219,10 @@ export default class SystemTest extends Browser {
     systemTest.debugLog("getRootPath")
     const rootPath = systemTest.getRootPath()
 
-    systemTest.debugLog(`Visit rootPath with dismissTo: ${rootPath}`)
-    await systemTest.dismissTo(rootPath)
-    systemTest.debugLog(`Dismissed to root path ${rootPath}`)
-
-    if (!systemTest.ws || systemTest.ws.readyState !== 1) {
-      systemTest.debugLog("WebSocket not connected after dismissTo, waiting for reconnection")
-      systemTest.ws = null
-      systemTest.getCommunicator().ws = null
-      await systemTest.waitForClientWebSocket()
-      systemTest.debugLog("Client websocket reconnected")
-    }
+    await systemTest.resetToRootPathForRun(rootPath)
 
     systemTest.debugLog("Run started - send initialize")
-    await timeout({timeout: 10_000, errorMessage: "Sending intialize to useSystemTest() timed out"}, async () => {
-      await systemTest.getCommunicator().sendCommand({type: "initialize"})
-    })
+    await systemTest.initializeBrowserContext()
 
     /** @type {unknown} */
     let runError = undefined
@@ -307,6 +297,78 @@ export default class SystemTest extends Browser {
 
       throw teardownError
     }
+  }
+
+  /**
+   * Resets the app to the root test route before each run.
+   * @param {string} rootPath
+   * @returns {Promise<void>}
+   */
+  async resetToRootPathForRun(rootPath) {
+    this.debugLog(`Visit rootPath with dismissTo: ${rootPath}`)
+    await this.dismissTo(rootPath)
+    this.debugLog(`Dismissed to root path ${rootPath}`)
+
+    if (!this.ws || this.ws.readyState !== 1) {
+      this.debugLog("WebSocket not connected after dismissTo, waiting for reconnection")
+      this.ws = null
+      this.getCommunicator().ws = null
+      await this.waitForClientWebSocket()
+      this.debugLog("Client websocket reconnected")
+    }
+  }
+
+  /**
+   * Visits a path. Native uses the in-app helper; web reloads through the driver and reconnects the test bridge.
+   * @param {string} path
+   * @param {import("./browser.js").BrowserNavigationArgs} [args]
+   * @returns {Promise<void>}
+   */
+  async visit(path, args = {}) {
+    if (process.env.SYSTEM_TEST_HOST === "native") {
+      await super.visit(path, args)
+      return
+    }
+
+    await timeout(
+      {timeout: this.getCommandTimeout(args.timeout), errorMessage: `timeout while visiting path: ${path}`},
+      async () => {
+        await this.visitPathWithDriverAndReconnect(path)
+        await this.initializeBrowserContext()
+      }
+    )
+  }
+
+  /** @returns {Promise<void>} */
+  async initializeBrowserContext() {
+    await timeout({timeout: 10_000, errorMessage: "Sending initialize to useSystemTest() timed out"}, async () => {
+      await this.getCommunicator().sendCommand({type: "initialize"})
+    })
+  }
+
+  /**
+   * Reloads a web route through the driver and waits for the browser command websocket.
+   * @param {string} path
+   * @returns {Promise<void>}
+   */
+  async visitPathWithDriverAndReconnect(path) {
+    this.ignoreExistingScoundrelClients()
+    this.ws = null
+    this.getCommunicator().ws = null
+    await this.driverVisit(this.buildSystemTestPath(path))
+    this.debugLog(`Driver visited path ${path}`)
+    await this.waitForClientWebSocket()
+    this.debugLog("Client websocket reconnected after driver navigation")
+  }
+
+  /** @returns {void} */
+  ignoreExistingScoundrelClients() {
+    if (!this.server) {
+      throw new Error("Scoundrel server is not started")
+    }
+
+    this._ignoredScoundrelClientCount = this.server.getClients().length
+    this.debugLog(`Ignoring ${this._ignoredScoundrelClientCount} Scoundrel client(s) from previous browser contexts`)
   }
 
   /**
@@ -390,14 +452,15 @@ export default class SystemTest extends Browser {
      */
     const isOpenClient = (client) => client?.backend?.ws?.readyState === 1
 
-    const existingClients = this.server.getClients?.()
-    const openExistingClients = existingClients?.filter(isOpenClient)
+    const existingClients = this.server.getClients()
+    const currentClients = existingClients.slice(this._ignoredScoundrelClientCount)
+    const openExistingClients = currentClients.filter(isOpenClient)
 
-    if (openExistingClients && openExistingClients.length > 0) {
+    if (openExistingClients.length > 0) {
       this.debugLog(`getScoundrelClient: using existing open client (${openExistingClients.length} available)`)
       return openExistingClients[openExistingClients.length - 1]
     }
-    this.debugLog(`getScoundrelClient: no open cached clients, waiting for new connection (cached total: ${existingClients?.length ?? 0})`)
+    this.debugLog(`getScoundrelClient: no open cached clients, waiting for new connection (cached total: ${existingClients.length}, ignored: ${this._ignoredScoundrelClientCount})`)
 
     if (!this.server.events?.on) {
       throw new Error("Scoundrel server events are unavailable")
@@ -835,7 +898,21 @@ export default class SystemTest extends Browser {
    * @returns {string}
    */
   buildRootPath() {
-    const url = new URL(SystemTest.rootPath, "http://localhost")
+    const rootPath = this.buildSystemTestPath(SystemTest.rootPath)
+
+    this.debugLog(`buildRootPath rootPath: ${rootPath}`)
+
+    return rootPath
+  }
+
+  /**
+   * Adds system-test query params to a path that will reload the web app.
+   * @param {string} path
+   * @returns {string}
+   */
+  buildSystemTestPath(path) {
+    const isAbsoluteUrl = /^[a-z]+:\/\//i.test(path)
+    const url = new URL(path, "http://localhost")
     const appendParam = (/** @type {string} */ key, /** @type {any} */ value) => {
       if (value === undefined || value === null) return
       url.searchParams.append(key, String(value))
@@ -853,6 +930,10 @@ export default class SystemTest extends Browser {
       }
     }
 
+    if (!url.searchParams.has("systemTest")) {
+      appendParam("systemTest", "true")
+    }
+
     if (!url.searchParams.has("systemTestClientWsPort") && this._clientWsPort !== 1985) {
       appendParam("systemTestClientWsPort", this._clientWsPort)
     }
@@ -861,11 +942,9 @@ export default class SystemTest extends Browser {
       appendParam("systemTestScoundrelPort", this._scoundrelPort)
     }
 
-    const rootPath =  `${url.pathname}${url.search}${url.hash}`
+    if (isAbsoluteUrl) return url.href
 
-    this.debugLog(`buildRootPath rootPath: ${rootPath}`)
-
-    return rootPath
+    return `${url.pathname}${url.search}${url.hash}`
   }
 
   /**
@@ -1066,6 +1145,7 @@ export default class SystemTest extends Browser {
     this.scoundrelWss = undefined
     this.server = undefined
     this.serverWebSocket = undefined
+    this._ignoredScoundrelClientCount = 0
     this.systemTestHttpServer = undefined
     this._httpServerError = undefined
     this.waitForClientWebSocketPromiseReject = undefined

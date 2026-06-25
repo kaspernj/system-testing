@@ -36,11 +36,12 @@ describe("WebDriverDriver interact", () => {
 
   it("does not use the DOM value-setter fallback when sendKeys updates the field value", async () => {
     const element = {
-      getAttributeCalls: 0,
-      getAttribute: async () => {
-        element.getAttributeCalls += 1
+      getPropertyCalls: 0,
+      getAttribute: async () => "",
+      getProperty: async () => {
+        element.getPropertyCalls += 1
 
-        return element.getAttributeCalls === 1 ? "" : "pwd"
+        return element.getPropertyCalls === 1 ? "" : "pwd"
       },
       getText: async () => "",
       sendKeys: async () => null
@@ -684,7 +685,8 @@ describe("WebDriverDriver interact", () => {
     driver.setWebDriver(/** @type {any} */ ({
       actions: jasmine.createSpy("actions").and.returnValue({move: moveSpy}),
       executeScript: executeScriptSpy,
-      findElements: jasmine.createSpy("findElements").and.resolveTo([hiddenElement, renderedElement])
+      findElements: jasmine.createSpy("findElements").and.resolveTo([hiddenElement, renderedElement]),
+      manage: () => ({setTimeouts: async () => {}})
     }))
 
     await driver.scrollIntoView("[data-testid='project-environment-agent-submit']", {timeout: 0})
@@ -712,6 +714,7 @@ describe("WebDriverDriver interact", () => {
       actions: jasmine.createSpy("actions").and.returnValue({move: moveSpy}),
       executeScript: executeScriptSpy,
       findElements: jasmine.createSpy("findElements").and.resolveTo([renderedElement]),
+      manage: () => ({setTimeouts: async () => {}}),
       wait: jasmine.createSpy("wait").and.callFake(async (callback) => {
         await callback()
         throw new SeleniumError.TimeoutError("visible lookup timed out")
@@ -738,7 +741,8 @@ describe("WebDriverDriver interact", () => {
 
     driver.setWebDriver(/** @type {any} */ ({
       executeScript: jasmine.createSpy("executeScript").and.resolveTo(true),
-      findElements: jasmine.createSpy("findElements").and.resolveTo([firstElement, secondElement])
+      findElements: jasmine.createSpy("findElements").and.resolveTo([firstElement, secondElement]),
+      manage: () => ({setTimeouts: async () => {}})
     }))
 
     await expectAsync(driver.scrollIntoView("[data-testid='project-environment-agent-submit']", {timeout: 0}))
@@ -758,7 +762,8 @@ describe("WebDriverDriver interact", () => {
 
     driver.setWebDriver(/** @type {any} */ ({
       executeScript: executeScriptSpy,
-      findElements: jasmine.createSpy("findElements").and.resolveTo([hiddenElement])
+      findElements: jasmine.createSpy("findElements").and.resolveTo([hiddenElement]),
+      manage: () => ({setTimeouts: async () => {}})
     }))
 
     await expectAsync(driver.scrollIntoView("[data-testid='project-environment-agent-submit']", {timeout: 0, visible: true}))

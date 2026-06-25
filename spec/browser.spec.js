@@ -172,26 +172,52 @@ describe("Browser", () => {
 
     browser.interact = /** @type {any} */ (async (...args) => {
       calls.push(args)
+
+      if (args[1] === "getTagName") return "input"
+      if (args[1] === "getProperty") return "Next value"
+
+      return undefined
     })
 
     await browser.replaceTestIDInputValue("name\"Input", "Next value", {timeout: 250})
 
-    expect(calls.length).toEqual(2)
+    expect(calls.length).toEqual(5)
     expect(calls[0]).toEqual([
       {
         selector: "[data-testid=\"name\\\"Input\"]",
-        timeout: 250,
-        withFallback: true
+        timeout: 250
+      },
+      "getTagName"
+    ])
+    expect(calls[1]).toEqual([
+      {
+        method: "actions",
+        selector: "[data-testid=\"name\\\"Input\"]",
+        timeout: 250
       },
       "click"
     ])
-    expect(calls[1][0]).toEqual({
+    expect(calls[2]).toEqual([
+      {
+        selector: "[data-testid=\"name\\\"Input\"]",
+        timeout: 250
+      },
+      "clear"
+    ])
+    expect(calls[3][0]).toEqual({
       selector: "[data-testid=\"name\\\"Input\"]",
-      timeout: 250,
-      withFallback: true
+      timeout: 250
     })
-    expect(calls[1][1]).toEqual("sendKeys")
-    expect(calls[1][4]).toEqual("Next value")
+    expect(calls[3][1]).toEqual("sendKeys")
+    expect(calls[3][2]).toEqual("Next value")
+    expect(calls[4]).toEqual([
+      {
+        selector: "[data-testid=\"name\\\"Input\"]",
+        timeout: 250
+      },
+      "getProperty",
+      "value"
+    ])
   })
 
   it("deletes all cookies through the driver adapter", async () => {

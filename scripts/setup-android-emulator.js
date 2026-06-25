@@ -47,6 +47,7 @@ if (stage !== "install") {
     ensurePackages()
   }
   ensureAdbServer()
+  prepareEmulatorStart()
   startEmulator()
   waitForDevice()
   ensureBootCompleted()
@@ -121,13 +122,71 @@ function startEmulator() {
 }
 
 /** @returns {void} */
+function prepareEmulatorStart() {
+  console.log(`[android] Preparing clean emulator start for ${avdName}`)
+  stopConnectedEmulatorsForAvd()
+  stopEmulatorProcessesForAvd()
+  sleep(2)
+  clearAvdLocks()
+}
+
+/** @returns {void} */
+function stopConnectedEmulatorsForAvd() {
+  for (const device of connectedEmulatorDevicesForAvd()) {
+    console.log(`[android] Stopping connected emulator ${device} for ${avdName}`)
+    run(adbPath, ["-s", device, "emu", "kill"], {env: sdkEnv(), sudo: useSudoForAdb, allowFailure: true})
+  }
+}
+
+/** @returns {void} */
+function stopEmulatorProcessesForAvd() {
+  const pattern = `${escapeRegex(emulatorPath)}.*-avd ${escapeRegex(avdName)}`
+  console.log(`[android] Stopping emulator processes matching ${pattern}`)
+  run("pkill", ["-f", pattern], {sudo: true, allowFailure: true})
+}
+
+/** @returns {void} */
+function clearAvdLocks() {
+  const avdPath = path.join(avdHome, `${avdName}.avd`)
+
+  if (!fs.existsSync(avdPath)) return
+
+  const lockPaths = fs.readdirSync(avdPath)
+    .filter((entry) => entry.endsWith(".lock"))
+    .map((entry) => path.join(avdPath, entry))
+
+  if (lockPaths.length === 0) return
+
+  console.log(`[android] Removing stale AVD locks for ${avdName}`)
+  run("rm", ["-rf", ...lockPaths], {sudo: useSudoForEmulator})
+}
+
+/** @returns {void} */
 function waitForDevice() {
   console.log("[android] Waiting for adb device")
   if (!fs.existsSync(adbPath)) {
     throw new Error(`adb not found at ${adbPath}`)
   }
 
-  run(adbPath, ["wait-for-device"], {env: sdkEnv(), sudo: useSudoForAdb})
+  const startTime = Date.now()
+  const timeoutMs = 120000
+
+  while (true) {
+    const devices = connectedEmulatorDevices()
+
+    if (devices.length > 0) {
+      console.log(`[android] Connected adb emulator device: ${devices[0]}`)
+      return
+    }
+
+    const elapsedMs = Date.now() - startTime
+
+    if (elapsedMs >= timeoutMs) {
+      throw new Error(`Android emulator device was not visible to adb after ${Math.round(timeoutMs / 1000)}s`)
+    }
+
+    sleep(2)
+  }
 }
 
 /** @returns {void} */
@@ -196,10 +255,10 @@ function runWithYes(args, {sudo}) {
 /**
  * @param {string} command
  * @param {string[]} args
- * @param {{sudo?: boolean, env?: Record<string, string | undefined>, input?: string, captureOutput?: boolean}} [options]
+ * @param {{sudo?: boolean, env?: Record<string, string | undefined>, input?: string, captureOutput?: boolean, allowFailure?: boolean}} [options]
  * @returns {import("node:child_process").SpawnSyncReturns<string>}
  */
-function run(command, args, {sudo = false, env = process.env, input, captureOutput = false} = {}) {
+function run(command, args, {sudo = false, env = process.env, input, captureOutput = false, allowFailure = false} = {}) {
   const fullCommand = sudo ? sudoPrefix({sudo: true}) : command
   const fullArgs = sudo ? buildSudoArgs(command, args, env) : args
   console.log(`[android] ${fullCommand} ${fullArgs.join(" ")}`)
@@ -212,7 +271,7 @@ function run(command, args, {sudo = false, env = process.env, input, captureOutp
     stdio
   })
 
-  if (result.status !== 0) {
+  if (result.status !== 0 && !allowFailure) {
     throw new Error(`Command failed: ${fullCommand} ${fullArgs.join(" ")}`)
   }
 
@@ -383,6 +442,54 @@ function installCmdlineTools(root) {
 function ensureAdbServer() {
   console.log("[android] Starting adb server")
   run(adbPath, ["start-server"], {env: sdkEnv(), sudo: useSudoForAdb})
+}
+
+/** @returns {string[]} */
+function connectedEmulatorDevicesForAvd() {
+  return connectedEmulatorDevices().filter((device) => emulatorDeviceAvdName(device) === avdName)
+}
+
+/** @returns {string[]} */
+function connectedEmulatorDevices() {
+  if (!fs.existsSync(adbPath)) return []
+
+  const result = run(adbPath, ["devices"], {env: sdkEnv(), sudo: useSudoForAdb, captureOutput: true, allowFailure: true})
+
+  if (result.status !== 0) return []
+
+  return result.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .map((line) => line.match(/^(emulator-\d+)\s+device$/)?.[1])
+    .filter((device) => typeof device === "string")
+}
+
+/**
+ * @param {string} device
+ * @returns {string | undefined}
+ */
+function emulatorDeviceAvdName(device) {
+  const result = run(adbPath, ["-s", device, "emu", "avd", "name"], {
+    env: sdkEnv(),
+    sudo: useSudoForAdb,
+    captureOutput: true,
+    allowFailure: true
+  })
+
+  if (result.status !== 0) return undefined
+
+  return result.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.length > 0 && line !== "OK")
+}
+
+/**
+ * @param {string} value
+ * @returns {string}
+ */
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
 /**

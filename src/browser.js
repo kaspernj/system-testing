@@ -4,7 +4,7 @@ import fs from "node:fs/promises"
 import {Key} from "selenium-webdriver"
 import moment from "moment"
 import {prettify} from "htmlfy"
-import {waitFor} from "awaitery"
+import {wait, waitFor} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
 import SeleniumDriver from "./drivers/selenium-driver.js"
 import AppiumDriver from "./drivers/appium-driver.js"
@@ -420,8 +420,48 @@ export default class Browser {
    * @returns {Promise<void>}
    */
   async clearAndSendKeys(elementOrIdentifier, nextValue) {
-    await this.interact(elementOrIdentifier, "click")
-    await this.interact(elementOrIdentifier, "sendKeys", Key.chord(Key.CONTROL, "a"), Key.BACK_SPACE, nextValue)
+    let actualValue
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const tagName = String(await this.interact(elementOrIdentifier, "getTagName")).toLowerCase()
+
+      await this.interact(this.textEntryClickTarget(elementOrIdentifier), "click")
+
+      if (tagName === "input" || tagName === "textarea") {
+        await this.interact(elementOrIdentifier, "clear")
+      } else {
+        await this.interact(elementOrIdentifier, "sendKeys", Key.chord(Key.CONTROL, "a"))
+        await this.interact(elementOrIdentifier, "sendKeys", Key.BACK_SPACE)
+      }
+
+      await this.interact(elementOrIdentifier, "sendKeys", nextValue)
+
+      actualValue = await this.interact(elementOrIdentifier, "getProperty", "value")
+
+      if (actualValue === nextValue) return
+
+      if (attempt < 3) await wait(50)
+    }
+
+    const actualLength = typeof actualValue == "string" ? actualValue.length : "missing"
+
+    throw new Error(`Input replacement did not update the element value after 3 attempts. Expected length ${nextValue.length}, got ${actualLength}.`)
+  }
+
+  /**
+   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
+   * @returns {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs}
+   */
+  textEntryClickTarget(elementOrIdentifier) {
+    if (typeof elementOrIdentifier === "string") {
+      return {selector: elementOrIdentifier, method: "actions"}
+    }
+
+    if (typeof elementOrIdentifier === "object" && elementOrIdentifier !== null && "selector" in elementOrIdentifier) {
+      return {...elementOrIdentifier, method: "actions"}
+    }
+
+    return elementOrIdentifier
   }
 
   /**
@@ -434,8 +474,7 @@ export default class Browser {
   async replaceTestIDInputValue(testID, nextValue, args = {}) {
     await this.clearAndSendKeys({
       selector: testIdSelector(testID),
-      timeout: args.timeout,
-      withFallback: true
+      timeout: args.timeout
     }, nextValue)
   }
 

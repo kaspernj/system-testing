@@ -56,6 +56,10 @@ Minimal app-side requirements:
 </View>
 ```
 
+## Navigation discipline
+
+App-flow specs should call `systemTest.visit(...)` once as the initial entry point, then use visible app UI, links, and actions to move around. A second `visit`, refresh, or direct route jump in one example should have a concrete documented reason, such as exercising an external callback or deep link.
+
 ## Usage
 
 ```js
