@@ -430,7 +430,20 @@ function installCmdlineTools(root) {
 
   run("rm", ["-rf", extractPath], {sudo: true})
   run("rm", ["-f", downloadPath], {sudo: true})
-  run("curl", ["-fsSL", toolsUrl, "-o", downloadPath], {sudo: false})
+  run("curl", [
+    "--http1.1",
+    "--retry",
+    "3",
+    "--retry-all-errors",
+    "--retry-delay",
+    "2",
+    "--connect-timeout",
+    "30",
+    "-fsSL",
+    toolsUrl,
+    "-o",
+    downloadPath
+  ], {sudo: false})
   run("mkdir", ["-p", extractPath], {sudo: false})
   run("unzip", ["-q", downloadPath, "-d", extractPath], {sudo: false})
   run("mkdir", ["-p", cmdlineRoot], {sudo: true})

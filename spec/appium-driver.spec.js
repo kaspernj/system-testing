@@ -1,7 +1,7 @@
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import AppiumDriver, {androidDescriptionContainsSelector, androidResourceIdSelector, androidTextContainsSelector, ensureChromeUserDataDirCapability} from "../src/drivers/appium-driver.js"
+import AppiumDriver, {androidDescriptionContainsSelector, androidResourceIdSelector, androidTextContainsSelector, ensureChromeUserDataDirCapability, ensureNativeNewCommandTimeoutCapability} from "../src/drivers/appium-driver.js"
 
 describe("AppiumDriver", () => {
   it("adds a dedicated user-data-dir for Chrome sessions", async () => {
@@ -70,6 +70,48 @@ describe("AppiumDriver", () => {
     } finally {
       await fs.rm(tempRootDir, {recursive: true, force: true})
     }
+  })
+
+  it("sets a native Appium command timeout above the native bridge startup wait", () => {
+    const capabilities = {
+      browserName: "",
+      platformName: "Android"
+    }
+
+    ensureNativeNewCommandTimeoutCapability({capabilities})
+
+    expect(capabilities["appium:newCommandTimeout"]).toEqual(180)
+  })
+
+  it("keeps explicit native Appium command timeouts untouched", () => {
+    const prefixedCapabilities = {
+      "appium:newCommandTimeout": 240,
+      browserName: "",
+      platformName: "Android"
+    }
+    const unprefixedCapabilities = {
+      browserName: "",
+      newCommandTimeout: 240,
+      platformName: "Android"
+    }
+
+    ensureNativeNewCommandTimeoutCapability({capabilities: prefixedCapabilities})
+    ensureNativeNewCommandTimeoutCapability({capabilities: unprefixedCapabilities})
+
+    expect(prefixedCapabilities["appium:newCommandTimeout"]).toEqual(240)
+    expect(unprefixedCapabilities["appium:newCommandTimeout"]).toBeUndefined()
+    expect(unprefixedCapabilities.newCommandTimeout).toEqual(240)
+  })
+
+  it("does not set native Appium command timeouts for Android Chrome sessions", () => {
+    const capabilities = {
+      browserName: "Chrome",
+      platformName: "Android"
+    }
+
+    ensureNativeNewCommandTimeoutCapability({capabilities})
+
+    expect(capabilities["appium:newCommandTimeout"]).toBeUndefined()
   })
 
   it("builds Android resource-id selectors for raw React Native test IDs", () => {

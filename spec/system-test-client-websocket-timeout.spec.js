@@ -1,7 +1,10 @@
 // @ts-check
 
 import SystemTest, {defaultClientWebSocketConnectTimeout} from "../src/system-test.js"
-import {defaultSystemTestJasmineTimeoutInterval} from "./support/system-test-helper.js"
+import {
+  defaultSystemTestJasmineStartupTimeoutInterval,
+  defaultSystemTestJasmineTimeoutInterval
+} from "./support/system-test-helper.js"
 
 describe("SystemTest client WebSocket timeout", () => {
   /** @type {string | undefined} */
@@ -35,6 +38,12 @@ describe("SystemTest client WebSocket timeout", () => {
     process.env.SYSTEM_TEST_HOST = "native"
 
     expect(defaultSystemTestJasmineTimeoutInterval()).toBeGreaterThan(defaultClientWebSocketConnectTimeout())
+  })
+
+  it("uses a longer Jasmine timeout for shared browser startup hooks", () => {
+    process.env.SYSTEM_TEST_HOST = "dist"
+
+    expect(defaultSystemTestJasmineStartupTimeoutInterval()).toBeGreaterThan(defaultSystemTestJasmineTimeoutInterval())
   })
 
   it("waits for an explicit client WebSocket startup timeout", async () => {

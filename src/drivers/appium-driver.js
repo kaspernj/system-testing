@@ -8,6 +8,7 @@ import timeout from "awaitery/build/timeout.js"
 import WebDriverDriver from "./webdriver-driver.js"
 
 const MAX_NATIVE_VIEWPORT_SCROLL_STEPS = 8
+const DEFAULT_NATIVE_NEW_COMMAND_TIMEOUT_SECONDS = 180
 
 /**
  * Appium timeout values returned by Selenium.
@@ -240,6 +241,23 @@ export async function ensureChromeUserDataDirCapability({browserName, capabiliti
 }
 
 /**
+ * Keeps native Appium sessions alive while the React Native app opens the system-test WebSocket.
+ * @param {object} args
+ * @param {Record<string, any>} args.capabilities
+ * @returns {void}
+ */
+export function ensureNativeNewCommandTimeoutCapability({capabilities}) {
+  const platformName = capabilities.platformName
+
+  if (typeof platformName !== "string" || platformName.toLowerCase() !== "android") return
+  if (typeof capabilities.browserName === "string" && capabilities.browserName.length > 0) return
+  if (capabilities["appium:newCommandTimeout"] !== undefined) return
+  if (capabilities.newCommandTimeout !== undefined) return
+
+  capabilities["appium:newCommandTimeout"] = DEFAULT_NATIVE_NEW_COMMAND_TIMEOUT_SECONDS
+}
+
+/**
  * @typedef {object} AppiumDriverOptions
  * @property {string} [serverUrl] Remote Appium server URL to connect to.
  * @property {Record<string, any>} [serverArgs] Options passed to the Appium server.
@@ -302,6 +320,7 @@ export default class AppiumDriver extends WebDriverDriver {
       browserName: this.options.browserName,
       capabilities
     })
+    ensureNativeNewCommandTimeoutCapability({capabilities})
 
     const builder = new Builder().usingServer(this.serverUrl)
 

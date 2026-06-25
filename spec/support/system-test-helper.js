@@ -6,6 +6,7 @@ import SystemTest, {defaultClientWebSocketConnectTimeout} from "../../src/system
 import DummyHttpServerEnvironment from "./dummy-http-server.js"
 
 const MINIMUM_JASMINE_TIMEOUT_INTERVAL_MS = 60000
+const MINIMUM_JASMINE_STARTUP_TIMEOUT_INTERVAL_MS = 120000
 const JASMINE_TIMEOUT_INTERVAL_HEADROOM_MS = 30000
 
 const sharedState = globalThis.__systemTestHelperState ??= {
@@ -48,6 +49,14 @@ export function defaultSystemTestJasmineTimeoutInterval() {
   )
 }
 
+/** @returns {number} */
+export function defaultSystemTestJasmineStartupTimeoutInterval() {
+  return Math.max(
+    MINIMUM_JASMINE_STARTUP_TIMEOUT_INTERVAL_MS,
+    defaultSystemTestJasmineTimeoutInterval()
+  )
+}
+
 export default class SystemTestHelper {
   constructor({debug = process.env.SYSTEM_TEST_DEBUG === "true"} = {}) {
     this.debug = debug
@@ -60,14 +69,17 @@ export default class SystemTestHelper {
   /** @param {...any} args */
   debugLog(...args) { if (this.debug) console.log(...args) }
 
+  /** @returns {void} */
   installJasmineHooks() {
+    const startupTimeout = defaultSystemTestJasmineStartupTimeoutInterval()
+
     beforeAll(async () => {
       await this.start()
-    })
+    }, startupTimeout)
 
     afterAll(async () => {
       await this.stop()
-    })
+    }, startupTimeout)
   }
 
   /** @returns {Promise<void>} */

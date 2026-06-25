@@ -3,6 +3,7 @@
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import {Key} from "selenium-webdriver"
 import Browser from "../src/browser.js"
 
 describe("Browser", () => {
@@ -181,15 +182,8 @@ describe("Browser", () => {
 
     await browser.replaceTestIDInputValue("name\"Input", "Next value", {timeout: 250})
 
-    expect(calls.length).toEqual(5)
+    expect(calls.length).toEqual(14)
     expect(calls[0]).toEqual([
-      {
-        selector: "[data-testid=\"name\\\"Input\"]",
-        timeout: 250
-      },
-      "getTagName"
-    ])
-    expect(calls[1]).toEqual([
       {
         method: "actions",
         selector: "[data-testid=\"name\\\"Input\"]",
@@ -197,20 +191,39 @@ describe("Browser", () => {
       },
       "click"
     ])
+    expect(calls[1]).toEqual([
+      {
+        selector: "[data-testid=\"name\\\"Input\"]",
+        timeout: 250
+      },
+      "sendKeys",
+      Key.chord(Key.CONTROL, "a")
+    ])
     expect(calls[2]).toEqual([
       {
         selector: "[data-testid=\"name\\\"Input\"]",
         timeout: 250
       },
-      "clear"
+      "sendKeys",
+      Key.BACK_SPACE
     ])
-    expect(calls[3][0]).toEqual({
-      selector: "[data-testid=\"name\\\"Input\"]",
-      timeout: 250
-    })
-    expect(calls[3][1]).toEqual("sendKeys")
-    expect(calls[3][2]).toEqual("Next value")
-    expect(calls[4]).toEqual([
+    expect(calls[3]).toEqual([
+      {
+        selector: "[data-testid=\"name\\\"Input\"]",
+        timeout: 250
+      },
+      "sendKeys",
+      "N"
+    ])
+    expect(calls[12]).toEqual([
+      {
+        selector: "[data-testid=\"name\\\"Input\"]",
+        timeout: 250
+      },
+      "sendKeys",
+      "e"
+    ])
+    expect(calls[13]).toEqual([
       {
         selector: "[data-testid=\"name\\\"Input\"]",
         timeout: 250
