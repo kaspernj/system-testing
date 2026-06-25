@@ -339,7 +339,7 @@ export default class SystemTest extends Browser {
    * @returns {Promise<void>}
    */
   async visit(path, args = {}) {
-    if (process.env.SYSTEM_TEST_HOST === "native") {
+    if (isNativeAppSession(this._driverConfig)) {
       await super.visit(path, args)
       return
     }

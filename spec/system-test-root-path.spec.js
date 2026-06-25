@@ -3,6 +3,7 @@
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import Browser from "../src/browser.js"
 import SystemTest from "../src/system-test.js"
 import SystemTestHttpServer from "../src/system-test-http-server.js"
 
@@ -178,6 +179,46 @@ describe("SystemTest root path", () => {
     expect(startupCalls).toEqual(["websocket", "driver"])
     expect(SystemTestHttpServer.prototype.start).not.toHaveBeenCalled()
     expect(SystemTest.prototype.driverVisit).not.toHaveBeenCalled()
+  })
+
+  it("routes native Appium visits through the native helper even when serving dist", async () => {
+    process.env.SYSTEM_TEST_HOST = "dist"
+    spyOn(SystemTest.prototype, "startScoundrel").and.callFake(() => {})
+    const nativeVisit = spyOn(Browser.prototype, "visit").and.resolveTo(undefined)
+    const webVisit = spyOn(SystemTest.prototype, "visitPathWithDriverAndReconnect").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "initializeBrowserContext").and.resolveTo(undefined)
+
+    const systemTest = new SystemTest({
+      driver: {
+        type: "appium",
+        options: {
+          capabilities: {
+            app: "spec/dummy/android/app/build/outputs/apk/release/app-release.apk",
+            browserName: ""
+          }
+        }
+      }
+    })
+
+    await systemTest.visit("/projects")
+
+    expect(nativeVisit).toHaveBeenCalledOnceWith("/projects", {})
+    expect(webVisit).not.toHaveBeenCalled()
+  })
+
+  it("routes web visits through the driver reconnect path", async () => {
+    process.env.SYSTEM_TEST_HOST = "dist"
+    spyOn(SystemTest.prototype, "startScoundrel").and.callFake(() => {})
+    const nativeVisit = spyOn(Browser.prototype, "visit").and.resolveTo(undefined)
+    const webVisit = spyOn(SystemTest.prototype, "visitPathWithDriverAndReconnect").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "initializeBrowserContext").and.resolveTo(undefined)
+
+    const systemTest = new SystemTest()
+
+    await systemTest.visit("/projects")
+
+    expect(webVisit).toHaveBeenCalledOnceWith("/projects")
+    expect(nativeVisit).not.toHaveBeenCalled()
   })
 
   it("propagates custom websocket ports into the browser URL", () => {
