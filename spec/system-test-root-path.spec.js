@@ -3,6 +3,7 @@
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import Browser from "../src/browser.js"
 import SystemTest from "../src/system-test.js"
 import SystemTestHttpServer from "../src/system-test-http-server.js"
 
@@ -134,6 +135,90 @@ describe("SystemTest root path", () => {
       "/blank?systemTest=true",
       "/blank?systemTest=true"
     ])
+  })
+
+  it("starts the client WebSocket before launching native Appium sessions even when serving dist", async () => {
+    process.env.SYSTEM_TEST_HOST = "dist"
+    const startupCalls = []
+    const adapter = {
+      getTimeouts: () => 100,
+      setBaseUrl: jasmine.createSpy("setBaseUrl"),
+      setTimeouts: jasmine.createSpy("setTimeouts").and.resolveTo(undefined),
+      start: jasmine.createSpy("start").and.callFake(async () => {
+        startupCalls.push("driver")
+      })
+    }
+
+    spyOn(SystemTestHttpServer.prototype, "start").and.resolveTo(undefined)
+    spyOn(SystemTestHttpServer.prototype, "assertReachable").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "getDriverAdapter").and.returnValue(/** @type {any} */ (adapter))
+    spyOn(SystemTest.prototype, "startScoundrel").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "startWebSocketServer").and.callFake(async () => {
+      startupCalls.push("websocket")
+    })
+    spyOn(SystemTest.prototype, "waitForClientWebSocket").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "find").and.resolveTo(/** @type {any} */ ({}))
+    spyOn(SystemTest.prototype, "findByTestID").and.resolveTo(/** @type {any} */ ({}))
+    spyOn(SystemTest.prototype, "driverVisit").and.resolveTo(undefined)
+
+    await new SystemTest({
+      driver: {
+        type: "appium",
+        options: {
+          capabilities: {
+            app: "spec/dummy/android/app/build/outputs/apk/release/app-release.apk",
+            browserName: ""
+          }
+        }
+      },
+      httpConnectHost: "10.0.2.2",
+      httpHost: "0.0.0.0",
+      httpPort: 1984
+    }).start()
+
+    expect(startupCalls).toEqual(["websocket", "driver"])
+    expect(SystemTestHttpServer.prototype.start).not.toHaveBeenCalled()
+    expect(SystemTest.prototype.driverVisit).not.toHaveBeenCalled()
+  })
+
+  it("routes native Appium visits through the native helper even when serving dist", async () => {
+    process.env.SYSTEM_TEST_HOST = "dist"
+    spyOn(SystemTest.prototype, "startScoundrel").and.callFake(() => {})
+    const nativeVisit = spyOn(Browser.prototype, "visit").and.resolveTo(undefined)
+    const webVisit = spyOn(SystemTest.prototype, "visitPathWithDriverAndReconnect").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "initializeBrowserContext").and.resolveTo(undefined)
+
+    const systemTest = new SystemTest({
+      driver: {
+        type: "appium",
+        options: {
+          capabilities: {
+            app: "spec/dummy/android/app/build/outputs/apk/release/app-release.apk",
+            browserName: ""
+          }
+        }
+      }
+    })
+
+    await systemTest.visit("/projects")
+
+    expect(nativeVisit).toHaveBeenCalledOnceWith("/projects", {})
+    expect(webVisit).not.toHaveBeenCalled()
+  })
+
+  it("routes web visits through the driver reconnect path", async () => {
+    process.env.SYSTEM_TEST_HOST = "dist"
+    spyOn(SystemTest.prototype, "startScoundrel").and.callFake(() => {})
+    const nativeVisit = spyOn(Browser.prototype, "visit").and.resolveTo(undefined)
+    const webVisit = spyOn(SystemTest.prototype, "visitPathWithDriverAndReconnect").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "initializeBrowserContext").and.resolveTo(undefined)
+
+    const systemTest = new SystemTest()
+
+    await systemTest.visit("/projects")
+
+    expect(webVisit).toHaveBeenCalledOnceWith("/projects")
+    expect(nativeVisit).not.toHaveBeenCalled()
   })
 
   it("propagates custom websocket ports into the browser URL", () => {

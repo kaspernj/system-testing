@@ -258,6 +258,22 @@ export function ensureNativeNewCommandTimeoutCapability({capabilities}) {
 }
 
 /**
+ * Whether a driver config resolves to a native Appium app session rather than a browser.
+ * Native app sessions launch an installed app (no `browserName`), so the system-test harness
+ * must start the client WebSocket before the app launches and allow the native-safe connect timeout.
+ * @param {import("../browser.js").BrowserDriverConfig} [driverConfig]
+ * @returns {boolean}
+ */
+export function isAppiumNativeAppDriverConfig(driverConfig) {
+  if (driverConfig?.type !== "appium") return false
+
+  const options = driverConfig.options ?? {}
+  const browserName = options.capabilities?.browserName ?? options.browserName
+
+  return typeof browserName !== "string" || browserName.length === 0
+}
+
+/**
  * @typedef {object} AppiumDriverOptions
  * @property {string} [serverUrl] Remote Appium server URL to connect to.
  * @property {Record<string, any>} [serverArgs] Options passed to the Appium server.

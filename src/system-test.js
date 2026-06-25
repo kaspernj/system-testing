@@ -10,14 +10,28 @@ import timeout from "awaitery/build/timeout.js"
 import {ensureError} from "typanic"
 import {WebSocketServer} from "ws"
 import Browser from "./browser.js"
+import {isAppiumNativeAppDriverConfig} from "./drivers/appium-driver.js"
 
 const CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 30000
 const INITIAL_ROOT_VISIT_RETRY_DELAY_MS = 100
 const NATIVE_CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 120000
 
-/** @returns {number} */
-export function defaultClientWebSocketConnectTimeout() {
-  return process.env.SYSTEM_TEST_HOST === "native" ? NATIVE_CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS : CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS
+/**
+ * Whether a system test runs against a native app rather than a web/dist browser.
+ * True for `SYSTEM_TEST_HOST=native` and for native Appium app sessions regardless of host.
+ * @param {SystemTestDriverConfig} [driver]
+ * @returns {boolean}
+ */
+export function isNativeAppSession(driver) {
+  return process.env.SYSTEM_TEST_HOST === "native" || isAppiumNativeAppDriverConfig(driver)
+}
+
+/**
+ * @param {{driver?: SystemTestDriverConfig}} [args]
+ * @returns {number}
+ */
+export function defaultClientWebSocketConnectTimeout({driver} = {}) {
+  return isNativeAppSession(driver) ? NATIVE_CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS : CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS
 }
 
 /**
@@ -325,7 +339,7 @@ export default class SystemTest extends Browser {
    * @returns {Promise<void>}
    */
   async visit(path, args = {}) {
-    if (process.env.SYSTEM_TEST_HOST === "native") {
+    if (isNativeAppSession(this._driverConfig)) {
       await super.visit(path, args)
       return
     }
@@ -387,7 +401,7 @@ export default class SystemTest extends Browser {
     this._host = host
     this._port = port
     this._clientWsPort = clientWsPort
-    this._clientWsConnectTimeout = clientWsConnectTimeout ?? defaultClientWebSocketConnectTimeout()
+    this._clientWsConnectTimeout = clientWsConnectTimeout ?? defaultClientWebSocketConnectTimeout({driver})
     this._httpHost = httpHost
     this._httpPort = httpPort
     this._httpConnectHost = httpConnectHost
@@ -745,9 +759,12 @@ export default class SystemTest extends Browser {
    */
   async start() {
     this.debugLog("Start called")
-    const isNativeHost = process.env.SYSTEM_TEST_HOST === "native"
+    // Native Appium app sessions launch an installed app instead of a web page, so they follow the
+    // native lifecycle (no dist HTTP server, no driver navigation, WebSocket started before the app)
+    // even when SYSTEM_TEST_HOST is "dist".
+    const isNativeApp = isNativeAppSession(this._driverConfig)
 
-    if (isNativeHost) {
+    if (isNativeApp) {
       this.currentUrl = "native://"
       this.debugLog("Using native app host")
     } else if (process.env.SYSTEM_TEST_HOST == "expo-dev-server") {
@@ -776,11 +793,11 @@ export default class SystemTest extends Browser {
 
     this.getDriverAdapter().setBaseUrl(this.currentUrl)
 
-    // Start the client WebSocket server before the driver for native hosts,
+    // Start the client WebSocket server before the driver for native app sessions,
     // because the native app launches immediately on driver start and its
     // useSystemTestExpo hook connects to the WebSocket as soon as it renders.
     // If the server isn't listening yet, the connection fails with no retry.
-    if (isNativeHost) {
+    if (isNativeApp) {
       this.debugLog("Starting WebSocket server (before driver for native)")
       await this.startWebSocketServer()
       this.debugLog("WebSocket server started")
@@ -793,14 +810,14 @@ export default class SystemTest extends Browser {
     await this.setTimeouts(10000)
     this.debugLog("Timeouts set on driver")
 
-    if (!isNativeHost) {
+    if (!isNativeApp) {
       // Web socket server to communicate with browser
       this.debugLog("Starting WebSocket server")
       await this.startWebSocketServer()
       this.debugLog("WebSocket server started")
     }
 
-    if (!isNativeHost) {
+    if (!isNativeApp) {
       // Visit the root page and wait for Expo to be loaded and the app to appear
       this.debugLog("Visiting root path")
       const rootPath = this.getRootPath()
@@ -844,7 +861,7 @@ export default class SystemTest extends Browser {
 
     this._started = true
     this.debugLog("Marked system test as started")
-    if (!isNativeHost) {
+    if (!isNativeApp) {
       this.debugLog("Setting base selector to focused systemTestingComponent")
       this.setBaseSelector("[data-testid='systemTestingComponent'][data-focussed='true']")
       this.debugLog("Base selector set")

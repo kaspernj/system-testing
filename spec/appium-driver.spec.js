@@ -1,7 +1,7 @@
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import AppiumDriver, {androidDescriptionContainsSelector, androidResourceIdSelector, androidTextContainsSelector, ensureChromeUserDataDirCapability, ensureNativeNewCommandTimeoutCapability} from "../src/drivers/appium-driver.js"
+import AppiumDriver, {androidDescriptionContainsSelector, androidResourceIdSelector, androidTextContainsSelector, ensureChromeUserDataDirCapability, ensureNativeNewCommandTimeoutCapability, isAppiumNativeAppDriverConfig} from "../src/drivers/appium-driver.js"
 
 describe("AppiumDriver", () => {
   it("adds a dedicated user-data-dir for Chrome sessions", async () => {
@@ -112,6 +112,19 @@ describe("AppiumDriver", () => {
     ensureNativeNewCommandTimeoutCapability({capabilities})
 
     expect(capabilities["appium:newCommandTimeout"]).toBeUndefined()
+  })
+
+  it("detects native Appium app driver configs by empty or missing browserName", () => {
+    expect(isAppiumNativeAppDriverConfig({type: "appium", options: {capabilities: {app: "app-release.apk", browserName: ""}}})).toBeTrue()
+    expect(isAppiumNativeAppDriverConfig({type: "appium", options: {capabilities: {platformName: "Android"}}})).toBeTrue()
+    expect(isAppiumNativeAppDriverConfig({type: "appium", options: {browserName: ""}})).toBeTrue()
+  })
+
+  it("treats Appium browser sessions and non-Appium configs as non-native", () => {
+    expect(isAppiumNativeAppDriverConfig({type: "appium", options: {capabilities: {browserName: "Chrome"}}})).toBeFalse()
+    expect(isAppiumNativeAppDriverConfig({type: "appium", options: {browserName: "Chrome"}})).toBeFalse()
+    expect(isAppiumNativeAppDriverConfig({type: "selenium"})).toBeFalse()
+    expect(isAppiumNativeAppDriverConfig(undefined)).toBeFalse()
   })
 
   it("builds Android resource-id selectors for raw React Native test IDs", () => {
