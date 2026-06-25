@@ -110,9 +110,22 @@ describe("SystemTest.run", () => {
     expect(systemTest.waitForClientWebSocket).toHaveBeenCalledTimes(1)
   })
 
-  it("reloads web visits through the driver with system-test query params and initializes the new page", async () => {
+  it("uses in-app navigation for connected web visits so browser-local state is preserved", async () => {
     process.env.SYSTEM_TEST_HOST = "expo-dev-server"
     const {communicator, systemTest} = createSystemTestRunDouble()
+
+    await systemTest.visit("/sign-in?from=test")
+
+    expect(communicator.sendCommand).toHaveBeenCalledOnceWith({type: "visit", path: "/sign-in?from=test"})
+    expect(systemTest.driverVisit).not.toHaveBeenCalled()
+    expect(systemTest.waitForClientWebSocket).not.toHaveBeenCalled()
+    expect(systemTest._ignoredScoundrelClientCount).toEqual(0)
+  })
+
+  it("reloads web visits through the driver when the command websocket is closed", async () => {
+    process.env.SYSTEM_TEST_HOST = "expo-dev-server"
+    const {communicator, systemTest} = createSystemTestRunDouble()
+    communicator.ws = {readyState: 3}
 
     await systemTest.visit("/sign-in?from=test")
 
