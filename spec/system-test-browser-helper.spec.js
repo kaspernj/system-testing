@@ -32,23 +32,55 @@ class FakeWebSocket {
 }
 
 describe("SystemTestBrowserHelper command events", () => {
-  it("throws when no command listener is registered", () => {
+  it("throws when no command listener is registered", async () => {
     const browserHelper = Object.create(SystemTestBrowserHelper.prototype)
     browserHelper.events = new EventEmitter()
 
-    expect(() => {
+    await expectAsync(
       browserHelper.emitCommandEvent("navigate", {path: "/missing-listener"})
-    }).toThrowError("No listener registered for command event: navigate (/missing-listener)")
+    ).toBeRejectedWithError("No listener registered for command event: navigate (/missing-listener)")
   })
 
-  it("does not throw when a command listener is registered", () => {
+  it("does not throw when a command listener is registered", async () => {
     const browserHelper = Object.create(SystemTestBrowserHelper.prototype)
     browserHelper.events = new EventEmitter()
     browserHelper.events.on("dismissTo", () => {})
 
-    expect(() => {
+    await expectAsync(
       browserHelper.emitCommandEvent("dismissTo", {path: "/ok"})
-    }).not.toThrow()
+    ).toBeResolved()
+  })
+
+  it("waits for dismissTo command listeners before responding", async () => {
+    const originalStartScoundrel = SystemTestBrowserHelper.prototype.startScoundrel
+
+    try {
+      SystemTestBrowserHelper.prototype.startScoundrel = function () {}
+      const browserHelper = new SystemTestBrowserHelper()
+      /** @type {(() => void) | undefined} */
+      let finishDismiss
+      const dismissPromise = new Promise((resolve) => {
+        finishDismiss = () => resolve(undefined)
+      })
+      let didFinishDismiss = false
+
+      browserHelper.events.on("dismissTo", async () => {
+        await dismissPromise
+        didFinishDismiss = true
+      })
+
+      const resultPromise = browserHelper.onCommand({data: {path: "/reset", type: "dismissTo"}})
+
+      await Promise.resolve()
+      expect(didFinishDismiss).toEqual(false)
+
+      if (!finishDismiss) throw new Error("Dismiss completion callback was not registered")
+      finishDismiss()
+      await expectAsync(resultPromise).toBeResolvedTo({result: "dismissed"})
+      expect(didFinishDismiss).toEqual(true)
+    } finally {
+      SystemTestBrowserHelper.prototype.startScoundrel = originalStartScoundrel
+    }
   })
 
   it("runs the teardown callback for teardown commands", async () => {
