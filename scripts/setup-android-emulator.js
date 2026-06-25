@@ -31,6 +31,7 @@ const packages = [
 const useSudoForEmulator = true
 const useSudoForAdb = false
 const stage = process.env.ANDROID_EMULATOR_STAGE ?? "full"
+const sdkManagerInstallAttempts = 3
 
 if (!fs.existsSync(emulatorPath) && stage !== "start") {
   ensurePackages()
@@ -219,15 +220,85 @@ function ensureBootCompleted() {
   }
 }
 
-/** @returns {void} */
 /**
  * @param {string[]} args
  * @param {{sudo: boolean}} options
  * @returns {void}
  */
 function runSdkManager(args, {sudo}) {
-  console.log(`[android] sdkmanager ${args.join(" ")}`)
-  run(sdkmanagerPath, args, {sudo, env: sdkEnv()})
+  for (let attempt = 1; attempt <= sdkManagerInstallAttempts; attempt += 1) {
+    const result = runSdkManagerAttempt(args, {sudo})
+
+    if (result.status === 0) return
+
+    if (attempt === sdkManagerInstallAttempts || !isRetryableSdkManagerFailure(result.output)) {
+      throw new Error(`sdkmanager failed with exit code ${result.status ?? "unknown"} after ${attempt} attempt(s): ${args.join(" ")}`)
+    }
+
+    console.log(`[android] sdkmanager failed with a retryable SDK archive/install error on attempt ${attempt}/${sdkManagerInstallAttempts}`)
+    removePartialSdkPackages(args)
+  }
+}
+
+/**
+ * @param {string[]} args
+ * @param {{sudo: boolean}} options
+ * @returns {{status: number | null, output: string}}
+ */
+function runSdkManagerAttempt(args, {sudo}) {
+  const fullCommand = sudo ? sudoPrefix({sudo: true}) : sdkmanagerPath
+  const fullArgs = sudo ? buildSudoArgs(sdkmanagerPath, args, sdkEnv()) : args
+  const logPath = path.join(process.env.TMPDIR ?? "/tmp", `system-testing-sdkmanager-${process.pid}-${Date.now()}.log`)
+  const command = `${quoteShellCommand([fullCommand, ...fullArgs])} 2>&1 | tee ${quoteShellArg(logPath)}`
+
+  console.log(`[android] ${fullCommand} ${fullArgs.join(" ")}`)
+  const result = spawnSync("bash", ["-o", "pipefail", "-c", command], {
+    env: sdkEnv(),
+    encoding: "utf-8",
+    stdio: ["ignore", "inherit", "inherit"]
+  })
+  const output = fs.existsSync(logPath) ? fs.readFileSync(logPath, "utf-8") : ""
+  fs.rmSync(logPath, {force: true})
+
+  return {status: result.status, output}
+}
+
+/**
+ * @param {string} output
+ * @returns {boolean}
+ */
+function isRetryableSdkManagerFailure(output) {
+  const lowerOutput = output.toLowerCase()
+
+  return [
+    "error on zipfile",
+    "unknown archive",
+    "zip end header not found",
+    "premature end of file"
+  ].some((message) => lowerOutput.includes(message))
+}
+
+/**
+ * @param {string[]} packageNames
+ * @returns {void}
+ */
+function removePartialSdkPackages(packageNames) {
+  const paths = [
+    path.join(sdkRoot, ".temp"),
+    ...packageNames.map((packageName) => sdkPackagePath(packageName))
+  ]
+  const uniquePaths = [...new Set(paths)]
+
+  console.log(`[android] Removing partial SDK package paths: ${uniquePaths.join(", ")}`)
+  run("rm", ["-rf", ...uniquePaths], {sudo: true})
+}
+
+/**
+ * @param {string} packageName
+ * @returns {string}
+ */
+function sdkPackagePath(packageName) {
+  return path.join(sdkRoot, ...packageName.split(";"))
 }
 
 /**
@@ -238,7 +309,7 @@ function runSdkManager(args, {sudo}) {
 function runWithYes(args, {sudo}) {
   const fullCommand = sudo ? sudoPrefix({sudo: true}) : sdkmanagerPath
   const fullArgs = sudo ? buildSudoArgs(sdkmanagerPath, args, sdkEnv()) : args
-  const quotedCommand = [fullCommand, ...fullArgs].map((part) => `'${part.replaceAll("'", "'\\''")}'`).join(" ")
+  const quotedCommand = quoteShellCommand([fullCommand, ...fullArgs])
 
   console.log(`[android] ${fullCommand} ${fullArgs.join(" ")} < yes`)
   const result = spawnSync("sh", ["-c", `yes | ${quotedCommand}`], {
@@ -250,6 +321,22 @@ function runWithYes(args, {sudo}) {
   if (result.status !== 0) {
     throw new Error(`sdkmanager failed with exit code ${result.status}`)
   }
+}
+
+/**
+ * @param {string[]} parts
+ * @returns {string}
+ */
+function quoteShellCommand(parts) {
+  return parts.map((part) => quoteShellArg(part)).join(" ")
+}
+
+/**
+ * @param {string} value
+ * @returns {string}
+ */
+function quoteShellArg(value) {
+  return `'${value.replaceAll("'", "'\\''")}'`
 }
 
 /**
