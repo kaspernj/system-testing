@@ -12,6 +12,7 @@ console.log(`[android] avdmanager: ${avdmanagerPath}`)
 const emulatorPath = path.join(sdkRoot, "emulator", "emulator")
 const adbPath = path.join(sdkRoot, "platform-tools", "adb")
 const avdName = process.env.ANDROID_AVD_NAME ?? "system-test-android"
+const emulatorLogPath = process.env.ANDROID_EMULATOR_LOG_PATH ?? path.join("/tmp", `${avdName}-emulator.log`)
 const systemImage = process.env.ANDROID_SYSTEM_IMAGE ?? "system-images;android-33;google_apis;x86_64"
 const avdDevice = process.env.ANDROID_AVD_DEVICE ?? "pixel_5"
 const avdHome = process.env.ANDROID_AVD_HOME ?? "/tmp/android-avd"
@@ -112,13 +113,21 @@ function startEmulator() {
 
   const command = useSudoForEmulator ? "sudo" : emulatorPath
   const args = useSudoForEmulator ? buildSudoArgs(emulatorPath, emulatorArgs, sdkEnv()) : emulatorArgs
-  const child = spawn(command, args, {
-    env: sdkEnv(),
-    stdio: "inherit",
-    detached: true
-  })
+  fs.mkdirSync(path.dirname(emulatorLogPath), {recursive: true})
+  const emulatorLogFd = fs.openSync(emulatorLogPath, "a")
 
-  child.unref()
+  console.log(`[android] Emulator output: ${emulatorLogPath}`)
+  try {
+    const child = spawn(command, args, {
+      env: sdkEnv(),
+      stdio: ["ignore", emulatorLogFd, emulatorLogFd],
+      detached: true
+    })
+
+    child.unref()
+  } finally {
+    fs.closeSync(emulatorLogFd)
+  }
 }
 
 /** @returns {void} */
