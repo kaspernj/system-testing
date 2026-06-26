@@ -12,7 +12,7 @@ console.log(`[android] avdmanager: ${avdmanagerPath}`)
 const emulatorPath = path.join(sdkRoot, "emulator", "emulator")
 const adbPath = path.join(sdkRoot, "platform-tools", "adb")
 const avdName = process.env.ANDROID_AVD_NAME ?? "system-test-android"
-const emulatorLogPath = process.env.ANDROID_EMULATOR_LOG_PATH ?? path.join("/tmp", `${avdName}-emulator.log`)
+const emulatorLogPath = process.env.ANDROID_EMULATOR_LOG_PATH ?? path.join(process.cwd(), "tmp", "android", `${avdName}-emulator.log`)
 const systemImage = process.env.ANDROID_SYSTEM_IMAGE ?? "system-images;android-33;google_apis;x86_64"
 const avdDevice = process.env.ANDROID_AVD_DEVICE ?? "pixel_5"
 const avdHome = process.env.ANDROID_AVD_HOME ?? "/tmp/android-avd"
