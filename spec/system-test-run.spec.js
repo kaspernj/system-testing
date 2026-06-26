@@ -116,7 +116,7 @@ describe("SystemTest.run", () => {
 
     await systemTest.visit("/sign-in?from=test")
 
-    expect(communicator.sendCommand).toHaveBeenCalledOnceWith({type: "visit", path: "/sign-in?from=test"})
+    expect(communicator.sendCommand).toHaveBeenCalledOnceWith({type: "visit", path: "/sign-in?from=test&velociousTest=true&systemTest=true&systemTestClientWsPort=5233&systemTestScoundrelPort=5234"})
     expect(systemTest.driverVisit).not.toHaveBeenCalled()
     expect(systemTest.waitForClientWebSocket).not.toHaveBeenCalled()
     expect(systemTest._ignoredScoundrelClientCount).toEqual(0)
@@ -126,6 +126,19 @@ describe("SystemTest.run", () => {
     process.env.SYSTEM_TEST_HOST = "expo-dev-server"
     const {communicator, systemTest} = createSystemTestRunDouble()
     communicator.ws = {readyState: 3}
+
+    await systemTest.visit("/sign-in?from=test")
+
+    expect(systemTest.driverVisit).toHaveBeenCalledOnceWith("/sign-in?from=test&velociousTest=true&systemTest=true&systemTestClientWsPort=5233&systemTestScoundrelPort=5234")
+    expect(systemTest.waitForClientWebSocket).toHaveBeenCalledTimes(1)
+    expect(communicator.sendCommand).toHaveBeenCalledOnceWith({type: "initialize"})
+    expect(systemTest._ignoredScoundrelClientCount).toEqual(2)
+  })
+
+  it("reloads web visits through the driver when the command websocket is missing", async () => {
+    process.env.SYSTEM_TEST_HOST = "expo-dev-server"
+    const {communicator, systemTest} = createSystemTestRunDouble()
+    communicator.ws = null
 
     await systemTest.visit("/sign-in?from=test")
 

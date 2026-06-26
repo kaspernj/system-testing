@@ -345,10 +345,10 @@ export default class SystemTest extends Browser {
     }
 
     const commandWebSocket = this.communicator?.ws
-    const canUseInAppNavigation = this.communicatorExists() && (!commandWebSocket || commandWebSocket.readyState === 1)
+    const canUseInAppNavigation = this.communicatorExists() && commandWebSocket?.readyState === 1
 
     if (canUseInAppNavigation) {
-      await super.visit(path, args)
+      await super.visit(this.buildSystemTestPath(path), args)
       return
     }
 
