@@ -429,4 +429,30 @@ describe("AppiumDriver", () => {
     await expectAsync(fs.stat(chromeUserDataDir)).toBeRejected()
     await fs.rm(tempRootDir, {recursive: true, force: true})
   })
+
+  it("throws an actionable install error when the optional appium package is missing", async () => {
+    const driver = new AppiumDriver({browser: {}})
+    const moduleNotFound = Object.assign(new Error("Cannot find package 'appium'"), {code: "ERR_MODULE_NOT_FOUND"})
+
+    spyOn(driver, "loadAppiumModule").and.rejectWith(moduleNotFound)
+
+    await expectAsync(driver.resolveAppiumMain()).toBeRejectedWithError(/optional 'appium' package.*npm install.*serverUrl/s)
+  })
+
+  it("rethrows unexpected errors from loading appium unchanged", async () => {
+    const driver = new AppiumDriver({browser: {}})
+    const unexpected = new Error("boom")
+
+    spyOn(driver, "loadAppiumModule").and.rejectWith(unexpected)
+
+    await expectAsync(driver.resolveAppiumMain()).toBeRejectedWith(unexpected)
+  })
+
+  it("throws when the appium package exposes no main()", async () => {
+    const driver = new AppiumDriver({browser: {}})
+
+    spyOn(driver, "loadAppiumModule").and.resolveTo({})
+
+    await expectAsync(driver.resolveAppiumMain()).toBeRejectedWithError("Appium main() is unavailable from the appium package")
+  })
 })

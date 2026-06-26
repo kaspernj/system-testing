@@ -48,7 +48,6 @@
     "eslint": "eslint --max-warnings 0"
   },
   "dependencies": {
-    "appium": "3.5.2",
     "awaitery": "^1.0.12",
     "diggerize": "^1.0.9",
     "eventemitter3": "^5.0.1",
@@ -64,10 +63,14 @@
     "ya-use-event-emitter": "^0.1.2"
   },
   "peerDependencies": {
+    "appium": ">= 3.5.2",
     "react": ">= 18.3.0",
     "selenium-webdriver": ">= 4.34.0"
   },
   "peerDependenciesMeta": {
+    "appium": {
+      "optional": true
+    },
     "react": {
       "optional": true
     }
@@ -79,6 +82,7 @@
     "@types/qs": "^6.14.0",
     "@types/react": "^19.2.7",
     "@types/selenium-webdriver": "^4.35.4",
+    "appium": "3.5.2",
     "appium-chromium-driver": "^2.1.6",
     "appium-uiautomator2-driver": "^7.1.0",
     "eslint": "^10.1.0",

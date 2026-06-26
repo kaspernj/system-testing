@@ -312,12 +312,7 @@ export default class AppiumDriver extends WebDriverDriver {
     if (this.options.serverUrl) {
       this.serverUrl = this.options.serverUrl
     } else {
-      const appiumModule = await import("appium")
-      const appiumMain = appiumModule.main ?? appiumModule.default?.main
-
-      if (!appiumMain) {
-        throw new Error("Appium main() is unavailable from the appium package")
-      }
+      const appiumMain = await this.resolveAppiumMain()
 
       this.appiumServer = await appiumMain(serverArgs)
       this.serverUrl = this.buildServerUrl(serverArgs)
@@ -353,6 +348,44 @@ export default class AppiumDriver extends WebDriverDriver {
       await this.cleanupChromeUserDataDir()
       throw error
     }
+  }
+
+  /**
+   * Imports the optional `appium` package. Isolated as a seam so the missing-package
+   * path can be unit tested without uninstalling Appium.
+   * @returns {Promise<Record<string, any>>}
+   */
+  async loadAppiumModule() {
+    return await import("appium")
+  }
+
+  /**
+   * Resolves Appium's `main()` for the embedded-server path, surfacing an actionable
+   * install instruction when the optional `appium` package is not installed.
+   * @returns {Promise<(serverArgs: Record<string, any>) => Promise<any>>}
+   */
+  async resolveAppiumMain() {
+    let appiumModule
+
+    try {
+      appiumModule = await this.loadAppiumModule()
+    } catch (error) {
+      const code = error instanceof Error ? /** @type {{code?: string}} */ (error).code : undefined
+
+      if (code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND") {
+        throw errorWithCause("The Appium driver requires the optional 'appium' package, which is not installed. Run `npm install --save-dev appium` (plus any Appium drivers you need, e.g. appium-uiautomator2-driver), or pass driver.options.serverUrl to use an external Appium server.", error)
+      }
+
+      throw error
+    }
+
+    const appiumMain = appiumModule.main ?? appiumModule.default?.main
+
+    if (!appiumMain) {
+      throw new Error("Appium main() is unavailable from the appium package")
+    }
+
+    return appiumMain
   }
 
   /**

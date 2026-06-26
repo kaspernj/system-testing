@@ -116,7 +116,15 @@ describe("Sign in page", () => {
 
 ### Driver selection
 
-SystemTest uses Selenium by default. To use Appium instead, pass a driver config when creating the instance:
+SystemTest uses Selenium by default. To use Appium instead, pass a driver config when creating the instance.
+
+`appium` is an optional peer dependency, so browser-only installs stay lightweight. Install it (plus the Appium drivers you need) when you opt into the Appium driver:
+
+```sh
+npm install --save-dev appium appium-uiautomator2-driver
+```
+
+Selecting `{driver: {type: "appium"}}` without `appium` installed throws an error with this instruction. If you point at an external Appium server with `serverUrl`, the `appium` package is not needed.
 
 ```js
 await SystemTest.run({
