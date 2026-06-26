@@ -275,10 +275,10 @@ function runWithYes(args, {sudo}) {
 /**
  * @param {string} command
  * @param {string[]} args
- * @param {{sudo?: boolean, env?: Record<string, string | undefined>, input?: string, captureOutput?: boolean, allowFailure?: boolean}} [options]
+ * @param {{sudo?: boolean, env?: Record<string, string | undefined>, input?: string, captureOutput?: boolean, allowFailure?: boolean, timeoutMs?: number}} [options]
  * @returns {import("node:child_process").SpawnSyncReturns<string>}
  */
-function run(command, args, {sudo = false, env = process.env, input, captureOutput = false, allowFailure = false} = {}) {
+function run(command, args, {sudo = false, env = process.env, input, captureOutput = false, allowFailure = false, timeoutMs} = {}) {
   const fullCommand = sudo ? sudoPrefix({sudo: true}) : command
   const fullArgs = sudo ? buildSudoArgs(command, args, env) : args
   console.log(`[android] ${fullCommand} ${fullArgs.join(" ")}`)
@@ -288,7 +288,9 @@ function run(command, args, {sudo = false, env = process.env, input, captureOutp
     encoding: "utf-8",
     env,
     input,
-    stdio
+    killSignal: "SIGKILL",
+    stdio,
+    timeout: timeoutMs
   })
 
   if (result.status !== 0 && !allowFailure) {
@@ -482,7 +484,8 @@ function stopAdbServer() {
   if (!fs.existsSync(adbPath)) return
 
   console.log("[android] Stopping adb server")
-  run(adbPath, ["kill-server"], {env: sdkEnv(), sudo: useSudoForAdb, allowFailure: true})
+  run(adbPath, ["kill-server"], {env: sdkEnv(), sudo: useSudoForAdb, allowFailure: true, timeoutMs: 10000})
+  console.log("[android] adb server stop requested")
 }
 
 /** @returns {string[]} */
