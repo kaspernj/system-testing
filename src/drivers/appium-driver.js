@@ -352,11 +352,15 @@ export default class AppiumDriver extends WebDriverDriver {
 
   /**
    * Imports the optional `appium` package. Isolated as a seam so the missing-package
-   * path can be unit tested without uninstalling Appium.
+   * path can be unit tested without uninstalling Appium. The specifier is widened to
+   * `string` so the build/typecheck does not statically require appium's types when the
+   * optional dependency is not installed.
    * @returns {Promise<Record<string, any>>}
    */
   async loadAppiumModule() {
-    return await import("appium")
+    const appiumPackage = /** @type {string} */ ("appium")
+
+    return await import(appiumPackage)
   }
 
   /**
