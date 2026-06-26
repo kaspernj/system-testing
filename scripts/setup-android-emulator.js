@@ -147,6 +147,7 @@ function stopEmulator() {
   stopEmulatorProcessesForAvd()
   sleep(2)
   clearAvdLocks()
+  stopAdbServer()
 }
 
 /** @returns {void} */
@@ -474,6 +475,14 @@ function installCmdlineTools(root) {
 function ensureAdbServer() {
   console.log("[android] Starting adb server")
   run(adbPath, ["start-server"], {env: sdkEnv(), sudo: useSudoForAdb})
+}
+
+/** @returns {void} */
+function stopAdbServer() {
+  if (!fs.existsSync(adbPath)) return
+
+  console.log("[android] Stopping adb server")
+  run(adbPath, ["kill-server"], {env: sdkEnv(), sudo: useSudoForAdb, allowFailure: true})
 }
 
 /** @returns {string[]} */
