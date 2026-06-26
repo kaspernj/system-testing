@@ -169,7 +169,7 @@ For local or CI web runs against Chrome, `npm run test:appium:web` now resolves 
 `Browser` is the lower-level browser/session class behind `SystemTest`. Use it when you want driver-backed browsing, screenshots, logs, and HTML capture without the rest of the system-test bootstrapping.
 
 ```js
-import {Browser} from "system-testing/build/index.js"
+import {Browser} from "system-testing"
 
 const browser = new Browser()
 
@@ -326,7 +326,7 @@ Minimal example:
 
 ```jsx
 import {Stack} from "expo-router"
-import {useSystemTestExpo} from "system-testing/build/expo.js"
+import {useSystemTestExpo} from "system-testing/expo"
 
 export default function RootLayout() {
   const {enabled, systemTestBrowserHelper} = useSystemTestExpo({
