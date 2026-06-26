@@ -206,7 +206,7 @@ describe("SystemTest root path", () => {
     expect(webVisit).not.toHaveBeenCalled()
   })
 
-  it("routes web visits through the driver reconnect path when the command websocket is closed", async () => {
+  it("routes web visits through the driver reconnect path when the command websocket is unavailable", async () => {
     process.env.SYSTEM_TEST_HOST = "dist"
     spyOn(SystemTest.prototype, "startScoundrel").and.callFake(() => {})
     const nativeVisit = spyOn(Browser.prototype, "visit").and.resolveTo(undefined)
@@ -214,7 +214,7 @@ describe("SystemTest root path", () => {
     spyOn(SystemTest.prototype, "initializeBrowserContext").and.resolveTo(undefined)
 
     const systemTest = new SystemTest()
-    systemTest.communicator.ws = /** @type {any} */ ({readyState: 3})
+    systemTest.communicator.ws = null
 
     await systemTest.visit("/projects")
 
