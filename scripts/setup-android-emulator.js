@@ -33,25 +33,29 @@ const useSudoForEmulator = true
 const useSudoForAdb = false
 const stage = process.env.ANDROID_EMULATOR_STAGE ?? "full"
 
-if (!fs.existsSync(emulatorPath) && stage !== "start") {
-  ensurePackages()
-}
-
-if (stage !== "start") {
-  ensurePackages()
-  ensureWritableSdkRoot()
-  ensureAvd()
-}
-
-if (stage !== "install") {
-  if (!fs.existsSync(adbPath)) {
+if (stage === "stop") {
+  stopEmulator()
+} else {
+  if (!fs.existsSync(emulatorPath) && stage !== "start") {
     ensurePackages()
   }
-  ensureAdbServer()
-  prepareEmulatorStart()
-  startEmulator()
-  waitForDevice()
-  ensureBootCompleted()
+
+  if (stage !== "start") {
+    ensurePackages()
+    ensureWritableSdkRoot()
+    ensureAvd()
+  }
+
+  if (stage !== "install") {
+    if (!fs.existsSync(adbPath)) {
+      ensurePackages()
+    }
+    ensureAdbServer()
+    prepareEmulatorStart()
+    startEmulator()
+    waitForDevice()
+    ensureBootCompleted()
+  }
 }
 
 /** @returns {void} */
@@ -133,6 +137,12 @@ function startEmulator() {
 /** @returns {void} */
 function prepareEmulatorStart() {
   console.log(`[android] Preparing clean emulator start for ${avdName}`)
+  stopEmulator()
+}
+
+/** @returns {void} */
+function stopEmulator() {
+  console.log(`[android] Stopping emulator ${avdName}`)
   stopConnectedEmulatorsForAvd()
   stopEmulatorProcessesForAvd()
   sleep(2)
