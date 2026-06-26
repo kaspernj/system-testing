@@ -6,7 +6,7 @@ import SystemTest, {defaultClientWebSocketConnectTimeout} from "../../src/system
 import DummyHttpServerEnvironment from "./dummy-http-server.js"
 
 const MINIMUM_JASMINE_TIMEOUT_INTERVAL_MS = 60000
-const MINIMUM_JASMINE_STARTUP_TIMEOUT_INTERVAL_MS = 180000
+const MINIMUM_JASMINE_STARTUP_TIMEOUT_INTERVAL_MS = 120000
 const JASMINE_TIMEOUT_INTERVAL_HEADROOM_MS = 30000
 
 const sharedState = globalThis.__systemTestHelperState ??= {
