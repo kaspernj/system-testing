@@ -6,6 +6,7 @@ import {Origin} from "selenium-webdriver/lib/input.js"
 import {wait} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
 import WebDriverDriver from "./webdriver-driver.js"
+import {testIdSelector} from "../test-id-selector.js"
 
 const MAX_NATIVE_VIEWPORT_SCROLL_STEPS = 8
 const DEFAULT_NATIVE_NEW_COMMAND_TIMEOUT_SECONDS = 180
@@ -474,7 +475,7 @@ export default class AppiumDriver extends WebDriverDriver {
 
     if (testIdStrategy === "css") {
       const testIdAttribute = this.options.testIdAttribute ?? "data-testid"
-      return await this.find(`[${testIdAttribute}='${testID}']`, args)
+      return await this.find(testIdSelector(testID, testIdAttribute), args)
     }
     if (testIdStrategy === "id") {
       return await this.findById(testID, args)
