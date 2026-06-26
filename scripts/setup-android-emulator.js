@@ -12,6 +12,7 @@ console.log(`[android] avdmanager: ${avdmanagerPath}`)
 const emulatorPath = path.join(sdkRoot, "emulator", "emulator")
 const adbPath = path.join(sdkRoot, "platform-tools", "adb")
 const avdName = process.env.ANDROID_AVD_NAME ?? "system-test-android"
+const emulatorLogPath = process.env.ANDROID_EMULATOR_LOG_PATH ?? path.join(process.cwd(), "tmp", "android", `${avdName}-emulator.log`)
 const systemImage = process.env.ANDROID_SYSTEM_IMAGE ?? "system-images;android-33;google_apis;x86_64"
 const avdDevice = process.env.ANDROID_AVD_DEVICE ?? "pixel_5"
 const avdHome = process.env.ANDROID_AVD_HOME ?? "/tmp/android-avd"
@@ -32,25 +33,29 @@ const useSudoForEmulator = true
 const useSudoForAdb = false
 const stage = process.env.ANDROID_EMULATOR_STAGE ?? "full"
 
-if (!fs.existsSync(emulatorPath) && stage !== "start") {
-  ensurePackages()
-}
-
-if (stage !== "start") {
-  ensurePackages()
-  ensureWritableSdkRoot()
-  ensureAvd()
-}
-
-if (stage !== "install") {
-  if (!fs.existsSync(adbPath)) {
+if (stage === "stop") {
+  stopEmulator()
+} else {
+  if (!fs.existsSync(emulatorPath) && stage !== "start") {
     ensurePackages()
   }
-  ensureAdbServer()
-  prepareEmulatorStart()
-  startEmulator()
-  waitForDevice()
-  ensureBootCompleted()
+
+  if (stage !== "start") {
+    ensurePackages()
+    ensureWritableSdkRoot()
+    ensureAvd()
+  }
+
+  if (stage !== "install") {
+    if (!fs.existsSync(adbPath)) {
+      ensurePackages()
+    }
+    ensureAdbServer()
+    prepareEmulatorStart()
+    startEmulator()
+    waitForDevice()
+    ensureBootCompleted()
+  }
 }
 
 /** @returns {void} */
@@ -112,22 +117,37 @@ function startEmulator() {
 
   const command = useSudoForEmulator ? "sudo" : emulatorPath
   const args = useSudoForEmulator ? buildSudoArgs(emulatorPath, emulatorArgs, sdkEnv()) : emulatorArgs
-  const child = spawn(command, args, {
-    env: sdkEnv(),
-    stdio: "inherit",
-    detached: true
-  })
+  fs.mkdirSync(path.dirname(emulatorLogPath), {recursive: true})
+  const emulatorLogFd = fs.openSync(emulatorLogPath, "a")
 
-  child.unref()
+  console.log(`[android] Emulator output: ${emulatorLogPath}`)
+  try {
+    const child = spawn(command, args, {
+      env: sdkEnv(),
+      stdio: ["ignore", emulatorLogFd, emulatorLogFd],
+      detached: true
+    })
+
+    child.unref()
+  } finally {
+    fs.closeSync(emulatorLogFd)
+  }
 }
 
 /** @returns {void} */
 function prepareEmulatorStart() {
   console.log(`[android] Preparing clean emulator start for ${avdName}`)
+  stopEmulator()
+}
+
+/** @returns {void} */
+function stopEmulator() {
+  console.log(`[android] Stopping emulator ${avdName}`)
   stopConnectedEmulatorsForAvd()
   stopEmulatorProcessesForAvd()
   sleep(2)
   clearAvdLocks()
+  stopAdbServer()
 }
 
 /** @returns {void} */
@@ -255,10 +275,10 @@ function runWithYes(args, {sudo}) {
 /**
  * @param {string} command
  * @param {string[]} args
- * @param {{sudo?: boolean, env?: Record<string, string | undefined>, input?: string, captureOutput?: boolean, allowFailure?: boolean}} [options]
+ * @param {{sudo?: boolean, env?: Record<string, string | undefined>, input?: string, captureOutput?: boolean, allowFailure?: boolean, timeoutMs?: number}} [options]
  * @returns {import("node:child_process").SpawnSyncReturns<string>}
  */
-function run(command, args, {sudo = false, env = process.env, input, captureOutput = false, allowFailure = false} = {}) {
+function run(command, args, {sudo = false, env = process.env, input, captureOutput = false, allowFailure = false, timeoutMs} = {}) {
   const fullCommand = sudo ? sudoPrefix({sudo: true}) : command
   const fullArgs = sudo ? buildSudoArgs(command, args, env) : args
   console.log(`[android] ${fullCommand} ${fullArgs.join(" ")}`)
@@ -268,7 +288,9 @@ function run(command, args, {sudo = false, env = process.env, input, captureOutp
     encoding: "utf-8",
     env,
     input,
-    stdio
+    killSignal: "SIGKILL",
+    stdio,
+    timeout: timeoutMs
   })
 
   if (result.status !== 0 && !allowFailure) {
@@ -455,6 +477,15 @@ function installCmdlineTools(root) {
 function ensureAdbServer() {
   console.log("[android] Starting adb server")
   run(adbPath, ["start-server"], {env: sdkEnv(), sudo: useSudoForAdb})
+}
+
+/** @returns {void} */
+function stopAdbServer() {
+  if (!fs.existsSync(adbPath)) return
+
+  console.log("[android] Stopping adb server")
+  run(adbPath, ["kill-server"], {env: sdkEnv(), sudo: useSudoForAdb, allowFailure: true, timeoutMs: 10000})
+  console.log("[android] adb server stop requested")
 }
 
 /** @returns {string[]} */

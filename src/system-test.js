@@ -333,7 +333,7 @@ export default class SystemTest extends Browser {
   }
 
   /**
-   * Visits a path. Native uses the in-app helper; web reloads through the driver and reconnects the test bridge.
+   * Visits a path. Connected browser contexts navigate in-app to preserve local state; unavailable web bridges reload through the driver.
    * @param {string} path
    * @param {import("./browser.js").BrowserNavigationArgs} [args]
    * @returns {Promise<void>}
@@ -341,6 +341,14 @@ export default class SystemTest extends Browser {
   async visit(path, args = {}) {
     if (isNativeAppSession(this._driverConfig)) {
       await super.visit(path, args)
+      return
+    }
+
+    const commandWebSocket = this.communicator?.ws
+    const canUseInAppNavigation = this.communicatorExists() && commandWebSocket?.readyState === 1
+
+    if (canUseInAppNavigation) {
+      await super.visit(this.buildSystemTestPath(path), args)
       return
     }
 
