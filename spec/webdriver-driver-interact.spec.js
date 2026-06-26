@@ -662,10 +662,49 @@ describe("WebDriverDriver interact", () => {
 
     await driver.scrollTestIdIntoView("project-environment-agent-submit", {timeout: 123})
 
-    expect(findScrollTargetSpy).toHaveBeenCalledWith("[data-testid='project-environment-agent-submit']", {timeout: 123})
+    expect(findScrollTargetSpy).toHaveBeenCalledWith("[data-testid=\"project-environment-agent-submit\"]", {timeout: 123})
     expect(webDriver.actions).toHaveBeenCalledWith({async: true})
     expect(moveSpy).toHaveBeenCalledWith({origin: element})
     expect(performSpy).toHaveBeenCalled()
+  })
+
+  it("escapes quotes in test IDs when finding by test ID", async () => {
+    const element = {}
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const findSpy = jasmine.createSpy("find").and.resolveTo(element)
+
+    driver.find = /** @type {any} */ (findSpy)
+
+    await driver.findByTestID("name\"Input", {visible: false})
+
+    expect(findSpy).toHaveBeenCalledWith("[data-testid=\"name\\\"Input\"]", {visible: false})
+  })
+
+  it("escapes quotes in test IDs when scrolling a test ID into view", async () => {
+    const element = {getId: async () => "webdriver-element-id"}
+    const performSpy = jasmine.createSpy("perform").and.resolveTo(undefined)
+    const moveSpy = jasmine.createSpy("move").and.returnValue({perform: performSpy})
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const findScrollTargetSpy = jasmine.createSpy("findScrollTarget").and.resolveTo(element)
+
+    driver.findScrollTarget = /** @type {any} */ (findScrollTargetSpy)
+    driver.setWebDriver(/** @type {any} */ ({actions: () => ({move: moveSpy})}))
+
+    await driver.scrollTestIdIntoView("name\"Input", {timeout: 0})
+
+    expect(findScrollTargetSpy).toHaveBeenCalledWith("[data-testid=\"name\\\"Input\"]", {timeout: 0})
   })
 
   it("falls back to rendered scroll targets without accepting hidden zero-size elements", async () => {

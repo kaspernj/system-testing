@@ -8,6 +8,7 @@ import {wait, waitFor} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
 import SeleniumDriver from "./drivers/selenium-driver.js"
 import AppiumDriver from "./drivers/appium-driver.js"
+import {testIdSelector} from "./test-id-selector.js"
 
 /**
  * @typedef {object} BrowserArgs
@@ -45,24 +46,6 @@ import AppiumDriver from "./drivers/appium-driver.js"
  * @typedef {object} BrowserTestIDInputArgs
  * @property {number} [timeout] Override timeout for the input lookup.
  */
-
-/**
- * Builds a data-testid CSS selector.
- * @param {string} testID Raw value from a `data-testid` attribute.
- * @returns {string} CSS attribute selector.
- */
-function testIdSelector(testID) {
-  return `[data-testid="${cssAttributeValue(testID)}"]`
-}
-
-/**
- * Escapes a value for use inside a double-quoted CSS attribute selector.
- * @param {string | number} value Raw attribute value.
- * @returns {string} Escaped selector value.
- */
-function cssAttributeValue(value) {
-  return String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"")
-}
 
 /**
  * Extracts the RGB channels from CSS `rgb(...)`/`rgba(...)` values or an RGB fragment.

@@ -455,4 +455,34 @@ describe("AppiumDriver", () => {
 
     await expectAsync(driver.resolveAppiumMain()).toBeRejectedWithError("Appium main() is unavailable from the appium package")
   })
+
+  it("escapes quotes when finding by test ID with the CSS strategy", async () => {
+    const element = {}
+    const driver = new AppiumDriver({
+      browser: {},
+      options: {testIdStrategy: "css"}
+    })
+    const findSpy = jasmine.createSpy("find").and.resolveTo(element)
+
+    driver.find = /** @type {any} */ (findSpy)
+
+    await driver.findByTestID("name\"Input", {visible: false})
+
+    expect(findSpy).toHaveBeenCalledWith("[data-testid=\"name\\\"Input\"]", {visible: false})
+  })
+
+  it("escapes quotes for the CSS strategy with a custom test ID attribute", async () => {
+    const element = {}
+    const driver = new AppiumDriver({
+      browser: {},
+      options: {testIdStrategy: "css", testIdAttribute: "data-test"}
+    })
+    const findSpy = jasmine.createSpy("find").and.resolveTo(element)
+
+    driver.find = /** @type {any} */ (findSpy)
+
+    await driver.findByTestID("name\"Input")
+
+    expect(findSpy).toHaveBeenCalledWith("[data-test=\"name\\\"Input\"]", undefined)
+  })
 })

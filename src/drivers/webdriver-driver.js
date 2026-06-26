@@ -2,6 +2,7 @@ import {By, error as SeleniumError} from "selenium-webdriver"
 import logging from "selenium-webdriver/lib/logging.js"
 import {wait, waitFor} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
+import {testIdSelector} from "../test-id-selector.js"
 
 /**
  * @param {string} message
@@ -604,7 +605,7 @@ export default class WebDriverDriver {
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
   async findByTestID(testID, args) {
-    return await this.find(`[data-testid='${testID}']`, args)
+    return await this.find(testIdSelector(testID), args)
   }
 
   /**
@@ -921,7 +922,7 @@ export default class WebDriverDriver {
    * @returns {Promise<void>}
    */
   async scrollTestIdIntoView(testID, args) {
-    const element = await this.findScrollTarget(`[data-testid='${testID}']`, args)
+    const element = await this.findScrollTarget(testIdSelector(testID), args)
 
     await this.scrollElementIntoView(element)
   }
