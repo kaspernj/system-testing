@@ -66,8 +66,14 @@ export default class SeleniumDriver extends WebDriverDriver {
   async start() {
     const chromeOptions = this.options.chromeOptions ? this.options.chromeOptions : new chrome.Options()
     const chromeArguments = this.options.chromeArguments ?? [
+      // Keep the headless/occluded renderer at full speed. Chrome otherwise throttles and
+      // backgrounds it in CI, which surfaces as "Timed out receiving message from renderer"
+      // when chromedriver waits on the renderer during navigation.
+      "--disable-backgrounding-occluded-windows",
+      "--disable-background-timer-throttling",
       "--disable-dev-shm-usage",
       "--disable-gpu",
+      "--disable-renderer-backgrounding",
       "--headless=new",
       "--no-sandbox",
       "--window-size=1920,1080"
