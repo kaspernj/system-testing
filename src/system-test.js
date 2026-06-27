@@ -13,6 +13,7 @@ import Browser from "./browser.js"
 import {isAppiumNativeAppDriverConfig} from "./drivers/appium-driver.js"
 
 const CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 30000
+const CLIENT_WEBSOCKET_SERVER_LISTEN_TIMEOUT_MS = 15000
 const INITIAL_ROOT_VISIT_RETRY_DELAY_MS = 100
 const NATIVE_CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 120000
 
@@ -999,10 +1000,30 @@ export default class SystemTest extends Browser {
    * @returns {Promise<void>}
    */
   async startWebSocketServer() {
-    this.clientWss = new WebSocketServer({port: this._clientWsPort})
-    await new Promise((resolve) => {
-      /** @type {NonNullable<typeof this.clientWss>} */ (this.clientWss).once("listening", resolve)
-    })
+    const clientWss = new WebSocketServer({port: this._clientWsPort})
+
+    this.clientWss = clientWss
+
+    // Bind failures (for example EADDRINUSE from a leftover process holding the port)
+    // emit "error" rather than "listening". Reject on it and bound the wait so startup
+    // fails fast with a specific message instead of hanging until the suite timeout.
+    await timeout(
+      {timeout: CLIENT_WEBSOCKET_SERVER_LISTEN_TIMEOUT_MS, errorMessage: `timeout while starting client WebSocket server on port ${this._clientWsPort}`},
+      () => new Promise((resolve, reject) => {
+        const onListening = () => {
+          clientWss.off("error", onError)
+          resolve(undefined)
+        }
+        const onError = (/** @type {unknown} */ error) => {
+          clientWss.off("listening", onListening)
+          reject(error instanceof Error ? error : new Error(`client WebSocket server failed to start on port ${this._clientWsPort}: ${error}`))
+        }
+
+        clientWss.once("listening", onListening)
+        clientWss.once("error", onError)
+      })
+    )
+
     this.clientWss.on("connection", this.onWebSocketConnection)
     this.clientWss.on("close", this.onWebSocketClose)
     this.clientWss.on("error", (error) => {

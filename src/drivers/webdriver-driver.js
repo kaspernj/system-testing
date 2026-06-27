@@ -4,6 +4,11 @@ import {wait, waitFor} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
 import {testIdSelector} from "../test-id-selector.js"
 
+// Bounds page navigation so a stalled load fails fast instead of waiting Selenium's
+// default 300s (longer than the system-test startup budget, which would otherwise
+// surface as an opaque suite timeout).
+const DEFAULT_PAGE_LOAD_TIMEOUT_MS = 60000
+
 /**
  * @param {string} message
  * @param {unknown} cause
@@ -325,7 +330,7 @@ export default class WebDriverDriver {
    */
   async driverSetTimeouts(newTimeout) {
     this._driverTimeouts = newTimeout
-    await this.getWebDriver().manage().setTimeouts({implicit: newTimeout})
+    await this.getWebDriver().manage().setTimeouts({implicit: newTimeout, pageLoad: DEFAULT_PAGE_LOAD_TIMEOUT_MS})
   }
 
   /**

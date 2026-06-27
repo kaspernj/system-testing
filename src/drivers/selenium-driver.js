@@ -88,6 +88,14 @@ export default class SeleniumDriver extends WebDriverDriver {
     const loggingPrefs = this.options.loggingPrefs ?? {browser: "ALL"}
     capabilities.set("goog:loggingPrefs", loggingPrefs)
 
+    // Return navigation at DOMContentLoaded instead of waiting for the full "load" event.
+    // The system-test app keeps WebSocket/Scoundrel connections open after first paint, which
+    // can hold the load event and hang driverVisit; readiness is asserted explicitly afterwards
+    // via systemTestingComponent and the client WebSocket.
+    if (!capabilities.get("pageLoadStrategy")) {
+      capabilities.set("pageLoadStrategy", "eager")
+    }
+
     if (this.options.capabilities) {
       for (const [key, value] of Object.entries(this.options.capabilities)) {
         capabilities.set(key, value)
