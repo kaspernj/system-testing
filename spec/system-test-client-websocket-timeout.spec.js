@@ -77,6 +77,25 @@ describe("SystemTest client WebSocket timeout", () => {
     expect(defaultSystemTestJasmineStartupTimeoutInterval()).toBeGreaterThan(defaultSystemTestJasmineTimeoutInterval())
   })
 
+  it("keeps the startup timeout above the sum of SystemTest.start internal phase timeouts", () => {
+    process.env.SYSTEM_TEST_HOST = "dist"
+
+    // Selenium session creation (60s) + systemTestingComponent lookup (30s) + client WebSocket connect.
+    // The shared startup beforeAll must dominate this sum so a hung phase surfaces its own specific
+    // error instead of the outer hook timing out first with an opaque "beforeAll failed" cascade.
+    const internalStartupPhaseSum = 60000 + 30000 + defaultClientWebSocketConnectTimeout()
+
+    expect(defaultSystemTestJasmineStartupTimeoutInterval()).toBeGreaterThan(internalStartupPhaseSum)
+  })
+
+  it("scales the startup timeout above the internal phases for the native client WebSocket window", () => {
+    process.env.SYSTEM_TEST_HOST = "native"
+
+    const internalStartupPhaseSum = 60000 + 30000 + defaultClientWebSocketConnectTimeout()
+
+    expect(defaultSystemTestJasmineStartupTimeoutInterval()).toBeGreaterThan(internalStartupPhaseSum)
+  })
+
   it("keeps the Jasmine startup timeout above the native WebSocket window for native Appium under dist", () => {
     process.env.SYSTEM_TEST_HOST = "dist"
 
