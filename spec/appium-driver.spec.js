@@ -485,4 +485,32 @@ describe("AppiumDriver", () => {
 
     expect(findSpy).toHaveBeenCalledWith("[data-test=\"name\\\"Input\"]", undefined)
   })
+
+  it("does not send a pageLoad timeout to native app sessions", async () => {
+    const calls = []
+    const driver = new AppiumDriver({browser: {throwIfHttpServerError: () => {}}, options: {capabilities: {platformName: "Android"}}})
+
+    driver.setWebDriver(/** @type {any} */ ({
+      manage: () => ({setTimeouts: async (options) => calls.push(options)})
+    }))
+
+    await driver.driverSetTimeouts(10000)
+
+    expect(driver.pageLoadTimeoutMs()).toBeUndefined()
+    expect(calls).toEqual([{implicit: 10000}])
+  })
+
+  it("applies the pageLoad timeout to Appium browser sessions", async () => {
+    const calls = []
+    const driver = new AppiumDriver({browser: {throwIfHttpServerError: () => {}}, options: {capabilities: {platformName: "Android", browserName: "Chrome"}}})
+
+    driver.setWebDriver(/** @type {any} */ ({
+      manage: () => ({setTimeouts: async (options) => calls.push(options)})
+    }))
+
+    await driver.driverSetTimeouts(10000)
+
+    expect(driver.pageLoadTimeoutMs()).toEqual(60000)
+    expect(calls).toEqual([{implicit: 10000, pageLoad: 60000}])
+  })
 })

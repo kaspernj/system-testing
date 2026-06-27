@@ -330,7 +330,22 @@ export default class WebDriverDriver {
    */
   async driverSetTimeouts(newTimeout) {
     this._driverTimeouts = newTimeout
-    await this.getWebDriver().manage().setTimeouts({implicit: newTimeout, pageLoad: DEFAULT_PAGE_LOAD_TIMEOUT_MS})
+
+    /** @type {{implicit: number, pageLoad?: number}} */
+    const timeouts = {implicit: newTimeout}
+    const pageLoadTimeout = this.pageLoadTimeoutMs()
+
+    if (pageLoadTimeout !== undefined) timeouts.pageLoad = pageLoadTimeout
+
+    await this.getWebDriver().manage().setTimeouts(timeouts)
+  }
+
+  /**
+   * Page-load timeout applied alongside the implicit wait, or `undefined` to omit it.
+   * @returns {number | undefined}
+   */
+  pageLoadTimeoutMs() {
+    return DEFAULT_PAGE_LOAD_TIMEOUT_MS
   }
 
   /**

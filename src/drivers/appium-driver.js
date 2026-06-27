@@ -1085,6 +1085,19 @@ export default class AppiumDriver extends WebDriverDriver {
   }
 
   /**
+   * Native Appium app sessions (no browser) reject a `pageLoad` timeout with
+   * "Not implemented yet for pageLoad", so only apply it to browser sessions.
+   * @returns {number | undefined}
+   */
+  pageLoadTimeoutMs() {
+    const browserName = this.options.capabilities?.browserName ?? this.options.browserName
+
+    if (!browserName) return undefined
+
+    return super.pageLoadTimeoutMs()
+  }
+
+  /**
    * @param {Record<string, any>} serverArgs
    * @returns {string}
    */
