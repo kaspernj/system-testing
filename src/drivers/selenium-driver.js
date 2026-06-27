@@ -11,6 +11,7 @@ const DEFAULT_DRIVER_START_TIMEOUT_MS = 60000
  * @typedef {object} SeleniumDriverOptions
  * @property {string} [browserName] Browser name used by the WebDriver session.
  * @property {string[]} [chromeArguments] Chrome CLI arguments.
+ * @property {string} [chromeBinaryPath] Path to a specific Chrome binary to launch.
  * @property {string} [chromedriverPath] Path to the Chromedriver executable.
  * @property {import("selenium-webdriver/chrome.js").Options} [chromeOptions] Preconfigured Chrome options instance.
  * @property {Record<string, any>} [capabilities] Extra WebDriver capabilities.
@@ -81,6 +82,14 @@ export default class SeleniumDriver extends WebDriverDriver {
 
     for (const argument of chromeArguments) {
       chromeOptions.addArguments(argument)
+    }
+
+    // Launch a specific Chrome binary when configured (e.g. a pinned Chrome for Testing
+    // build) so the browser and the matched Chromedriver stay on the same exact version.
+    const chromeBinaryPath = this.options.chromeBinaryPath ?? process.env.SYSTEM_TEST_CHROME_BINARY
+
+    if (chromeBinaryPath) {
+      chromeOptions.setBinaryPath(chromeBinaryPath)
     }
 
     const builder = new Builder().forBrowser(this.options.browserName ?? "chrome").setChromeOptions(chromeOptions)

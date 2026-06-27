@@ -3,11 +3,19 @@ artifact_dirs:
   - /home/build/project/tmp/android
   - /home/build/project/spec/dummy/tmp/screenshots
 before_install:
-  - sudo apt-get update && sudo apt-get install -y ca-certificates openjdk-17-jdk wget
+  - sudo apt-get update && sudo apt-get install -y ca-certificates openjdk-17-jdk unzip wget
   - if [ ! -x /usr/bin/node ]; then sudo ln -sf "$(command -v node)" /usr/bin/node; fi
   - wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
   - sudo apt-get install -y ./google-chrome-stable_current_amd64.deb
   - rm -f google-chrome-stable_current_amd64.deb
+  # Pin the Selenium Default-checks Chrome to a known-good Chrome for Testing build (matched
+  # exactly to its Chromedriver) instead of the auto-updated system Chrome, whose version can
+  # outrun the closest available Chromedriver and cause renderer-communication timeouts.
+  - wget -q https://storage.googleapis.com/chrome-for-testing-public/148.0.7778.178/linux64/chrome-linux64.zip -O /tmp/chrome-for-testing.zip
+  - sudo mkdir -p /opt/chrome-for-testing
+  - sudo unzip -o -q /tmp/chrome-for-testing.zip -d /opt/chrome-for-testing
+  - sudo chmod -R a+rx /opt/chrome-for-testing/chrome-linux64
+  - rm -f /tmp/chrome-for-testing.zip
 before_script:
   - npm install
   - cd spec/dummy && npm install
@@ -15,6 +23,8 @@ mem_limit: 16384m
 builds:
   build_1:
     name: Default checks
+    environment:
+      SYSTEM_TEST_CHROME_BINARY: /opt/chrome-for-testing/chrome-linux64/chrome
     script:
       - SYSTEM_TEST_HOST=dist SYSTEM_TEST_DRIVER=selenium SYSTEM_TEST_APPIUM_DRIVERS= SYSTEM_TEST_APPIUM_CAPABILITIES= SYSTEM_TEST_APPIUM_SERVER_ARGS= HEARTBEAT_LABEL="Default checks" node scripts/run-with-heartbeat.js node scripts/run-default-checks.js
   build_2:
