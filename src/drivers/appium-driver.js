@@ -6,8 +6,10 @@ import {Origin} from "selenium-webdriver/lib/input.js"
 import {wait} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
 import WebDriverDriver from "./webdriver-driver.js"
+import {testIdSelector} from "../test-id-selector.js"
 
 const MAX_NATIVE_VIEWPORT_SCROLL_STEPS = 8
+const DEFAULT_NATIVE_NEW_COMMAND_TIMEOUT_SECONDS = 180
 
 /**
  * Appium timeout values returned by Selenium.
@@ -240,6 +242,39 @@ export async function ensureChromeUserDataDirCapability({browserName, capabiliti
 }
 
 /**
+ * Keeps native Appium sessions alive while the React Native app opens the system-test WebSocket.
+ * @param {object} args
+ * @param {Record<string, any>} args.capabilities
+ * @returns {void}
+ */
+export function ensureNativeNewCommandTimeoutCapability({capabilities}) {
+  const platformName = capabilities.platformName
+
+  if (typeof platformName !== "string" || platformName.toLowerCase() !== "android") return
+  if (typeof capabilities.browserName === "string" && capabilities.browserName.length > 0) return
+  if (capabilities["appium:newCommandTimeout"] !== undefined) return
+  if (capabilities.newCommandTimeout !== undefined) return
+
+  capabilities["appium:newCommandTimeout"] = DEFAULT_NATIVE_NEW_COMMAND_TIMEOUT_SECONDS
+}
+
+/**
+ * Whether a driver config resolves to a native Appium app session rather than a browser.
+ * Native app sessions launch an installed app (no `browserName`), so the system-test harness
+ * must start the client WebSocket before the app launches and allow the native-safe connect timeout.
+ * @param {import("../browser.js").BrowserDriverConfig} [driverConfig]
+ * @returns {boolean}
+ */
+export function isAppiumNativeAppDriverConfig(driverConfig) {
+  if (driverConfig?.type !== "appium") return false
+
+  const options = driverConfig.options ?? {}
+  const browserName = options.capabilities?.browserName ?? options.browserName
+
+  return typeof browserName !== "string" || browserName.length === 0
+}
+
+/**
  * @typedef {object} AppiumDriverOptions
  * @property {string} [serverUrl] Remote Appium server URL to connect to.
  * @property {Record<string, any>} [serverArgs] Options passed to the Appium server.
@@ -278,12 +313,7 @@ export default class AppiumDriver extends WebDriverDriver {
     if (this.options.serverUrl) {
       this.serverUrl = this.options.serverUrl
     } else {
-      const appiumModule = await import("appium")
-      const appiumMain = appiumModule.main ?? appiumModule.default?.main
-
-      if (!appiumMain) {
-        throw new Error("Appium main() is unavailable from the appium package")
-      }
+      const appiumMain = await this.resolveAppiumMain()
 
       this.appiumServer = await appiumMain(serverArgs)
       this.serverUrl = this.buildServerUrl(serverArgs)
@@ -302,6 +332,7 @@ export default class AppiumDriver extends WebDriverDriver {
       browserName: this.options.browserName,
       capabilities
     })
+    ensureNativeNewCommandTimeoutCapability({capabilities})
 
     const builder = new Builder().usingServer(this.serverUrl)
 
@@ -318,6 +349,48 @@ export default class AppiumDriver extends WebDriverDriver {
       await this.cleanupChromeUserDataDir()
       throw error
     }
+  }
+
+  /**
+   * Imports the optional `appium` package. Isolated as a seam so the missing-package
+   * path can be unit tested without uninstalling Appium. The specifier is widened to
+   * `string` so the build/typecheck does not statically require appium's types when the
+   * optional dependency is not installed.
+   * @returns {Promise<Record<string, any>>}
+   */
+  async loadAppiumModule() {
+    const appiumPackage = /** @type {string} */ ("appium")
+
+    return await import(appiumPackage)
+  }
+
+  /**
+   * Resolves Appium's `main()` for the embedded-server path, surfacing an actionable
+   * install instruction when the optional `appium` package is not installed.
+   * @returns {Promise<(serverArgs: Record<string, any>) => Promise<any>>}
+   */
+  async resolveAppiumMain() {
+    let appiumModule
+
+    try {
+      appiumModule = await this.loadAppiumModule()
+    } catch (error) {
+      const code = error instanceof Error ? /** @type {{code?: string}} */ (error).code : undefined
+
+      if (code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND") {
+        throw errorWithCause("The Appium driver requires the optional 'appium' package, which is not installed. Run `npm install --save-dev appium` (plus any Appium drivers you need, e.g. appium-uiautomator2-driver), or pass driver.options.serverUrl to use an external Appium server.", error)
+      }
+
+      throw error
+    }
+
+    const appiumMain = appiumModule.main ?? appiumModule.default?.main
+
+    if (!appiumMain) {
+      throw new Error("Appium main() is unavailable from the appium package")
+    }
+
+    return appiumMain
   }
 
   /**
@@ -402,7 +475,7 @@ export default class AppiumDriver extends WebDriverDriver {
 
     if (testIdStrategy === "css") {
       const testIdAttribute = this.options.testIdAttribute ?? "data-testid"
-      return await this.find(`[${testIdAttribute}='${testID}']`, args)
+      return await this.find(testIdSelector(testID, testIdAttribute), args)
     }
     if (testIdStrategy === "id") {
       return await this.findById(testID, args)

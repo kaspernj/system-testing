@@ -1,7 +1,7 @@
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import AppiumDriver, {androidDescriptionContainsSelector, androidResourceIdSelector, androidTextContainsSelector, ensureChromeUserDataDirCapability} from "../src/drivers/appium-driver.js"
+import AppiumDriver, {androidDescriptionContainsSelector, androidResourceIdSelector, androidTextContainsSelector, ensureChromeUserDataDirCapability, ensureNativeNewCommandTimeoutCapability, isAppiumNativeAppDriverConfig} from "../src/drivers/appium-driver.js"
 
 describe("AppiumDriver", () => {
   it("adds a dedicated user-data-dir for Chrome sessions", async () => {
@@ -70,6 +70,61 @@ describe("AppiumDriver", () => {
     } finally {
       await fs.rm(tempRootDir, {recursive: true, force: true})
     }
+  })
+
+  it("sets a native Appium command timeout above the native bridge startup wait", () => {
+    const capabilities = {
+      browserName: "",
+      platformName: "Android"
+    }
+
+    ensureNativeNewCommandTimeoutCapability({capabilities})
+
+    expect(capabilities["appium:newCommandTimeout"]).toEqual(180)
+  })
+
+  it("keeps explicit native Appium command timeouts untouched", () => {
+    const prefixedCapabilities = {
+      "appium:newCommandTimeout": 240,
+      browserName: "",
+      platformName: "Android"
+    }
+    const unprefixedCapabilities = {
+      browserName: "",
+      newCommandTimeout: 240,
+      platformName: "Android"
+    }
+
+    ensureNativeNewCommandTimeoutCapability({capabilities: prefixedCapabilities})
+    ensureNativeNewCommandTimeoutCapability({capabilities: unprefixedCapabilities})
+
+    expect(prefixedCapabilities["appium:newCommandTimeout"]).toEqual(240)
+    expect(unprefixedCapabilities["appium:newCommandTimeout"]).toBeUndefined()
+    expect(unprefixedCapabilities.newCommandTimeout).toEqual(240)
+  })
+
+  it("does not set native Appium command timeouts for Android Chrome sessions", () => {
+    const capabilities = {
+      browserName: "Chrome",
+      platformName: "Android"
+    }
+
+    ensureNativeNewCommandTimeoutCapability({capabilities})
+
+    expect(capabilities["appium:newCommandTimeout"]).toBeUndefined()
+  })
+
+  it("detects native Appium app driver configs by empty or missing browserName", () => {
+    expect(isAppiumNativeAppDriverConfig({type: "appium", options: {capabilities: {app: "app-release.apk", browserName: ""}}})).toBeTrue()
+    expect(isAppiumNativeAppDriverConfig({type: "appium", options: {capabilities: {platformName: "Android"}}})).toBeTrue()
+    expect(isAppiumNativeAppDriverConfig({type: "appium", options: {browserName: ""}})).toBeTrue()
+  })
+
+  it("treats Appium browser sessions and non-Appium configs as non-native", () => {
+    expect(isAppiumNativeAppDriverConfig({type: "appium", options: {capabilities: {browserName: "Chrome"}}})).toBeFalse()
+    expect(isAppiumNativeAppDriverConfig({type: "appium", options: {browserName: "Chrome"}})).toBeFalse()
+    expect(isAppiumNativeAppDriverConfig({type: "selenium"})).toBeFalse()
+    expect(isAppiumNativeAppDriverConfig(undefined)).toBeFalse()
   })
 
   it("builds Android resource-id selectors for raw React Native test IDs", () => {
@@ -373,5 +428,61 @@ describe("AppiumDriver", () => {
 
     await expectAsync(fs.stat(chromeUserDataDir)).toBeRejected()
     await fs.rm(tempRootDir, {recursive: true, force: true})
+  })
+
+  it("throws an actionable install error when the optional appium package is missing", async () => {
+    const driver = new AppiumDriver({browser: {}})
+    const moduleNotFound = Object.assign(new Error("Cannot find package 'appium'"), {code: "ERR_MODULE_NOT_FOUND"})
+
+    spyOn(driver, "loadAppiumModule").and.rejectWith(moduleNotFound)
+
+    await expectAsync(driver.resolveAppiumMain()).toBeRejectedWithError(/optional 'appium' package.*npm install.*serverUrl/s)
+  })
+
+  it("rethrows unexpected errors from loading appium unchanged", async () => {
+    const driver = new AppiumDriver({browser: {}})
+    const unexpected = new Error("boom")
+
+    spyOn(driver, "loadAppiumModule").and.rejectWith(unexpected)
+
+    await expectAsync(driver.resolveAppiumMain()).toBeRejectedWith(unexpected)
+  })
+
+  it("throws when the appium package exposes no main()", async () => {
+    const driver = new AppiumDriver({browser: {}})
+
+    spyOn(driver, "loadAppiumModule").and.resolveTo({})
+
+    await expectAsync(driver.resolveAppiumMain()).toBeRejectedWithError("Appium main() is unavailable from the appium package")
+  })
+
+  it("escapes quotes when finding by test ID with the CSS strategy", async () => {
+    const element = {}
+    const driver = new AppiumDriver({
+      browser: {},
+      options: {testIdStrategy: "css"}
+    })
+    const findSpy = jasmine.createSpy("find").and.resolveTo(element)
+
+    driver.find = /** @type {any} */ (findSpy)
+
+    await driver.findByTestID("name\"Input", {visible: false})
+
+    expect(findSpy).toHaveBeenCalledWith("[data-testid=\"name\\\"Input\"]", {visible: false})
+  })
+
+  it("escapes quotes for the CSS strategy with a custom test ID attribute", async () => {
+    const element = {}
+    const driver = new AppiumDriver({
+      browser: {},
+      options: {testIdStrategy: "css", testIdAttribute: "data-test"}
+    })
+    const findSpy = jasmine.createSpy("find").and.resolveTo(element)
+
+    driver.find = /** @type {any} */ (findSpy)
+
+    await driver.findByTestID("name\"Input")
+
+    expect(findSpy).toHaveBeenCalledWith("[data-test=\"name\\\"Input\"]", undefined)
   })
 })

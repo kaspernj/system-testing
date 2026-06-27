@@ -4,6 +4,43 @@ import fs from "node:fs/promises"
 import http from "node:http"
 import mime from "mime"
 
+/**
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+function isMissingPathError(error) {
+  return !!error && typeof error === "object" && "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR")
+}
+
+/**
+ * @param {string} filePath
+ * @returns {Promise<import("node:fs").Stats | undefined>}
+ */
+async function pathStats(filePath) {
+  try {
+    return await fs.stat(filePath)
+  } catch (error) {
+    if (isMissingPathError(error)) return undefined
+    throw error
+  }
+}
+
+/**
+ * @param {string[]} filePaths
+ * @returns {Promise<string | undefined>}
+ */
+async function firstExistingFilePath(filePaths) {
+  for (const filePath of filePaths) {
+    if (filePath.length === 0) continue
+
+    const stats = await pathStats(filePath)
+
+    if (stats?.isFile()) return filePath
+  }
+
+  return undefined
+}
+
 export default class SystemTestHttpServer {
   /**
    * @param {{host?: string, port?: number, debug?: boolean, onError?: (error: Error) => void, connectHost?: string}} [args]
@@ -72,23 +109,19 @@ export default class SystemTestHttpServer {
 
     const baseUrl = `http://${request.headers.host || "localhost:1984"}`
     const {pathname} = new URL(request.url, baseUrl)
-    let filePath = `${process.cwd()}/dist${pathname}`
+    const requestedPath = `${process.cwd()}/dist${pathname}`
+    const requestedStats = await pathStats(requestedPath)
+    let filePath = await firstExistingFilePath([
+      requestedStats?.isFile() ? requestedPath : "",
+      pathname.endsWith("/") ? "" : `${requestedPath}.html`,
+      requestedStats?.isDirectory() ? `${requestedPath}/index.html` : "",
+      `${process.cwd()}/dist/index.html`
+    ])
 
-    if (filePath.endsWith("/")) {
-      filePath += "index.html"
-    }
-
-    let fileExists
-
-    try {
-      await fs.stat(filePath)
-      fileExists = true
-    } catch (_error) { // eslint-disable-line no-unused-vars
-      fileExists = false
-    }
-
-    if (!fileExists) {
-      filePath = `${process.cwd()}/dist/index.html`
+    if (!filePath) {
+      response.statusCode = 404
+      response.end("Not Found")
+      return
     }
 
     let fileContent

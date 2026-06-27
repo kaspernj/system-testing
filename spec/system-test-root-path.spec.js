@@ -1,16 +1,99 @@
 // @ts-check
 
+import fs from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import Browser from "../src/browser.js"
 import SystemTest from "../src/system-test.js"
 import SystemTestHttpServer from "../src/system-test-http-server.js"
 
 describe("SystemTest root path", () => {
-  const originalSystemTestHost = process.env.SYSTEM_TEST_HOST
+  /** @type {string | undefined} */
+  let previousSystemTestHost
+  /** @type {string | undefined} */
+  let previousCwd
 
-  afterEach(() => {
-    if (originalSystemTestHost === undefined) {
+  beforeEach(() => {
+    previousSystemTestHost = process.env.SYSTEM_TEST_HOST
+    previousCwd = process.cwd()
+  })
+
+  afterEach(async () => {
+    if (previousSystemTestHost === undefined) {
       delete process.env.SYSTEM_TEST_HOST
     } else {
-      process.env.SYSTEM_TEST_HOST = originalSystemTestHost
+      process.env.SYSTEM_TEST_HOST = previousSystemTestHost
+    }
+
+    if (previousCwd) process.chdir(previousCwd)
+  })
+
+  it("serves directory index files for exported static routes without trailing slashes", async () => {
+    const tempRootPath = await fs.mkdtemp(path.join(os.tmpdir(), "system-testing-dist-"))
+
+    try {
+      await fs.mkdir(path.join(tempRootPath, "dist", "admin", "events"), {recursive: true})
+      await fs.writeFile(path.join(tempRootPath, "dist", "admin", "events", "index.html"), "admin events")
+      process.chdir(tempRootPath)
+
+      const response = {
+        body: "",
+        headers: {},
+        statusCode: 0,
+        end(content) {
+          this.body = content.toString()
+        },
+        setHeader(key, value) {
+          this.headers[key] = value
+        }
+      }
+
+      await new SystemTestHttpServer().onHttpServerRequest(
+        /** @type {any} */ ({headers: {host: "localhost:1984"}, url: "/admin/events"}),
+        /** @type {any} */ (response)
+      )
+
+      expect(response.statusCode).toBe(200)
+      expect(response.body).toBe("admin events")
+      expect(response.headers["Content-Type"]).toBe("text/html")
+    } finally {
+      process.chdir(previousCwd || tempRootPath)
+      await fs.rm(tempRootPath, {force: true, recursive: true})
+    }
+  })
+
+  it("serves exported sibling HTML files before same-name route directories", async () => {
+    const tempRootPath = await fs.mkdtemp(path.join(os.tmpdir(), "system-testing-dist-"))
+
+    try {
+      await fs.mkdir(path.join(tempRootPath, "dist", "events", "[id]"), {recursive: true})
+      await fs.writeFile(path.join(tempRootPath, "dist", "events.html"), "events route")
+      await fs.writeFile(path.join(tempRootPath, "dist", "events", "[id]", "index.html"), "event show route")
+      process.chdir(tempRootPath)
+
+      const response = {
+        body: "",
+        headers: {},
+        statusCode: 0,
+        end(content) {
+          this.body = content.toString()
+        },
+        setHeader(key, value) {
+          this.headers[key] = value
+        }
+      }
+
+      await new SystemTestHttpServer().onHttpServerRequest(
+        /** @type {any} */ ({headers: {host: "localhost:1984"}, url: "/events"}),
+        /** @type {any} */ (response)
+      )
+
+      expect(response.statusCode).toBe(200)
+      expect(response.body).toBe("events route")
+      expect(response.headers["Content-Type"]).toBe("text/html")
+    } finally {
+      process.chdir(previousCwd || tempRootPath)
+      await fs.rm(tempRootPath, {force: true, recursive: true})
     }
   })
 
@@ -52,6 +135,92 @@ describe("SystemTest root path", () => {
       "/blank?systemTest=true",
       "/blank?systemTest=true"
     ])
+  })
+
+  it("starts the client WebSocket before launching native Appium sessions even when serving dist", async () => {
+    process.env.SYSTEM_TEST_HOST = "dist"
+    const startupCalls = []
+    const adapter = {
+      getTimeouts: () => 100,
+      setBaseUrl: jasmine.createSpy("setBaseUrl"),
+      setTimeouts: jasmine.createSpy("setTimeouts").and.resolveTo(undefined),
+      start: jasmine.createSpy("start").and.callFake(async () => {
+        startupCalls.push("driver")
+      })
+    }
+
+    spyOn(SystemTestHttpServer.prototype, "start").and.resolveTo(undefined)
+    spyOn(SystemTestHttpServer.prototype, "assertReachable").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "getDriverAdapter").and.returnValue(/** @type {any} */ (adapter))
+    spyOn(SystemTest.prototype, "startScoundrel").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "startWebSocketServer").and.callFake(async () => {
+      startupCalls.push("websocket")
+    })
+    spyOn(SystemTest.prototype, "waitForClientWebSocket").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "find").and.resolveTo(/** @type {any} */ ({}))
+    spyOn(SystemTest.prototype, "findByTestID").and.resolveTo(/** @type {any} */ ({}))
+    spyOn(SystemTest.prototype, "driverVisit").and.resolveTo(undefined)
+
+    await new SystemTest({
+      driver: {
+        type: "appium",
+        options: {
+          capabilities: {
+            app: "spec/dummy/android/app/build/outputs/apk/release/app-release.apk",
+            browserName: ""
+          }
+        }
+      },
+      httpConnectHost: "10.0.2.2",
+      httpHost: "0.0.0.0",
+      httpPort: 1984
+    }).start()
+
+    expect(startupCalls).toEqual(["websocket", "driver"])
+    expect(SystemTestHttpServer.prototype.start).not.toHaveBeenCalled()
+    expect(SystemTest.prototype.driverVisit).not.toHaveBeenCalled()
+  })
+
+  it("routes native Appium visits through the native helper even when serving dist", async () => {
+    process.env.SYSTEM_TEST_HOST = "dist"
+    spyOn(SystemTest.prototype, "startScoundrel").and.callFake(() => {})
+    const nativeVisit = spyOn(Browser.prototype, "visit").and.resolveTo(undefined)
+    const webVisit = spyOn(SystemTest.prototype, "visitPathWithDriverAndReconnect").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "initializeBrowserContext").and.resolveTo(undefined)
+
+    const systemTest = new SystemTest({
+      driver: {
+        type: "appium",
+        options: {
+          capabilities: {
+            app: "spec/dummy/android/app/build/outputs/apk/release/app-release.apk",
+            browserName: ""
+          }
+        }
+      }
+    })
+
+    await systemTest.visit("/projects")
+
+    expect(nativeVisit).toHaveBeenCalledOnceWith("/projects", {})
+    expect(webVisit).not.toHaveBeenCalled()
+  })
+
+  it("routes web visits through the driver reconnect path when the command websocket is closed", async () => {
+    process.env.SYSTEM_TEST_HOST = "dist"
+    spyOn(SystemTest.prototype, "startScoundrel").and.callFake(() => {})
+    const nativeVisit = spyOn(Browser.prototype, "visit").and.resolveTo(undefined)
+    const webVisit = spyOn(SystemTest.prototype, "visitPathWithDriverAndReconnect").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "initializeBrowserContext").and.resolveTo(undefined)
+
+    const systemTest = new SystemTest()
+    systemTest.communicator.ws = Object.create(WebSocket.prototype)
+    Object.defineProperty(systemTest.communicator.ws, "readyState", {value: WebSocket.CLOSED})
+
+    await systemTest.visit("/projects")
+
+    expect(webVisit).toHaveBeenCalledOnceWith("/projects")
+    expect(nativeVisit).not.toHaveBeenCalled()
   })
 
   it("propagates custom websocket ports into the browser URL", () => {

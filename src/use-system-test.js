@@ -43,11 +43,11 @@ export function resetSystemTestEnabledForTests() {
  * @param {import("./system-test-browser-helper.js").default} [options.browserHelper]
  * @param {boolean} [options.enabled] Override the auto-detected enabled state.
  * @param {string} [options.host] Override the system test host for WebSocket connections.
- * @param {(args: {path: string}) => void} [options.onDismissTo]
+ * @param {(args: {path: string}) => void | Promise<void>} [options.onDismissTo]
  * @param {function() : void} [options.onFirstInitialize]
  * @param {function() : void} [options.onInitialize]
  * @param {function() : void} [options.onTeardown]
- * @param {(args: {path: string}) => void} [options.onNavigate]
+ * @param {(args: {path: string}) => void | Promise<void>} [options.onNavigate]
  * @returns {{enabled: boolean, systemTestBrowserHelper: import("./system-test-browser-helper.js").default | null}}
  */
 export default function useSystemTest({browserHelper, enabled, host, onDismissTo, onFirstInitialize, onInitialize, onTeardown, onNavigate, ...restArgs} = {browserHelper: undefined, enabled: undefined, host: undefined, onDismissTo: undefined, onFirstInitialize: undefined, onInitialize: undefined, onTeardown: undefined, onNavigate: undefined}) {

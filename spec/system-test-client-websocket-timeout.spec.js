@@ -1,7 +1,10 @@
 // @ts-check
 
 import SystemTest, {defaultClientWebSocketConnectTimeout} from "../src/system-test.js"
-import {defaultSystemTestJasmineTimeoutInterval} from "./support/system-test-helper.js"
+import {
+  defaultSystemTestJasmineStartupTimeoutInterval,
+  defaultSystemTestJasmineTimeoutInterval
+} from "./support/system-test-helper.js"
 
 describe("SystemTest client WebSocket timeout", () => {
   /** @type {string | undefined} */
@@ -25,6 +28,37 @@ describe("SystemTest client WebSocket timeout", () => {
     expect(defaultClientWebSocketConnectTimeout()).toEqual(30000)
   })
 
+  it("uses a native-safe client WebSocket startup timeout for Appium native app sessions", () => {
+    process.env.SYSTEM_TEST_HOST = "dist"
+
+    expect(defaultClientWebSocketConnectTimeout({
+      driver: {
+        type: "appium",
+        options: {
+          capabilities: {
+            app: "spec/dummy/android/app/build/outputs/apk/release/app-release.apk",
+            browserName: ""
+          }
+        }
+      }
+    })).toEqual(120000)
+  })
+
+  it("keeps Appium browser sessions on the web client WebSocket startup timeout", () => {
+    process.env.SYSTEM_TEST_HOST = "dist"
+
+    expect(defaultClientWebSocketConnectTimeout({
+      driver: {
+        type: "appium",
+        options: {
+          capabilities: {
+            browserName: "Chrome"
+          }
+        }
+      }
+    })).toEqual(30000)
+  })
+
   it("uses a native-safe client WebSocket startup timeout", () => {
     process.env.SYSTEM_TEST_HOST = "native"
 
@@ -35,6 +69,28 @@ describe("SystemTest client WebSocket timeout", () => {
     process.env.SYSTEM_TEST_HOST = "native"
 
     expect(defaultSystemTestJasmineTimeoutInterval()).toBeGreaterThan(defaultClientWebSocketConnectTimeout())
+  })
+
+  it("uses a longer Jasmine timeout for shared browser startup hooks", () => {
+    process.env.SYSTEM_TEST_HOST = "dist"
+
+    expect(defaultSystemTestJasmineStartupTimeoutInterval()).toBeGreaterThan(defaultSystemTestJasmineTimeoutInterval())
+  })
+
+  it("keeps the Jasmine startup timeout above the native WebSocket window for native Appium under dist", () => {
+    process.env.SYSTEM_TEST_HOST = "dist"
+
+    const driver = {
+      type: /** @type {const} */ ("appium"),
+      options: {
+        capabilities: {
+          app: "spec/dummy/android/app/build/outputs/apk/release/app-release.apk",
+          browserName: ""
+        }
+      }
+    }
+
+    expect(defaultSystemTestJasmineStartupTimeoutInterval(driver)).toBeGreaterThan(defaultClientWebSocketConnectTimeout({driver}))
   })
 
   it("waits for an explicit client WebSocket startup timeout", async () => {

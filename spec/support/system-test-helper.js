@@ -6,6 +6,7 @@ import SystemTest, {defaultClientWebSocketConnectTimeout} from "../../src/system
 import DummyHttpServerEnvironment from "./dummy-http-server.js"
 
 const MINIMUM_JASMINE_TIMEOUT_INTERVAL_MS = 60000
+const MINIMUM_JASMINE_STARTUP_TIMEOUT_INTERVAL_MS = 120000
 const JASMINE_TIMEOUT_INTERVAL_HEADROOM_MS = 30000
 
 const sharedState = globalThis.__systemTestHelperState ??= {
@@ -40,11 +41,25 @@ function errorWithCause(message, cause) {
   return error
 }
 
-/** @returns {number} */
-export function defaultSystemTestJasmineTimeoutInterval() {
+/**
+ * @param {import("../../src/system-test.js").SystemTestDriverConfig} [driver]
+ * @returns {number}
+ */
+export function defaultSystemTestJasmineTimeoutInterval(driver) {
   return Math.max(
     MINIMUM_JASMINE_TIMEOUT_INTERVAL_MS,
-    defaultClientWebSocketConnectTimeout() + JASMINE_TIMEOUT_INTERVAL_HEADROOM_MS
+    defaultClientWebSocketConnectTimeout({driver}) + JASMINE_TIMEOUT_INTERVAL_HEADROOM_MS
+  )
+}
+
+/**
+ * @param {import("../../src/system-test.js").SystemTestDriverConfig} [driver]
+ * @returns {number}
+ */
+export function defaultSystemTestJasmineStartupTimeoutInterval(driver) {
+  return Math.max(
+    MINIMUM_JASMINE_STARTUP_TIMEOUT_INTERVAL_MS,
+    defaultSystemTestJasmineTimeoutInterval(driver)
   )
 }
 
@@ -54,20 +69,23 @@ export default class SystemTestHelper {
     this.dummyHttpServerEnvironment = sharedState.dummyHttpServerEnvironment
     this.systemTest = sharedState.systemTest
 
-    jasmine.DEFAULT_TIMEOUT_INTERVAL = defaultSystemTestJasmineTimeoutInterval()
+    jasmine.DEFAULT_TIMEOUT_INTERVAL = defaultSystemTestJasmineTimeoutInterval(this.getDriverConfig())
   }
 
   /** @param {...any} args */
   debugLog(...args) { if (this.debug) console.log(...args) }
 
+  /** @returns {void} */
   installJasmineHooks() {
+    const startupTimeout = defaultSystemTestJasmineStartupTimeoutInterval(this.getDriverConfig())
+
     beforeAll(async () => {
       await this.start()
-    })
+    }, startupTimeout)
 
     afterAll(async () => {
       await this.stop()
-    })
+    }, startupTimeout)
   }
 
   /** @returns {Promise<void>} */
