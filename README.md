@@ -56,6 +56,10 @@ Minimal app-side requirements:
 </View>
 ```
 
+## Navigation discipline
+
+App-flow specs should call `systemTest.visit(...)` once as the initial entry point, then use visible app UI, links, and actions to move around. A second `visit`, refresh, or direct route jump in one example should have a concrete documented reason, such as exercising an external callback or deep link.
+
 ## Usage
 
 ```js
@@ -112,7 +116,15 @@ describe("Sign in page", () => {
 
 ### Driver selection
 
-SystemTest uses Selenium by default. To use Appium instead, pass a driver config when creating the instance:
+SystemTest uses Selenium by default. To use Appium instead, pass a driver config when creating the instance.
+
+`appium` is an optional peer dependency, so browser-only installs stay lightweight. Install it (plus the Appium drivers you need) when you opt into the Appium driver:
+
+```sh
+npm install --save-dev appium appium-uiautomator2-driver
+```
+
+Selecting `{driver: {type: "appium"}}` without `appium` installed throws an error with this instruction. If you point at an external Appium server with `serverUrl`, the `appium` package is not needed.
 
 ```js
 await SystemTest.run({
@@ -157,7 +169,7 @@ For local or CI web runs against Chrome, `npm run test:appium:web` now resolves 
 `Browser` is the lower-level browser/session class behind `SystemTest`. Use it when you want driver-backed browsing, screenshots, logs, and HTML capture without the rest of the system-test bootstrapping.
 
 ```js
-import {Browser} from "system-testing/build/index.js"
+import {Browser} from "system-testing"
 
 const browser = new Browser()
 
@@ -314,7 +326,7 @@ Minimal example:
 
 ```jsx
 import {Stack} from "expo-router"
-import {useSystemTestExpo} from "system-testing/build/expo.js"
+import {useSystemTestExpo} from "system-testing/expo"
 
 export default function RootLayout() {
   const {enabled, systemTestBrowserHelper} = useSystemTestExpo({

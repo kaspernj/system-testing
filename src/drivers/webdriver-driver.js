@@ -2,6 +2,12 @@ import {By, error as SeleniumError} from "selenium-webdriver"
 import logging from "selenium-webdriver/lib/logging.js"
 import {wait, waitFor} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
+import {testIdSelector} from "../test-id-selector.js"
+
+// Bounds page navigation so a stalled load fails fast instead of waiting Selenium's
+// default 300s (longer than the system-test startup budget, which would otherwise
+// surface as an opaque suite timeout).
+const DEFAULT_PAGE_LOAD_TIMEOUT_MS = 60000
 
 /**
  * @param {string} message
@@ -104,7 +110,7 @@ function shouldIgnoreBrowserLogEntry(entry, message) {
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
- * @property {"actions" | "human" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"human"` uses multiple pointer moves and pauses before clicking; `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context (skips WebDriver's pointer synthesis entirely — useful when the default click is dropped by a framework responder that refuses synthetic WebDriver pointer events).
+ * @property {"actions" | "human" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"human"` uses multiple pointer moves and pauses before clicking; `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context and is for diagnostics only, not committed stabilization fixes.
  * @property {number} [clickOffsetX] X offset for `actions`/`human` pointer clicks relative to the target element.
  * @property {number} [clickOffsetY] Y offset for `actions`/`human` pointer clicks relative to the target element.
  * @property {number} [humanStepDelay] Pause duration in ms between human pointer moves.
@@ -324,7 +330,45 @@ export default class WebDriverDriver {
    */
   async driverSetTimeouts(newTimeout) {
     this._driverTimeouts = newTimeout
-    await this.getWebDriver().manage().setTimeouts({implicit: newTimeout})
+
+    /** @type {{implicit: number, pageLoad?: number}} */
+    const timeouts = {implicit: newTimeout}
+    const pageLoadTimeout = this.pageLoadTimeoutMs()
+
+    if (pageLoadTimeout !== undefined) timeouts.pageLoad = pageLoadTimeout
+
+    await this.getWebDriver().manage().setTimeouts(timeouts)
+  }
+
+  /**
+   * Page-load timeout applied alongside the implicit wait, or `undefined` to omit it.
+   * @returns {number | undefined}
+   */
+  pageLoadTimeoutMs() {
+    return DEFAULT_PAGE_LOAD_TIMEOUT_MS
+  }
+
+  /**
+   * Runs a callback with Selenium's implicit wait temporarily changed. Finder
+   * methods do their own explicit polling, so leaving Selenium's implicit wait
+   * enabled would make short lookup timeouts block for the global driver wait.
+   * @template T
+   * @param {number} implicitTimeout
+   * @param {() => Promise<T>} callback
+   * @returns {Promise<T>}
+   */
+  async withTemporaryImplicitTimeout(implicitTimeout, callback) {
+    const originalImplicitTimeout = this._driverTimeouts
+
+    if (originalImplicitTimeout === implicitTimeout) return await callback()
+
+    await this.getWebDriver().manage().setTimeouts({implicit: implicitTimeout})
+
+    try {
+      return await callback()
+    } finally {
+      await this.getWebDriver().manage().setTimeouts({implicit: originalImplicitTimeout})
+    }
   }
 
   /**
@@ -471,40 +515,43 @@ export default class WebDriverDriver {
     /** @type {import("selenium-webdriver").WebElement[]} */
     let elements = []
 
-    while (true) {
-      const timeLeft = actualTimeout == 0 ? 0 : getTimeLeft()
+    await this.withTemporaryImplicitTimeout(0, async () => {
+      while (true) {
+        const timeLeft = actualTimeout == 0 ? 0 : getTimeLeft()
 
-      try {
-        if (timeLeft == 0) {
-          elements = await getElements()
-        } else {
-          await this.getWebDriver().wait(async () => {
+        try {
+          if (timeLeft == 0) {
             elements = await getElements()
+          } else {
+            await this.getWebDriver().wait(async () => {
+              elements = await getElements()
 
-            return elements.length > 0
-          }, timeLeft)
+              return elements.length > 0
+            }, timeLeft)
+          }
+
+          break
+        } catch (error) {
+          let isStaleElementError = false
+
+          if (error instanceof SeleniumError.StaleElementReferenceError) {
+            isStaleElementError = true
+          } else if (error instanceof WebDriverError && error.message.toLowerCase().includes("stale element reference")) {
+            isStaleElementError = true
+          }
+
+          if (
+            (error instanceof SeleniumError.TimeoutError || isStaleElementError)
+            && getTimeLeft() > 0
+          ) {
+            continue
+          }
+
+          throw errorWithCause(`Couldn't get elements with selector: ${actualSelector}: ${error instanceof Error ? error.message : error}`, error)
         }
-
-        break
-      } catch (error) {
-        let isStaleElementError = false
-
-        if (error instanceof SeleniumError.StaleElementReferenceError) {
-          isStaleElementError = true
-        } else if (error instanceof WebDriverError && error.message.toLowerCase().includes("stale element reference")) {
-          isStaleElementError = true
-        }
-
-        if (
-          (error instanceof SeleniumError.TimeoutError || isStaleElementError)
-          && getTimeLeft() > 0
-        ) {
-          continue
-        }
-
-        throw errorWithCause(`Couldn't get elements with selector: ${actualSelector}: ${error instanceof Error ? error.message : error}`, error)
       }
-    }
+    })
+
     if (scrollTo) {
       for (const element of elements) {
         await this.scrollElementIntoView(element)
@@ -578,7 +625,7 @@ export default class WebDriverDriver {
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
   async findByTestID(testID, args) {
-    return await this.find(`[data-testid='${testID}']`, args)
+    return await this.find(testIdSelector(testID), args)
   }
 
   /**
@@ -895,7 +942,7 @@ export default class WebDriverDriver {
    * @returns {Promise<void>}
    */
   async scrollTestIdIntoView(testID, args) {
-    const element = await this.findScrollTarget(`[data-testid='${testID}']`, args)
+    const element = await this.findScrollTarget(testIdSelector(testID), args)
 
     await this.scrollElementIntoView(element)
   }
@@ -1000,6 +1047,16 @@ export default class WebDriverDriver {
    * @returns {Promise<string | undefined>}
    */
   async readInteractableValue(element) {
+    const elementWithProperty = /** @type {{getProperty?: (name: string) => Promise<unknown>}} */ (element)
+
+    if (typeof elementWithProperty.getProperty == "function") {
+      const valueProperty = await elementWithProperty.getProperty("value")
+
+      if (typeof valueProperty == "string") {
+        return valueProperty
+      }
+    }
+
     const valueProperty = await element.getAttribute("value")
 
     if (typeof valueProperty == "string") {

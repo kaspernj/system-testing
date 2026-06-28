@@ -8,6 +8,17 @@ import DummyHttpServerEnvironment from "./dummy-http-server.js"
 const MINIMUM_JASMINE_TIMEOUT_INTERVAL_MS = 60000
 const JASMINE_TIMEOUT_INTERVAL_HEADROOM_MS = 30000
 
+// SystemTest.start() runs several independently bounded phases in sequence. The shared
+// startup beforeAll must outlast their sum so that, under slow CI, a hung phase fails
+// with its own specific error (e.g. "timeout while starting Selenium WebDriver") instead
+// of this outer hook hitting jasmine's opaque suite timeout first and cascading
+// "beforeAll failed" across the entire run. These mirror the per-phase budgets in
+// SystemTest.start()/SeleniumDriver.start().
+const SELENIUM_DRIVER_START_TIMEOUT_MS = 60000 // src/drivers/selenium-driver.js DEFAULT_DRIVER_START_TIMEOUT_MS
+const STARTUP_NAVIGATION_BUDGET_MS = 30000 // HTTP reachability + initial root visit + body/#root lookup
+const SYSTEM_TESTING_COMPONENT_TIMEOUT_MS = 30000 // SystemTest.start() findByTestID("systemTestingComponent")
+const STARTUP_TIMEOUT_HEADROOM_MS = 30000
+
 const sharedState = globalThis.__systemTestHelperState ??= {
   refCount: 0,
   started: false,
@@ -40,12 +51,30 @@ function errorWithCause(message, cause) {
   return error
 }
 
-/** @returns {number} */
-export function defaultSystemTestJasmineTimeoutInterval() {
+/**
+ * @param {import("../../src/system-test.js").SystemTestDriverConfig} [driver]
+ * @returns {number}
+ */
+export function defaultSystemTestJasmineTimeoutInterval(driver) {
   return Math.max(
     MINIMUM_JASMINE_TIMEOUT_INTERVAL_MS,
-    defaultClientWebSocketConnectTimeout() + JASMINE_TIMEOUT_INTERVAL_HEADROOM_MS
+    defaultClientWebSocketConnectTimeout({driver}) + JASMINE_TIMEOUT_INTERVAL_HEADROOM_MS
   )
+}
+
+/**
+ * @param {import("../../src/system-test.js").SystemTestDriverConfig} [driver]
+ * @returns {number}
+ */
+export function defaultSystemTestJasmineStartupTimeoutInterval(driver) {
+  const startupPhaseBudget =
+    SELENIUM_DRIVER_START_TIMEOUT_MS +
+    STARTUP_NAVIGATION_BUDGET_MS +
+    SYSTEM_TESTING_COMPONENT_TIMEOUT_MS +
+    defaultClientWebSocketConnectTimeout({driver}) +
+    STARTUP_TIMEOUT_HEADROOM_MS
+
+  return Math.max(startupPhaseBudget, defaultSystemTestJasmineTimeoutInterval(driver))
 }
 
 export default class SystemTestHelper {
@@ -54,20 +83,23 @@ export default class SystemTestHelper {
     this.dummyHttpServerEnvironment = sharedState.dummyHttpServerEnvironment
     this.systemTest = sharedState.systemTest
 
-    jasmine.DEFAULT_TIMEOUT_INTERVAL = defaultSystemTestJasmineTimeoutInterval()
+    jasmine.DEFAULT_TIMEOUT_INTERVAL = defaultSystemTestJasmineTimeoutInterval(this.getDriverConfig())
   }
 
   /** @param {...any} args */
   debugLog(...args) { if (this.debug) console.log(...args) }
 
+  /** @returns {void} */
   installJasmineHooks() {
+    const startupTimeout = defaultSystemTestJasmineStartupTimeoutInterval(this.getDriverConfig())
+
     beforeAll(async () => {
       await this.start()
-    })
+    }, startupTimeout)
 
     afterAll(async () => {
       await this.stop()
-    })
+    }, startupTimeout)
   }
 
   /** @returns {Promise<void>} */

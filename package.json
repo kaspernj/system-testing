@@ -1,12 +1,24 @@
 {
   "name": "system-testing",
-  "version": "1.0.115",
+  "version": "1.0.124",
   "description": "System testing with Selenium and browsers.",
   "bin": {
     "system-testing": "build/cli.js"
   },
   "main": "build/index.js",
   "types": "build/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./build/index.d.ts",
+      "default": "./build/index.js"
+    },
+    "./expo": {
+      "types": "./build/expo.d.ts",
+      "default": "./build/expo.js"
+    },
+    "./package.json": "./package.json",
+    "./build/*": "./build/*"
+  },
   "files": [
     "build/**"
   ],
@@ -33,7 +45,7 @@
     "prepare:dummy": "npm run build && rm -rf spec/dummy/node_modules/system-testing && mkdir -p spec/dummy/node_modules/system-testing && cp -r build package.json spec/dummy/node_modules/system-testing/",
     "build": "rm -rf build && npm run compile",
     "compile": "tsc",
-    "build:apk:dummy": "npm run prepare:dummy && cd spec/dummy && EXPO_PUBLIC_SYSTEM_TEST=true EXPO_PUBLIC_SYSTEM_TEST_HOST=10.0.2.2 npx expo prebuild --platform android --no-install --non-interactive && node ../../scripts/set-gradle-wrapper-network-timeout.mjs android/gradle/wrapper/gradle-wrapper.properties 60000 && cd android && SDK_ROOT=${ANDROID_SDK_ROOT:-/usr/lib/android-sdk} && echo \"sdk.dir=$SDK_ROOT\" > local.properties && EXPO_PUBLIC_SYSTEM_TEST=true EXPO_PUBLIC_SYSTEM_TEST_HOST=10.0.2.2 ANDROID_SDK_ROOT=$SDK_ROOT ANDROID_HOME=$SDK_ROOT ANDROID_SDK_HOME=/tmp/android-sdk-home GRADLE_USER_HOME=/tmp/gradle-home ./gradlew --no-daemon --stacktrace assembleRelease",
+    "build:apk:dummy": "npm run prepare:dummy && cd spec/dummy && EXPO_PUBLIC_SYSTEM_TEST=true EXPO_PUBLIC_SYSTEM_TEST_HOST=10.0.2.2 npx expo prebuild --platform android --no-install --non-interactive && node ../../scripts/set-gradle-wrapper-network-timeout.mjs android/gradle/wrapper/gradle-wrapper.properties 60000 && cd android && SDK_ROOT=${ANDROID_SDK_ROOT:-/usr/lib/android-sdk} && echo \"sdk.dir=$SDK_ROOT\" > local.properties && EXPO_PUBLIC_SYSTEM_TEST=true EXPO_PUBLIC_SYSTEM_TEST_HOST=10.0.2.2 ANDROID_SDK_ROOT=$SDK_ROOT ANDROID_HOME=$SDK_ROOT ANDROID_SDK_HOME=/tmp/android-sdk-home GRADLE_USER_HOME=/tmp/gradle-home HEARTBEAT_LABEL=\"Gradle assembleRelease\" node ../../../scripts/run-with-heartbeat.js ./gradlew --no-daemon --stacktrace assembleRelease",
     "export:web": "npm run prepare:dummy && npm --prefix spec/dummy run export:web",
     "lint": "npm run eslint && npm run typecheck",
     "prepublishOnly": "npm run build",
@@ -48,7 +60,6 @@
     "eslint": "eslint --max-warnings 0"
   },
   "dependencies": {
-    "appium": "3.5.0",
     "awaitery": "^1.0.12",
     "diggerize": "^1.0.9",
     "eventemitter3": "^5.0.1",
@@ -64,10 +75,14 @@
     "ya-use-event-emitter": "^0.1.2"
   },
   "peerDependencies": {
+    "appium": ">= 3.5.2",
     "react": ">= 18.3.0",
     "selenium-webdriver": ">= 4.34.0"
   },
   "peerDependenciesMeta": {
+    "appium": {
+      "optional": true
+    },
     "react": {
       "optional": true
     }
@@ -75,11 +90,12 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/jasmine": "^6.0.0",
-    "@types/node": "^25.0.2",
+    "@types/node": "^26.0.0",
     "@types/qs": "^6.14.0",
     "@types/react": "^19.2.7",
     "@types/selenium-webdriver": "^4.35.4",
-    "appium-chromium-driver": "^2.1.6",
+    "appium": "3.5.2",
+    "appium-chromium-driver": "^3.0.2",
     "appium-uiautomator2-driver": "^7.1.0",
     "eslint": "^10.1.0",
     "eslint-plugin-jsdoc": "^63.0.2",

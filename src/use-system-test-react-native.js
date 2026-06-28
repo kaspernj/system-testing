@@ -5,11 +5,11 @@ import useSystemTest from "./use-system-test.js"
  * Supply runtime-specific navigation callbacks.
  * @param {object} options
  * @param {import("./system-test-browser-helper.js").default} [options.browserHelper]
- * @param {(args: {path: string}) => void} [options.onDismissTo]
+ * @param {(args: {path: string}) => void | Promise<void>} [options.onDismissTo]
  * @param {function() : void} [options.onFirstInitialize]
  * @param {function() : void} [options.onInitialize]
  * @param {function() : void} [options.onTeardown]
- * @param {(args: {path: string}) => void} [options.onNavigate]
+ * @param {(args: {path: string}) => void | Promise<void>} [options.onNavigate]
  * @returns {{enabled: boolean, systemTestBrowserHelper: import("./system-test-browser-helper.js").default | null}}
  */
 export default function useSystemTestReactNative({browserHelper, onDismissTo, onFirstInitialize, onInitialize, onTeardown, onNavigate, ...restArgs} = {browserHelper: undefined, onDismissTo: undefined, onFirstInitialize: undefined, onInitialize: undefined, onTeardown: undefined, onNavigate: undefined}) {

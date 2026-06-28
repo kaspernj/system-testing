@@ -67,22 +67,28 @@ export default class UseSystemTestShapeHook extends ShapeHook {
     }, [systemTestBrowserHelper, this.p.onFirstInitialize, this.p.onInitialize, this.p.onTeardown])
   }
 
-  /** @param {...unknown} args */
+  /**
+   * @param {...unknown} args
+   * @returns {Promise<void> | void}
+   */
   onSystemTestBrowserHelperDismissTo = (...args) => {
     if (!this.p.enabled || !this.p.onDismissTo) {
       return
     }
 
-    this.p.onDismissTo({path: (/** @type {SystemTestBrowserHelperPathEvent} */ (args[0])).path})
+    return this.p.onDismissTo({path: (/** @type {SystemTestBrowserHelperPathEvent} */ (args[0])).path})
   }
 
-  /** @param {...unknown} args */
+  /**
+   * @param {...unknown} args
+   * @returns {Promise<void> | void}
+   */
   onSystemTestBrowserHelperNavigate = (...args) => {
     if (!this.p.enabled || !this.p.onNavigate) {
       return
     }
 
-    this.p.onNavigate({path: (/** @type {SystemTestBrowserHelperPathEvent} */ (args[0])).path})
+    return this.p.onNavigate({path: (/** @type {SystemTestBrowserHelperPathEvent} */ (args[0])).path})
   }
 }
 

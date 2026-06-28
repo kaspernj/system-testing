@@ -10,14 +10,29 @@ import timeout from "awaitery/build/timeout.js"
 import {ensureError} from "typanic"
 import {WebSocketServer} from "ws"
 import Browser from "./browser.js"
+import {isAppiumNativeAppDriverConfig} from "./drivers/appium-driver.js"
 
 const CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 30000
+const CLIENT_WEBSOCKET_SERVER_LISTEN_TIMEOUT_MS = 15000
 const INITIAL_ROOT_VISIT_RETRY_DELAY_MS = 100
 const NATIVE_CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 120000
 
-/** @returns {number} */
-export function defaultClientWebSocketConnectTimeout() {
-  return process.env.SYSTEM_TEST_HOST === "native" ? NATIVE_CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS : CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS
+/**
+ * Whether a system test runs against a native app rather than a web/dist browser.
+ * True for `SYSTEM_TEST_HOST=native` and for native Appium app sessions regardless of host.
+ * @param {SystemTestDriverConfig} [driver]
+ * @returns {boolean}
+ */
+export function isNativeAppSession(driver) {
+  return process.env.SYSTEM_TEST_HOST === "native" || isAppiumNativeAppDriverConfig(driver)
+}
+
+/**
+ * @param {{driver?: SystemTestDriverConfig}} [args]
+ * @returns {number}
+ */
+export function defaultClientWebSocketConnectTimeout({driver} = {}) {
+  return isNativeAppSession(driver) ? NATIVE_CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS : CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS
 }
 
 /**
@@ -49,7 +64,7 @@ export function defaultClientWebSocketConnectTimeout() {
  * @typedef {object} FindArgs
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
- * @property {"actions" | "human" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"human"` uses multiple pointer moves and pauses before clicking; `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context (skips WebDriver's pointer synthesis entirely — useful when the default click is dropped by a framework responder that refuses synthetic WebDriver pointer events).
+ * @property {"actions" | "human" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"human"` uses multiple pointer moves and pauses before clicking; `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context and is for diagnostics only, not committed stabilization fixes.
  * @property {number} [clickOffsetX] X offset for `actions`/`human` pointer clicks relative to the target element.
  * @property {number} [clickOffsetY] Y offset for `actions`/`human` pointer clicks relative to the target element.
  * @property {number} [humanStepDelay] Pause duration in ms between human pointer moves.
@@ -99,6 +114,8 @@ export default class SystemTest extends Browser {
   /** @type {Error[]} */
   _browserErrors = []
   _scoundrelPort = 8090
+  /** @type {number} */
+  _ignoredScoundrelClientCount = 0
   /** @type {WebSocketServer | undefined} */
   scoundrelWss = undefined
   /** @type {WebSocketServer | undefined} */
@@ -217,22 +234,10 @@ export default class SystemTest extends Browser {
     systemTest.debugLog("getRootPath")
     const rootPath = systemTest.getRootPath()
 
-    systemTest.debugLog(`Visit rootPath with dismissTo: ${rootPath}`)
-    await systemTest.dismissTo(rootPath)
-    systemTest.debugLog(`Dismissed to root path ${rootPath}`)
-
-    if (!systemTest.ws || systemTest.ws.readyState !== 1) {
-      systemTest.debugLog("WebSocket not connected after dismissTo, waiting for reconnection")
-      systemTest.ws = null
-      systemTest.getCommunicator().ws = null
-      await systemTest.waitForClientWebSocket()
-      systemTest.debugLog("Client websocket reconnected")
-    }
+    await systemTest.resetToRootPathForRun(rootPath)
 
     systemTest.debugLog("Run started - send initialize")
-    await timeout({timeout: 10_000, errorMessage: "Sending intialize to useSystemTest() timed out"}, async () => {
-      await systemTest.getCommunicator().sendCommand({type: "initialize"})
-    })
+    await systemTest.initializeBrowserContext()
 
     /** @type {unknown} */
     let runError = undefined
@@ -310,6 +315,86 @@ export default class SystemTest extends Browser {
   }
 
   /**
+   * Resets the app to the root test route before each run.
+   * @param {string} rootPath
+   * @returns {Promise<void>}
+   */
+  async resetToRootPathForRun(rootPath) {
+    this.debugLog(`Visit rootPath with dismissTo: ${rootPath}`)
+    await this.dismissTo(rootPath)
+    this.debugLog(`Dismissed to root path ${rootPath}`)
+
+    if (!this.ws || this.ws.readyState !== 1) {
+      this.debugLog("WebSocket not connected after dismissTo, waiting for reconnection")
+      this.ws = null
+      this.getCommunicator().ws = null
+      await this.waitForClientWebSocket()
+      this.debugLog("Client websocket reconnected")
+    }
+  }
+
+  /**
+   * Visits a path. Connected browser contexts navigate in-app to preserve local state; unavailable web bridges reload through the driver.
+   * @param {string} path
+   * @param {import("./browser.js").BrowserNavigationArgs} [args]
+   * @returns {Promise<void>}
+   */
+  async visit(path, args = {}) {
+    if (isNativeAppSession(this._driverConfig)) {
+      await super.visit(path, args)
+      return
+    }
+
+    const commandWebSocket = this.communicator?.ws
+    const canUseInAppNavigation = this.communicatorExists() && commandWebSocket?.readyState === 1
+
+    if (canUseInAppNavigation) {
+      await super.visit(this.buildSystemTestPath(path), args)
+      return
+    }
+
+    await timeout(
+      {timeout: this.getCommandTimeout(args.timeout), errorMessage: `timeout while visiting path: ${path}`},
+      async () => {
+        await this.visitPathWithDriverAndReconnect(path)
+        await this.initializeBrowserContext()
+      }
+    )
+  }
+
+  /** @returns {Promise<void>} */
+  async initializeBrowserContext() {
+    await timeout({timeout: 10_000, errorMessage: "Sending initialize to useSystemTest() timed out"}, async () => {
+      await this.getCommunicator().sendCommand({type: "initialize"})
+    })
+  }
+
+  /**
+   * Reloads a web route through the driver and waits for the browser command websocket.
+   * @param {string} path
+   * @returns {Promise<void>}
+   */
+  async visitPathWithDriverAndReconnect(path) {
+    this.ignoreExistingScoundrelClients()
+    this.ws = null
+    this.getCommunicator().ws = null
+    await this.driverVisit(this.buildSystemTestPath(path))
+    this.debugLog(`Driver visited path ${path}`)
+    await this.waitForClientWebSocket()
+    this.debugLog("Client websocket reconnected after driver navigation")
+  }
+
+  /** @returns {void} */
+  ignoreExistingScoundrelClients() {
+    if (!this.server) {
+      throw new Error("Scoundrel server is not started")
+    }
+
+    this._ignoredScoundrelClientCount = this.server.getClients().length
+    this.debugLog(`Ignoring ${this._ignoredScoundrelClientCount} Scoundrel client(s) from previous browser contexts`)
+  }
+
+  /**
    * Creates a new SystemTest instance
    * @param {SystemTestArgs} [args]
    */
@@ -325,7 +410,7 @@ export default class SystemTest extends Browser {
     this._host = host
     this._port = port
     this._clientWsPort = clientWsPort
-    this._clientWsConnectTimeout = clientWsConnectTimeout ?? defaultClientWebSocketConnectTimeout()
+    this._clientWsConnectTimeout = clientWsConnectTimeout ?? defaultClientWebSocketConnectTimeout({driver})
     this._httpHost = httpHost
     this._httpPort = httpPort
     this._httpConnectHost = httpConnectHost
@@ -390,14 +475,15 @@ export default class SystemTest extends Browser {
      */
     const isOpenClient = (client) => client?.backend?.ws?.readyState === 1
 
-    const existingClients = this.server.getClients?.()
-    const openExistingClients = existingClients?.filter(isOpenClient)
+    const existingClients = this.server.getClients()
+    const currentClients = existingClients.slice(this._ignoredScoundrelClientCount)
+    const openExistingClients = currentClients.filter(isOpenClient)
 
-    if (openExistingClients && openExistingClients.length > 0) {
+    if (openExistingClients.length > 0) {
       this.debugLog(`getScoundrelClient: using existing open client (${openExistingClients.length} available)`)
       return openExistingClients[openExistingClients.length - 1]
     }
-    this.debugLog(`getScoundrelClient: no open cached clients, waiting for new connection (cached total: ${existingClients?.length ?? 0})`)
+    this.debugLog(`getScoundrelClient: no open cached clients, waiting for new connection (cached total: ${existingClients.length}, ignored: ${this._ignoredScoundrelClientCount})`)
 
     if (!this.server.events?.on) {
       throw new Error("Scoundrel server events are unavailable")
@@ -682,9 +768,12 @@ export default class SystemTest extends Browser {
    */
   async start() {
     this.debugLog("Start called")
-    const isNativeHost = process.env.SYSTEM_TEST_HOST === "native"
+    // Native Appium app sessions launch an installed app instead of a web page, so they follow the
+    // native lifecycle (no dist HTTP server, no driver navigation, WebSocket started before the app)
+    // even when SYSTEM_TEST_HOST is "dist".
+    const isNativeApp = isNativeAppSession(this._driverConfig)
 
-    if (isNativeHost) {
+    if (isNativeApp) {
       this.currentUrl = "native://"
       this.debugLog("Using native app host")
     } else if (process.env.SYSTEM_TEST_HOST == "expo-dev-server") {
@@ -713,11 +802,11 @@ export default class SystemTest extends Browser {
 
     this.getDriverAdapter().setBaseUrl(this.currentUrl)
 
-    // Start the client WebSocket server before the driver for native hosts,
+    // Start the client WebSocket server before the driver for native app sessions,
     // because the native app launches immediately on driver start and its
     // useSystemTestExpo hook connects to the WebSocket as soon as it renders.
     // If the server isn't listening yet, the connection fails with no retry.
-    if (isNativeHost) {
+    if (isNativeApp) {
       this.debugLog("Starting WebSocket server (before driver for native)")
       await this.startWebSocketServer()
       this.debugLog("WebSocket server started")
@@ -730,14 +819,14 @@ export default class SystemTest extends Browser {
     await this.setTimeouts(10000)
     this.debugLog("Timeouts set on driver")
 
-    if (!isNativeHost) {
+    if (!isNativeApp) {
       // Web socket server to communicate with browser
       this.debugLog("Starting WebSocket server")
       await this.startWebSocketServer()
       this.debugLog("WebSocket server started")
     }
 
-    if (!isNativeHost) {
+    if (!isNativeApp) {
       // Visit the root page and wait for Expo to be loaded and the app to appear
       this.debugLog("Visiting root path")
       const rootPath = this.getRootPath()
@@ -781,7 +870,7 @@ export default class SystemTest extends Browser {
 
     this._started = true
     this.debugLog("Marked system test as started")
-    if (!isNativeHost) {
+    if (!isNativeApp) {
       this.debugLog("Setting base selector to focused systemTestingComponent")
       this.setBaseSelector("[data-testid='systemTestingComponent'][data-focussed='true']")
       this.debugLog("Base selector set")
@@ -835,7 +924,21 @@ export default class SystemTest extends Browser {
    * @returns {string}
    */
   buildRootPath() {
-    const url = new URL(SystemTest.rootPath, "http://localhost")
+    const rootPath = this.buildSystemTestPath(SystemTest.rootPath)
+
+    this.debugLog(`buildRootPath rootPath: ${rootPath}`)
+
+    return rootPath
+  }
+
+  /**
+   * Adds system-test query params to a path that will reload the web app.
+   * @param {string} path
+   * @returns {string}
+   */
+  buildSystemTestPath(path) {
+    const isAbsoluteUrl = /^[a-z]+:\/\//i.test(path)
+    const url = new URL(path, "http://localhost")
     const appendParam = (/** @type {string} */ key, /** @type {any} */ value) => {
       if (value === undefined || value === null) return
       url.searchParams.append(key, String(value))
@@ -853,6 +956,10 @@ export default class SystemTest extends Browser {
       }
     }
 
+    if (!url.searchParams.has("systemTest")) {
+      appendParam("systemTest", "true")
+    }
+
     if (!url.searchParams.has("systemTestClientWsPort") && this._clientWsPort !== 1985) {
       appendParam("systemTestClientWsPort", this._clientWsPort)
     }
@@ -861,11 +968,9 @@ export default class SystemTest extends Browser {
       appendParam("systemTestScoundrelPort", this._scoundrelPort)
     }
 
-    const rootPath =  `${url.pathname}${url.search}${url.hash}`
+    if (isAbsoluteUrl) return url.href
 
-    this.debugLog(`buildRootPath rootPath: ${rootPath}`)
-
-    return rootPath
+    return `${url.pathname}${url.search}${url.hash}`
   }
 
   /**
@@ -895,10 +1000,30 @@ export default class SystemTest extends Browser {
    * @returns {Promise<void>}
    */
   async startWebSocketServer() {
-    this.clientWss = new WebSocketServer({port: this._clientWsPort})
-    await new Promise((resolve) => {
-      /** @type {NonNullable<typeof this.clientWss>} */ (this.clientWss).once("listening", resolve)
-    })
+    const clientWss = new WebSocketServer({port: this._clientWsPort})
+
+    this.clientWss = clientWss
+
+    // Bind failures (for example EADDRINUSE from a leftover process holding the port)
+    // emit "error" rather than "listening". Reject on it and bound the wait so startup
+    // fails fast with a specific message instead of hanging until the suite timeout.
+    await timeout(
+      {timeout: CLIENT_WEBSOCKET_SERVER_LISTEN_TIMEOUT_MS, errorMessage: `timeout while starting client WebSocket server on port ${this._clientWsPort}`},
+      () => new Promise((resolve, reject) => {
+        const onListening = () => {
+          clientWss.off("error", onError)
+          resolve(undefined)
+        }
+        const onError = (/** @type {unknown} */ error) => {
+          clientWss.off("listening", onListening)
+          reject(error instanceof Error ? error : new Error(`client WebSocket server failed to start on port ${this._clientWsPort}: ${error}`))
+        }
+
+        clientWss.once("listening", onListening)
+        clientWss.once("error", onError)
+      })
+    )
+
     this.clientWss.on("connection", this.onWebSocketConnection)
     this.clientWss.on("close", this.onWebSocketClose)
     this.clientWss.on("error", (error) => {
@@ -1066,6 +1191,7 @@ export default class SystemTest extends Browser {
     this.scoundrelWss = undefined
     this.server = undefined
     this.serverWebSocket = undefined
+    this._ignoredScoundrelClientCount = 0
     this.systemTestHttpServer = undefined
     this._httpServerError = undefined
     this.waitForClientWebSocketPromiseReject = undefined
