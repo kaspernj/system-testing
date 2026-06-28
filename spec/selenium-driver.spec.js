@@ -86,6 +86,51 @@ describe("SeleniumDriver", () => {
     expect(configuredService instanceof chrome.ServiceBuilder).toBeTrue()
   })
 
+  it("launches a configured Chrome binary so the browser matches the pinned Chromedriver", async () => {
+    const {driver} = newDriver({chromedriverPath: process.execPath, chromeBinaryPath: "/opt/chrome-for-testing/chrome-linux64/chrome"})
+    let chromeBinary
+
+    try {
+      await withPatchedBuilder({
+        setChromeOptions(chromeOptions) {
+          chromeBinary = chromeOptions.get("goog:chromeOptions")?.binary
+
+          return this
+        },
+        async build() {
+          return {quit: async () => {}}
+        }
+      }, async () => {
+        await driver.start()
+      })
+    } finally {
+      driver._removeExitHandlers()
+    }
+
+    expect(chromeBinary).toEqual("/opt/chrome-for-testing/chrome-linux64/chrome")
+  })
+
+  it("requests the eager page load strategy so navigation does not block on the full load event", async () => {
+    const {driver} = newDriver({chromedriverPath: process.execPath})
+    let pageLoadStrategy
+
+    try {
+      await withPatchedBuilder({
+        async build() {
+          pageLoadStrategy = this.getCapabilities().get("pageLoadStrategy")
+
+          return {quit: async () => {}}
+        }
+      }, async () => {
+        await driver.start()
+      })
+    } finally {
+      driver._removeExitHandlers()
+    }
+
+    expect(pageLoadStrategy).toEqual("eager")
+  })
+
   it("uses an explicit Chromedriver service when a path is configured", async () => {
     const {driver, browser} = newDriver({chromedriverPath: process.execPath})
     const fakeWebDriver = {

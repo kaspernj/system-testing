@@ -113,4 +113,27 @@ describe("WebDriverDriver lifecycle", () => {
     ])
     expect(driver._driverTimeouts).toBe(10000)
   })
+
+  it("bounds the page load timeout when applying driver timeouts", async () => {
+    const calls = []
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver.setWebDriver(/** @type {any} */ ({
+      manage: () => ({
+        setTimeouts: async (options) => {
+          calls.push(options)
+        }
+      })
+    }))
+
+    await driver.driverSetTimeouts(10000)
+
+    expect(calls).toEqual([{implicit: 10000, pageLoad: 60000}])
+  })
 })
