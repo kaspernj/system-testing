@@ -3,6 +3,7 @@
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import {WebSocketServer} from "ws"
 import Browser from "../src/browser.js"
 import SystemTest from "../src/system-test.js"
 import SystemTestHttpServer from "../src/system-test-http-server.js"
@@ -221,6 +222,22 @@ describe("SystemTest root path", () => {
 
     expect(webVisit).toHaveBeenCalledOnceWith("/projects")
     expect(nativeVisit).not.toHaveBeenCalled()
+  })
+
+  it("fails fast instead of hanging when the client WebSocket port is already in use", async () => {
+    spyOn(SystemTest.prototype, "startScoundrel").and.callFake(() => {})
+    const blockedPort = 19987
+    const blocker = new WebSocketServer({port: blockedPort})
+
+    await new Promise((resolve) => blocker.once("listening", resolve))
+
+    try {
+      const systemTest = new SystemTest({clientWsPort: blockedPort})
+
+      await expectAsync(systemTest.startWebSocketServer()).toBeRejected()
+    } finally {
+      await new Promise((resolve) => blocker.close(resolve))
+    }
   })
 
   it("propagates custom websocket ports into the browser URL", () => {
