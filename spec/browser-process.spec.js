@@ -88,4 +88,11 @@ describe("BrowserProcess", () => {
     expect(entry.name).toEqual("spec-browser")
     expect(entry.port).toEqual(6543)
   })
+
+  it("records the bind host in the registry entry so custom binds stay reachable", () => {
+    const browserProcess = new BrowserProcess({browser: /** @type {any} */ ({}), host: "10.0.0.5", name: "spec-browser"})
+    browserProcess.port = 6543
+
+    expect(browserProcess.buildRegistryEntry().host).toEqual("10.0.0.5")
+  })
 })

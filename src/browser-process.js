@@ -182,6 +182,7 @@ export default class BrowserProcess {
   buildRegistryEntry() {
     return {
       baseUrl: this.baseUrl,
+      host: this.host,
       name: this.name,
       pid: process.pid,
       port: this.port,

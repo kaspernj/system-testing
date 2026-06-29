@@ -81,6 +81,7 @@ async function main(argv) {
     console.log(`Stopped ${stoppedEntry.name}\tpid=${stoppedEntry.pid}`)
   } else if (mainCommand === "browser-command") {
     const client = new BrowserCommandClient({
+      host: parsed.flags.host,
       name: parsed.flags.name,
       port: parsed.flags.port ? Number(parsed.flags.port) : undefined,
       token: resolveBrowserDaemonToken(parsed.flags)

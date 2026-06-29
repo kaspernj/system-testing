@@ -4,7 +4,7 @@ import path from "node:path"
 import wait from "awaitery/build/wait.js"
 import {WebSocket} from "ws"
 
-import {browserDaemonStopTimeoutMs, browserDaemonVerifyTimeoutMs} from "./browser-daemon-constants.js"
+import {browserDaemonStopTimeoutMs, browserDaemonVerifyTimeoutMs, resolveDaemonConnectHost} from "./browser-daemon-constants.js"
 
 const registryPath = path.join(os.tmpdir(), "system-testing-browser-registry.json")
 
@@ -131,7 +131,7 @@ export default class BrowserRegistry {
       return false
     }
 
-    const ws = new WebSocket(`ws://127.0.0.1:${entry.port}`)
+    const ws = new WebSocket(`ws://${resolveDaemonConnectHost(entry.host)}:${entry.port}`)
 
     return await new Promise((resolve) => {
       let settled = false

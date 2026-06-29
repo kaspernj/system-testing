@@ -35,6 +35,10 @@ describe("cli helpers", () => {
     it("returns undefined when neither the flag nor the environment variable is set", () => {
       expect(resolveBrowserDaemonToken({})).toBeUndefined()
     })
+
+    it("throws when --token is passed without a value instead of using the literal \"true\"", () => {
+      expect(() => resolveBrowserDaemonToken({token: true})).toThrowError("--token requires a value")
+    })
   })
 
   it("parses repeated flags into arrays", () => {
