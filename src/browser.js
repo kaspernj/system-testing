@@ -46,6 +46,15 @@ import {testIdSelector} from "./test-id-selector.js"
  * @typedef {object} BrowserTestIDInputArgs
  * @property {number} [timeout] Override timeout for the input lookup.
  */
+/**
+ * @typedef {object} BrowserStepEvent
+ * @property {string} name Step name.
+ * @property {string} path Full `parent > child` step path.
+ * @property {"running" | "passed" | "failed"} status Step outcome.
+ * @property {string} startedAt ISO timestamp when the step started.
+ * @property {string} [finishedAt] ISO timestamp when the step settled.
+ * @property {string} [error] Failure message when the step failed.
+ */
 
 /**
  * Extracts the RGB channels from CSS `rgb(...)`/`rgba(...)` values or an RGB fragment.
@@ -95,6 +104,12 @@ export default class Browser {
   _driverConfig = undefined
   /** @type {Error | undefined} */
   _httpServerError = undefined
+  /** @type {string[]} Names of the currently running (possibly nested) steps. */
+  _activeSteps = []
+  /** @type {BrowserStepEvent[]} Recorded step boundaries for trace/report layers. */
+  _stepHistory = []
+  /** @type {string | undefined} Path of the step that most recently failed in this run. */
+  _lastFailedStepPath = undefined
 
   /** @param {BrowserArgs} [args] */
   constructor({debug = false, driver, communicator, screenshotsPath = `${process.cwd()}/tmp/screenshots`, ...restArgs} = {}) {
@@ -727,8 +742,84 @@ export default class Browser {
   }
 
   /**
+   * Runs a callback as a named step. Records step boundaries for trace/report layers and,
+   * on failure, annotates the original error and failure artifacts with the active step
+   * path without changing the callback's return value or error type. Steps may be nested.
+   * @template T
+   * @param {string} name
+   * @param {() => Promise<T> | T} callback
+   * @returns {Promise<T>}
+   */
+  async step(name, callback) {
+    if (this._activeSteps.length === 0) {
+      this._lastFailedStepPath = undefined
+    }
+
+    const stepPath = [...this._activeSteps, name]
+    /** @type {BrowserStepEvent} */
+    const event = {name, path: stepPath.join(" > "), startedAt: new Date().toISOString(), status: "running"}
+
+    this._activeSteps.push(name)
+    this._stepHistory.push(event)
+    this.debugLog(`Step started: ${event.path}`)
+
+    try {
+      const result = await callback()
+
+      event.status = "passed"
+      event.finishedAt = new Date().toISOString()
+      this.debugLog(`Step passed: ${event.path}`)
+
+      return result
+    } catch (error) {
+      event.status = "failed"
+      event.finishedAt = new Date().toISOString()
+      event.error = error instanceof Error ? error.message : String(error)
+
+      throw this.annotateErrorWithStep(error, event.path)
+    } finally {
+      this._activeSteps.pop()
+    }
+  }
+
+  /**
+   * Adds step context to a thrown error once (the innermost failing step wins), preserving
+   * the original error instance and type.
+   * @param {unknown} error
+   * @param {string} stepPath
+   * @returns {unknown}
+   */
+  annotateErrorWithStep(error, stepPath) {
+    if (!(error instanceof Error) || /** @type {any} */ (error).systemTestStep) {
+      return error
+    }
+
+    /** @type {any} */ (error).systemTestStep = stepPath
+    error.message = `${error.message} (in step: ${stepPath})`
+    this._lastFailedStepPath = stepPath
+
+    return error
+  }
+
+  /**
+   * Path of the step currently running, or undefined when no step is active.
+   * @returns {string | undefined}
+   */
+  currentStepPath() {
+    return this._activeSteps.length > 0 ? this._activeSteps.join(" > ") : undefined
+  }
+
+  /**
+   * Recorded step boundaries, for trace/report layers.
+   * @returns {BrowserStepEvent[]}
+   */
+  getStepHistory() {
+    return this._stepHistory
+  }
+
+  /**
    * Takes a screenshot, writes HTML/browser logs to disk, and returns the collected artifacts.
-   * @returns {Promise<{currentUrl: string, html: string, htmlPath: string, logs: string[], logsPath: string, screenshotPath: string}>}
+   * @returns {Promise<{currentUrl: string, html: string, htmlPath: string, logs: string[], logsPath: string, screenshotPath: string, step: string | undefined}>}
    */
   async takeScreenshot() {
     this.debugLog("Getting path for screenshots")
@@ -759,8 +850,10 @@ export default class Browser {
     await fs.writeFile(screenshotPath, imageContent, "base64")
 
     const currentUrl = await this.getCurrentUrl()
+    const step = this.currentStepPath() ?? this._lastFailedStepPath
 
     console.log("Current URL:", currentUrl)
+    if (step) console.log("Active step:", step)
     console.log("Logs:", logsPath)
     console.log("Screenshot:", screenshotPath)
     console.log("HTML:", htmlPath)
@@ -771,7 +864,8 @@ export default class Browser {
       htmlPath,
       logs,
       logsPath,
-      screenshotPath
+      screenshotPath,
+      step
     }
   }
 
