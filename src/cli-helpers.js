@@ -1,3 +1,22 @@
+import {browserDaemonTokenEnvVar} from "./browser-daemon-constants.js"
+
+/**
+ * Resolves the optional browser daemon token from the CLI flag, falling back to the
+ * environment variable. Returns undefined when neither is set. Throws when `--token` is
+ * passed without a value so token auth never silently enables with the literal `"true"`.
+ * @param {Record<string, any>} flags
+ * @returns {string | undefined}
+ */
+export function resolveBrowserDaemonToken(flags) {
+  if (flags.token === true) {
+    throw new Error("--token requires a value")
+  }
+
+  const token = flags.token ?? process.env[browserDaemonTokenEnvVar]
+
+  return token ? String(token) : undefined
+}
+
 /**
  * @param {string[]} argv
  * @returns {{_: string[], flags: Record<string, any>}}

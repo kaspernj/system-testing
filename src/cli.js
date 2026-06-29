@@ -2,21 +2,25 @@
 
 import BrowserCommandClient from "./browser-command-client.js"
 import BrowserProcess from "./browser-process.js"
+import {browserDaemonTokenEnvVar} from "./browser-daemon-constants.js"
 import BrowserRegistry from "./browser-registry.js"
-import {parseArgv, resolveBrowserCommand} from "./cli-helpers.js"
+import {parseArgv, resolveBrowserCommand, resolveBrowserDaemonToken} from "./cli-helpers.js"
 
 /** @returns {void} */
 function printHelp() {
   console.log(`Usage:
-  system-testing browser <name> [--port 1991] [--base-url https://example.com]
+  system-testing browser <name> [--port 1991] [--base-url https://example.com] [--host 127.0.0.1] [--token SECRET]
   system-testing browser-list
   system-testing browser-stop [--name my-browser]
-  system-testing browser-command [--name my-browser] [--port 1991] --visit=https://example.com
+  system-testing browser-command [--name my-browser] [--port 1991] [--token SECRET] --visit=https://example.com
   system-testing browser-command [--name my-browser] --find-by-test-id someID [--timeout 15]
   system-testing browser-command [--name my-browser] --take-screenshot
   system-testing browser-command [--name my-browser] --click selector [--method human] [--click-offset-x 32] [--click-offset-y 28] [--human-steps 5] [--human-step-delay 75]
   system-testing browser-command [--name my-browser] --command=executeScript --script='return document.title' [--arg ...]
   system-testing browser-command [--name my-browser] --command=addCookie --cookie-name=auth --cookie-value=... [--cookie-domain=127.0.0.1] [--cookie-path=/]
+
+The browser daemon binds to 127.0.0.1 by default. Override with --host only when remote access is intended.
+Set a shared token with --token or the ${browserDaemonTokenEnvVar} environment variable to require it on every command.
 `)
 }
 
@@ -46,8 +50,10 @@ async function main(argv) {
         driver: parsed.flags.driver ? {type: parsed.flags.driver} : undefined
       },
       debug: parsed.flags.debug === true || parsed.flags.debug === "true",
+      host: parsed.flags.host,
       name,
-      port: parsed.flags.port ? Number(parsed.flags.port) : 0
+      port: parsed.flags.port ? Number(parsed.flags.port) : 0,
+      token: resolveBrowserDaemonToken(parsed.flags)
     })
 
     await browserProcess.start()
@@ -75,8 +81,10 @@ async function main(argv) {
     console.log(`Stopped ${stoppedEntry.name}\tpid=${stoppedEntry.pid}`)
   } else if (mainCommand === "browser-command") {
     const client = new BrowserCommandClient({
+      host: parsed.flags.host,
       name: parsed.flags.name,
-      port: parsed.flags.port ? Number(parsed.flags.port) : undefined
+      port: parsed.flags.port ? Number(parsed.flags.port) : undefined,
+      token: resolveBrowserDaemonToken(parsed.flags)
     })
     const {args, command} = resolveBrowserCommand(parsed.flags)
     const result = await client.send({args, command, type: "browser-command"})

@@ -223,8 +223,27 @@ Optional arguments:
 - `--base-url https://example.com`: set the browser base URL so relative `visit` paths work
 - `--driver selenium|appium`: choose the driver type
 - `--debug`: enable browser debug logging
+- `--host 127.0.0.1`: bind host. Defaults to `127.0.0.1` (loopback), so the daemon is only reachable by local processes. Only set this if you intend to expose it.
+- `--token SECRET`: require a shared token on every command (see below)
 
 The process stays running until you stop it. On start it prints JSON with at least the browser `name`, `pid`, and `port`.
+
+#### Local-only by default and the optional command token
+
+The daemon exposes powerful commands (`executeScript`, `addCookie`, ...), so it binds to `127.0.0.1`
+by default and is not reachable from other hosts. Override that only deliberately with `--host`.
+
+For extra protection you can require a shared token. Set it on the daemon and on each command with
+`--token`, or via the `SYSTEM_TEST_BROWSER_TOKEN` environment variable:
+
+```bash
+SYSTEM_TEST_BROWSER_TOKEN=secret npx system-testing browser my-browser
+SYSTEM_TEST_BROWSER_TOKEN=secret npx system-testing browser-command --name my-browser --visit=https://example.com
+```
+
+When a token is configured, browser commands without the matching token are rejected
+(`{"ok": false, "error": "Browser daemon command rejected: invalid or missing token"}`). The token is
+never written to the registry file or printed in logs. When no token is set, commands work as before.
 
 List running browser daemons:
 
