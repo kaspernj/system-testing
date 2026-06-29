@@ -37,6 +37,7 @@ function createSystemTestRunDouble() {
     ignoreExistingScoundrelClients: SystemTest.prototype.ignoreExistingScoundrelClients,
     initializeBrowserContext: SystemTest.prototype.initializeBrowserContext,
     reinitialize: jasmine.createSpy("reinitialize").and.resolveTo(undefined),
+    resetSteps: jasmine.createSpy("resetSteps"),
     resetToRootPathForRun: SystemTest.prototype.resetToRootPathForRun,
     sendBrowserCommand: SystemTest.prototype.sendBrowserCommand,
     server: {
@@ -95,6 +96,7 @@ describe("SystemTest.run", () => {
     expect(systemTest.driverVisit).not.toHaveBeenCalled()
     expect(systemTest.waitForClientWebSocket).not.toHaveBeenCalled()
     expect(systemTest._ignoredScoundrelClientCount).toEqual(0)
+    expect(systemTest.resetSteps).toHaveBeenCalled()
   })
 
   it("waits for websocket reconnection after in-app run reset closes the current websocket", async () => {

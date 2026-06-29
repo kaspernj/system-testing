@@ -94,6 +94,35 @@ describe("Browser.step", () => {
     expect(browser.getStepHistory()[1].path).toEqual("outer > inner")
   })
 
+  it("passes non-Error rejections through unchanged while recording the failed step", async () => {
+    const browser = new Browser()
+    let thrown
+
+    try {
+      await browser.step("visit", async () => {
+        throw "communicator failure"
+      })
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toEqual("communicator failure")
+    expect(browser.getStepHistory()[0].status).toEqual("failed")
+  })
+
+  it("resets step history and failure state", async () => {
+    const browser = new Browser()
+
+    await browser.step("a", async () => {})
+
+    expect(browser.getStepHistory().length).toEqual(1)
+
+    browser.resetSteps()
+
+    expect(browser.getStepHistory()).toEqual([])
+    expect(browser.currentStepPath()).toBeUndefined()
+  })
+
   describe("failure artifacts", () => {
     /** @type {string} */
     let screenshotsPath
@@ -133,8 +162,38 @@ describe("Browser.step", () => {
       expect(artifacts.step).toEqual("checkout")
     })
 
+    it("records the failed step in artifacts for non-Error rejections", async () => {
+      const browser = stubbedBrowser(screenshotsPath)
+
+      try {
+        await browser.step("visit", async () => {
+          throw "communicator failure"
+        })
+      } catch {
+        // Expected.
+      }
+
+      expect((await browser.takeScreenshot()).step).toEqual("visit")
+    })
+
     it("omits the step from artifacts when no step ran", async () => {
       const browser = stubbedBrowser(screenshotsPath)
+
+      expect((await browser.takeScreenshot()).step).toBeUndefined()
+    })
+
+    it("clears the last failed step after resetSteps", async () => {
+      const browser = stubbedBrowser(screenshotsPath)
+
+      try {
+        await browser.step("checkout", async () => {
+          throw new Error("x")
+        })
+      } catch {
+        // Expected.
+      }
+
+      browser.resetSteps()
 
       expect((await browser.takeScreenshot()).step).toBeUndefined()
     })

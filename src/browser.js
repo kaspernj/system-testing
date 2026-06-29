@@ -776,6 +776,13 @@ export default class Browser {
       event.finishedAt = new Date().toISOString()
       event.error = error instanceof Error ? error.message : String(error)
 
+      // The innermost failing step runs this catch first, so the first assignment (after the
+      // top-level reset) keeps the deepest path. This also covers non-Error rejections (e.g.
+      // helper-driven visit/dismissTo failures), which cannot carry the step on the value.
+      if (this._lastFailedStepPath === undefined) {
+        this._lastFailedStepPath = event.path
+      }
+
       throw this.annotateErrorWithStep(error, event.path)
     } finally {
       this._activeSteps.pop()
@@ -796,7 +803,6 @@ export default class Browser {
 
     /** @type {any} */ (error).systemTestStep = stepPath
     error.message = `${error.message} (in step: ${stepPath})`
-    this._lastFailedStepPath = stepPath
 
     return error
   }
@@ -815,6 +821,17 @@ export default class Browser {
    */
   getStepHistory() {
     return this._stepHistory
+  }
+
+  /**
+   * Clears step history and active-step state. Called at the start of each `SystemTest.run`
+   * example so reused browser instances do not carry steps across examples.
+   * @returns {void}
+   */
+  resetSteps() {
+    this._activeSteps = []
+    this._stepHistory = []
+    this._lastFailedStepPath = undefined
   }
 
   /**
