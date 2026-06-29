@@ -97,7 +97,6 @@ export default class SystemTestBrowserHelper {
 
     this.scoundrelWs = new WebSocket(`ws://${host}:${scoundrelPort}`)
 
-    // @ts-expect-error
     this.scoundrelClientWebSocket = new ClientWebSocket(this.scoundrelWs)
 
     await this.scoundrelClientWebSocket.waitForOpened()
