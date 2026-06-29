@@ -1,6 +1,6 @@
 import Browser from "./browser.js"
 import BrowserCommandRunner from "./browser-command-runner.js"
-import {browserDaemonStopTimeoutMs} from "./browser-daemon-constants.js"
+import {browserDaemonDefaultHost, browserDaemonStopTimeoutMs} from "./browser-daemon-constants.js"
 import BrowserRegistry from "./browser-registry.js"
 import {WebSocketServer} from "ws"
 
@@ -14,8 +14,10 @@ export default class BrowserProcess {
    * @param {string} [args.baseUrl]
    * @param {boolean} [args.debug]
    * @param {number} [args.port]
+   * @param {string} [args.host] Bind host. Defaults to loopback so the daemon is local-only.
+   * @param {string} [args.token] Optional shared token required for browser commands.
    */
-  constructor({name, browser, browserArgs = {}, baseUrl, debug = false, port = 0}) {
+  constructor({name, browser, browserArgs = {}, baseUrl, debug = false, port = 0, host = browserDaemonDefaultHost, token}) {
     this.name = name
     this.browser = browser ?? new Browser({debug, ...browserArgs})
     this.baseUrl = baseUrl
@@ -23,6 +25,8 @@ export default class BrowserProcess {
     this.requestRunner = new BrowserCommandRunner({browser: this.browser})
     this.requestCount = 0
     this.port = port
+    this.host = host
+    this.token = token || undefined
   }
 
   /** @returns {Promise<void>} */
@@ -38,7 +42,7 @@ export default class BrowserProcess {
     await this.browser.getDriverAdapter().start()
     await this.browser.setTimeouts(browserDaemonStopTimeoutMs)
 
-    this.wss = new WebSocketServer({port: this.port})
+    this.wss = new WebSocketServer({host: this.host, port: this.port})
     await new Promise((resolve) => {
       /** @type {NonNullable<typeof this.wss>} */ (this.wss).once("listening", resolve)
     })
@@ -52,13 +56,7 @@ export default class BrowserProcess {
     this.port = address.port
     this.wss.on("connection", this.onConnection)
 
-    await BrowserRegistry.register({
-      baseUrl: this.baseUrl,
-      name: this.name,
-      pid: process.pid,
-      port: this.port,
-      startedAt: new Date().toISOString()
-    })
+    await BrowserRegistry.register(this.buildRegistryEntry())
 
     const stop = async () => {
       await this.stop()
@@ -136,6 +134,8 @@ export default class BrowserProcess {
       throw new Error(`Unknown payload type: ${payload.type}`)
     }
 
+    this.assertAuthorized(payload)
+
     const command = payload.command
     const commandArgs = payload.args ? {...payload.args} : {}
 
@@ -156,5 +156,36 @@ export default class BrowserProcess {
     }
 
     return await this.requestRunner.run(command, commandArgs)
+  }
+
+  /**
+   * Rejects browser commands that do not present the configured token. No-op when no
+   * token is configured, preserving simple local workflows.
+   * @param {Record<string, any>} payload
+   * @returns {void}
+   */
+  assertAuthorized(payload) {
+    if (!this.token) {
+      return
+    }
+
+    if (payload.token !== this.token) {
+      throw new Error("Browser daemon command rejected: invalid or missing token")
+    }
+  }
+
+  /**
+   * Builds the registry entry for this daemon. Deliberately excludes the token so the
+   * shared secret is never written to the on-disk registry.
+   * @returns {Record<string, any>}
+   */
+  buildRegistryEntry() {
+    return {
+      baseUrl: this.baseUrl,
+      name: this.name,
+      pid: process.pid,
+      port: this.port,
+      startedAt: new Date().toISOString()
+    }
   }
 }

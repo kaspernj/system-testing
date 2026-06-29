@@ -1,8 +1,42 @@
 // @ts-check
 
-import {parseArgv, resolveBrowserCommand} from "../src/cli-helpers.js"
+import {parseArgv, resolveBrowserCommand, resolveBrowserDaemonToken} from "../src/cli-helpers.js"
 
 describe("cli helpers", () => {
+  describe("resolveBrowserDaemonToken", () => {
+    /** @type {string | undefined} */
+    let previousToken
+
+    beforeEach(() => {
+      previousToken = process.env.SYSTEM_TEST_BROWSER_TOKEN
+      delete process.env.SYSTEM_TEST_BROWSER_TOKEN
+    })
+
+    afterEach(() => {
+      if (previousToken === undefined) {
+        delete process.env.SYSTEM_TEST_BROWSER_TOKEN
+      } else {
+        process.env.SYSTEM_TEST_BROWSER_TOKEN = previousToken
+      }
+    })
+
+    it("prefers the flag over the environment variable", () => {
+      process.env.SYSTEM_TEST_BROWSER_TOKEN = "env-token"
+
+      expect(resolveBrowserDaemonToken({token: "flag-token"})).toEqual("flag-token")
+    })
+
+    it("falls back to the environment variable", () => {
+      process.env.SYSTEM_TEST_BROWSER_TOKEN = "env-token"
+
+      expect(resolveBrowserDaemonToken({})).toEqual("env-token")
+    })
+
+    it("returns undefined when neither the flag nor the environment variable is set", () => {
+      expect(resolveBrowserDaemonToken({})).toBeUndefined()
+    })
+  })
+
   it("parses repeated flags into arrays", () => {
     const parsed = parseArgv(["browser-command", "--command=interact", "--arg", "one", "--arg", "two"])
 
