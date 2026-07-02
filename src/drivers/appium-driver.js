@@ -3,7 +3,7 @@ import path from "node:path"
 import {Builder, By} from "selenium-webdriver"
 import {Command, Name} from "selenium-webdriver/lib/command.js"
 import {Origin} from "selenium-webdriver/lib/input.js"
-import {wait} from "awaitery"
+import {wait, waitFor} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
 import WebDriverDriver from "./webdriver-driver.js"
 import {testIdSelector} from "../test-id-selector.js"
@@ -183,19 +183,6 @@ function nativeTestIDTextSelectors(testId, expectedText) {
     combineAndroidSelectors(resourceSelector, androidDescriptionContainsSelector(expectedText)),
     childAndroidSelector(resourceSelector, androidTextContainsSelector(expectedText)),
     childAndroidSelector(resourceSelector, androidDescriptionContainsSelector(expectedText))
-  ]
-}
-
-/**
- * Builds native Android scroll selectors for a scoped text assertion.
- * @param {string} testId Stable test id.
- * @param {string} expectedText Text that must appear on that element.
- * @returns {string[]} UiAutomator selectors.
- */
-function nativeTestIDTextScrollSelectors(testId, expectedText) {
-  return [
-    ...nativeTestIDTextSelectors(testId, expectedText),
-    androidResourceIdSelector(testId)
   ]
 }
 
@@ -798,6 +785,8 @@ export default class AppiumDriver extends WebDriverDriver {
       return
     }
 
+    const {scrollContainerTestIDs = [], scrollTo = true, timeout: waitTimeout = this.getTimeouts()} = args
+    const ownerSelector = androidResourceIdSelector(testId)
     const selectors = nativeTestIDTextSelectors(testId, expectedText)
     const scopedTextXpath = androidScopedTextXpath(testId, expectedText)
     const directFind = async () => {
@@ -820,11 +809,27 @@ export default class AppiumDriver extends WebDriverDriver {
     }
 
     await this.withNativeImplicitWait(0, async () => {
-      await this.findNativeControlWithScrolling({
-        description: `id ${testId} with text ${expectedText}`,
-        directFind,
-        scrollSelectors: nativeTestIDTextScrollSelectors(testId, expectedText)
-      }, {...args, scrollTo: args.scrollTo ?? true})
+      try {
+        await directFind()
+        return
+      } catch (error) {
+        if (!isNativeControlLookupMiss(error)) throw error
+      }
+
+      if (scrollTo) {
+        try {
+          await this.scrollNativeUiSelectorIntoView(ownerSelector, scrollContainerTestIDs)
+        } catch (error) {
+          void error
+        }
+      }
+
+      if (waitTimeout === 0) {
+        await directFind()
+        return
+      }
+
+      await waitFor({timeout: waitTimeout}, directFind)
     })
   }
 

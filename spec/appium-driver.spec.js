@@ -260,6 +260,54 @@ describe("AppiumDriver", () => {
     expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
   })
 
+  it("scrolls native text waits by owner id instead of text selectors", async () => {
+    const element = {getId: async () => "native-test-id-text-element"}
+    const testId = "accountShowScreen/name/value"
+    const ownerSelector = androidResourceIdSelector(testId)
+    const childTextSelector = `${ownerSelector}.childSelector(${androidTextContainsSelector("Show Test Account")})`
+    const driver = new AppiumDriver({
+      browser: {
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      },
+      options: {
+        capabilities: {
+          platformName: "Android"
+        }
+      }
+    })
+    let childTextLookups = 0
+    const setTimeouts = jasmine.createSpy("setTimeouts").and.resolveTo()
+    const findElements = jasmine.createSpy("findElements").and.callFake(async (locator) => {
+      if (locator.value === childTextSelector) {
+        childTextLookups += 1
+
+        return childTextLookups > 1 ? [element] : []
+      }
+
+      if (locator.value?.includes("scrollIntoView(") && locator.value.includes("Show Test Account")) {
+        throw new Error(`Text-specific native scroll was attempted: ${locator.value}`)
+      }
+
+      return []
+    })
+
+    driver.setWebDriver(/** @type {import("selenium-webdriver").WebDriver} */ ({
+      findElements,
+      manage: () => ({
+        getTimeouts: async () => ({implicit: 5000}),
+        setTimeouts
+      })
+    }))
+
+    await expectAsync(driver.waitForTestIDText(testId, "Show Test Account", {timeout: 1000})).toBeResolved()
+    expect(findElements.calls.allArgs().some(([locator]) => (
+      locator.value === `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(${ownerSelector})`
+    ))).toBeTrue()
+    expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
+  })
+
   it("scrolls native id lookups with caller-provided scroll containers", async () => {
     const element = {getId: async () => "native-id-element"}
     const targetSelector = androidResourceIdSelector("projectShowScreen/editButton")
