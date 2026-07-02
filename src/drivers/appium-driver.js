@@ -801,6 +801,12 @@ export default class AppiumDriver extends WebDriverDriver {
     const selectors = nativeTestIDTextSelectors(testId, expectedText)
     const scopedTextXpath = androidScopedTextXpath(testId, expectedText)
     const directFind = async () => {
+      const scopedTextElements = await this.getWebDriver().findElements(By.xpath(scopedTextXpath))
+      if (scopedTextElements.length > 1) {
+        throw new Error(`More than 1 elements (${scopedTextElements.length}) were found by id ${testId} with text ${expectedText}`)
+      }
+      if (scopedTextElements[0]) return scopedTextElements[0]
+
       for (const selector of selectors) {
         const elements = await this.getWebDriver().findElements(new By("-android uiautomator", selector))
 
@@ -809,9 +815,6 @@ export default class AppiumDriver extends WebDriverDriver {
         }
         if (elements[0]) return elements[0]
       }
-
-      const scopedTextElements = await this.getWebDriver().findElements(By.xpath(scopedTextXpath))
-      if (scopedTextElements[0]) return scopedTextElements[0]
 
       throw new Error(`Element couldn't be found by id ${testId} with text ${expectedText}`)
     }

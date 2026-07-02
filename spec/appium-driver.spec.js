@@ -225,6 +225,41 @@ describe("AppiumDriver", () => {
     expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
   })
 
+  it("tries scoped xpath before native text selectors for text under a test id", async () => {
+    const element = {getId: async () => "native-test-id-text-element"}
+    const driver = new AppiumDriver({
+      browser: {
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      },
+      options: {
+        capabilities: {
+          platformName: "Android"
+        }
+      }
+    })
+    const setTimeouts = jasmine.createSpy("setTimeouts").and.resolveTo()
+    const findElements = jasmine.createSpy("findElements").and.callFake(async (locator) => {
+      if (locator.using === "xpath" && locator.value.includes("accountShowScreen/name/value")) return [element]
+
+      throw new Error(`Unexpected locator before scoped xpath: ${locator.using} ${locator.value}`)
+    })
+
+    driver.setWebDriver(/** @type {import("selenium-webdriver").WebDriver} */ ({
+      findElements,
+      manage: () => ({
+        getTimeouts: async () => ({implicit: 5000}),
+        setTimeouts
+      })
+    }))
+
+    await expectAsync(driver.waitForTestIDText("accountShowScreen/name/value", "Show Test Account", {timeout: 0})).toBeResolved()
+    expect(findElements.calls.count()).toEqual(1)
+    expect(findElements.calls.first().args[0].using).toEqual("xpath")
+    expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
+  })
+
   it("scrolls native id lookups with caller-provided scroll containers", async () => {
     const element = {getId: async () => "native-id-element"}
     const targetSelector = androidResourceIdSelector("projectShowScreen/editButton")

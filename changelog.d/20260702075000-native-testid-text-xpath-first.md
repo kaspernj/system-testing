@@ -1,0 +1,1 @@
+- Prefer the scoped XPath lookup before UiAutomator text selectors for native Appium test-id text assertions, avoiding timeout exhaustion when React Native exposes the text on a descendant node.
