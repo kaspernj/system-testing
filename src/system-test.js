@@ -225,6 +225,7 @@ export default class SystemTest extends Browser {
     }
 
     systemTest._browserErrors = []
+    systemTest.resetSteps()
     systemTest.applyArgs({failOnBrowserError: true, failOnConsoleError: false, ...systemTestArgs})
 
     systemTest.debugLog("Resetting browser cookies before initialize")

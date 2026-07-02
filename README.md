@@ -114,6 +114,30 @@ describe("Sign in page", () => {
 })
 ```
 
+### Named steps
+
+Group related commands into named steps with `systemTest.step(name, callback)` to make failures easier to read. The callback runs unchanged and its return value is passed through; on failure the original error is preserved and annotated with the active step path, and the step is recorded for trace/report tooling. Steps may be nested.
+
+```js
+await SystemTest.run(async (systemTest) => {
+  await systemTest.step("sign in", async () => {
+    await systemTest.visit("/sign-in")
+    await systemTest.interact("[data-testid='signInEmailInput']", "sendKeys", "user@example.com")
+    await systemTest.click("[data-testid='signInSubmitButton']")
+    await systemTest.expectNotificationMessage("You were signed in.")
+  })
+
+  await systemTest.step("create project", async () => {
+    // ...
+  })
+})
+```
+
+If a command inside a step fails, the thrown error's message gains `(in step: sign in)` and an
+`error.systemTestStep` property, and the failure screenshot/artifacts record the step. The recorded
+boundaries are available via `systemTest.getStepHistory()` (and `systemTest.currentStepPath()` for the
+active step) for future HTML trace reports.
+
 ### Driver selection
 
 SystemTest uses Selenium by default. To use Appium instead, pass a driver config when creating the instance.
