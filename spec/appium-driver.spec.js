@@ -225,8 +225,10 @@ describe("AppiumDriver", () => {
     expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
   })
 
-  it("tries scoped xpath before native text selectors for text under a test id", async () => {
+  it("prefers bounded native text selectors before scoped xpath for text under a test id", async () => {
     const element = {getId: async () => "native-test-id-text-element"}
+    const siblingElement = {getId: async () => "longer-native-test-id-text-element"}
+    const childTextSelector = `${androidResourceIdSelector("accountShowScreen/name/value")}.childSelector(${androidTextContainsSelector("Show Test Account")})`
     const driver = new AppiumDriver({
       browser: {
         driver: undefined,
@@ -241,9 +243,10 @@ describe("AppiumDriver", () => {
     })
     const setTimeouts = jasmine.createSpy("setTimeouts").and.resolveTo()
     const findElements = jasmine.createSpy("findElements").and.callFake(async (locator) => {
-      if (locator.using === "xpath" && locator.value.includes("accountShowScreen/name/value")) return [element]
+      if (locator.value === childTextSelector) return [element]
+      if (locator.using === "xpath" && locator.value.includes("accountShowScreen/name/value")) return [element, siblingElement]
 
-      throw new Error(`Unexpected locator before scoped xpath: ${locator.using} ${locator.value}`)
+      return []
     })
 
     driver.setWebDriver(/** @type {import("selenium-webdriver").WebDriver} */ ({
@@ -255,8 +258,8 @@ describe("AppiumDriver", () => {
     }))
 
     await expectAsync(driver.waitForTestIDText("accountShowScreen/name/value", "Show Test Account", {timeout: 0})).toBeResolved()
-    expect(findElements.calls.count()).toEqual(1)
-    expect(findElements.calls.first().args[0].using).toEqual("xpath")
+    expect(findElements.calls.allArgs().map(([locator]) => locator.value)).toContain(childTextSelector)
+    expect(findElements.calls.allArgs().some(([locator]) => locator.using === "xpath")).toBeFalse()
     expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
   })
 
