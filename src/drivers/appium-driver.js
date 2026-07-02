@@ -3,7 +3,7 @@ import path from "node:path"
 import {Builder, By} from "selenium-webdriver"
 import {Command, Name} from "selenium-webdriver/lib/command.js"
 import {Origin} from "selenium-webdriver/lib/input.js"
-import {wait, waitFor} from "awaitery"
+import {wait} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
 import WebDriverDriver from "./webdriver-driver.js"
 import {testIdSelector} from "../test-id-selector.js"
@@ -809,27 +809,16 @@ export default class AppiumDriver extends WebDriverDriver {
     }
 
     await this.withNativeImplicitWait(0, async () => {
-      try {
-        await directFind()
-        return
-      } catch (error) {
-        if (!isNativeControlLookupMiss(error)) throw error
-      }
-
-      if (scrollTo) {
-        try {
-          await this.scrollNativeUiSelectorIntoView(ownerSelector, scrollContainerTestIDs)
-        } catch (error) {
-          void error
-        }
-      }
-
-      if (waitTimeout === 0) {
-        await directFind()
-        return
-      }
-
-      await waitFor({timeout: waitTimeout}, directFind)
+      await this.findNativeControlWithScrolling({
+        description: `id ${testId} with text ${expectedText}`,
+        directFind,
+        scrollSelectors: [ownerSelector]
+      }, {
+        ...args,
+        scrollContainerTestIDs,
+        scrollTo,
+        timeout: waitTimeout
+      })
     })
   }
 

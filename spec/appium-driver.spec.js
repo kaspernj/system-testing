@@ -281,12 +281,13 @@ describe("AppiumDriver", () => {
       }
     })
     let childTextLookups = 0
+    let downScrolls = 0
     const setTimeouts = jasmine.createSpy("setTimeouts").and.resolveTo()
     const findElements = jasmine.createSpy("findElements").and.callFake(async (locator) => {
       if (locator.value === childTextSelector) {
         childTextLookups += 1
 
-        return childTextLookups > 1 ? [element] : []
+        return downScrolls > 0 ? [element] : []
       }
 
       if (locator.value?.includes("scrollIntoView(") && locator.value.includes("Show Test Account")) {
@@ -297,10 +298,19 @@ describe("AppiumDriver", () => {
     })
 
     driver.setWebDriver(/** @type {import("selenium-webdriver").WebDriver} */ ({
+      executeScript: jasmine.createSpy("executeScript").and.callFake(async (script, args) => {
+        if (script !== "mobile: scrollGesture") return undefined
+        if (args.direction === "down") downScrolls += 1
+
+        return true
+      }),
       findElements,
       manage: () => ({
         getTimeouts: async () => ({implicit: 5000}),
-        setTimeouts
+        setTimeouts,
+        window: () => ({
+          getRect: async () => ({x: 0, y: 0, width: 400, height: 800})
+        })
       })
     }))
 
@@ -308,6 +318,8 @@ describe("AppiumDriver", () => {
     expect(findElements.calls.allArgs().some(([locator]) => (
       locator.value === `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(${ownerSelector})`
     ))).toBeTrue()
+    expect(downScrolls).toBeGreaterThan(0)
+    expect(childTextLookups).toBeGreaterThan(1)
     expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
   })
 
