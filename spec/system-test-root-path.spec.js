@@ -273,6 +273,27 @@ describe("SystemTest root path", () => {
     expect(url.searchParams.getAll("systemTestClientWsPort")).toEqual(["7001"])
     expect(url.searchParams.getAll("systemTestScoundrelPort")).toEqual(["7002"])
   })
+
+  it("does not duplicate explicit URL args that are already present in a visited path", () => {
+    spyOn(SystemTest.prototype, "startScoundrel").and.callFake(() => {})
+
+    const systemTest = new SystemTest({
+      urlArgs: {
+        backendHost: "127.0.0.1",
+        backendPort: "4282",
+        backendProtocol: "http",
+        systemTest: "true"
+      }
+    })
+
+    const path = systemTest.buildSystemTestPath("/projects?backendHost=127.0.0.1&backendPort=4282&backendProtocol=http&systemTest=true")
+    const url = new URL(path, "http://localhost")
+
+    expect(url.searchParams.getAll("backendHost")).toEqual(["127.0.0.1"])
+    expect(url.searchParams.getAll("backendPort")).toEqual(["4282"])
+    expect(url.searchParams.getAll("backendProtocol")).toEqual(["http"])
+    expect(url.searchParams.getAll("systemTest")).toEqual(["true"])
+  })
   it("ignores the known Chrome password-field DOM warning in live browser errors", () => {
     spyOn(SystemTest.prototype, "startScoundrel").and.callFake(() => {})
 
