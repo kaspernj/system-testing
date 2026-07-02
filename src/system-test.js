@@ -939,6 +939,10 @@ export default class SystemTest extends Browser {
   buildSystemTestPath(path) {
     const isAbsoluteUrl = /^[a-z]+:\/\//i.test(path)
     const url = new URL(path, "http://localhost")
+    const setParam = (/** @type {string} */ key, /** @type {any} */ value) => {
+      if (value === undefined || value === null) return
+      url.searchParams.set(key, String(value))
+    }
     const appendParam = (/** @type {string} */ key, /** @type {any} */ value) => {
       if (value === undefined || value === null) return
       url.searchParams.append(key, String(value))
@@ -947,11 +951,11 @@ export default class SystemTest extends Browser {
     if (this._urlArgs) {
       if (this._urlArgs instanceof URLSearchParams) {
         for (const [key, value] of this._urlArgs) {
-          appendParam(key, value)
+          setParam(key, value)
         }
       } else {
         for (const [key, value] of Object.entries(this._urlArgs)) {
-          appendParam(key, value)
+          setParam(key, value)
         }
       }
     }
