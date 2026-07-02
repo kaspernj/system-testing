@@ -263,6 +263,45 @@ describe("AppiumDriver", () => {
     expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
   })
 
+  it("falls back to owner element text when native scoped text selectors miss", async () => {
+    const testId = "accountShowScreen/name/value"
+    const ownerSelector = androidResourceIdSelector(testId)
+    const element = {
+      getId: async () => "native-owner-text-element",
+      getText: async () => "Show Test Account"
+    }
+    const driver = new AppiumDriver({
+      browser: {
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      },
+      options: {
+        capabilities: {
+          platformName: "Android"
+        }
+      }
+    })
+    const setTimeouts = jasmine.createSpy("setTimeouts").and.resolveTo()
+    const findElements = jasmine.createSpy("findElements").and.callFake(async (locator) => {
+      if (locator.value === ownerSelector) return [element]
+
+      return []
+    })
+
+    driver.setWebDriver(/** @type {import("selenium-webdriver").WebDriver} */ ({
+      findElements,
+      manage: () => ({
+        getTimeouts: async () => ({implicit: 5000}),
+        setTimeouts
+      })
+    }))
+
+    await expectAsync(driver.waitForTestIDText(testId, "Show Test Account", {timeout: 0})).toBeResolved()
+    expect(findElements.calls.allArgs().map(([locator]) => locator.value)).toContain(ownerSelector)
+    expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
+  })
+
   it("scrolls native text waits by owner id instead of text selectors", async () => {
     const element = {getId: async () => "native-test-id-text-element"}
     const testId = "accountShowScreen/name/value"

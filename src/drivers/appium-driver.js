@@ -805,6 +805,16 @@ export default class AppiumDriver extends WebDriverDriver {
       }
       if (scopedTextElements[0]) return scopedTextElements[0]
 
+      const ownerElements = await this.getWebDriver().findElements(new By("-android uiautomator", ownerSelector))
+      if (ownerElements.length > 1) {
+        throw new Error(`More than 1 elements (${ownerElements.length}) were found by id ${testId}`)
+      }
+      if (ownerElements[0]) {
+        const actualText = await ownerElements[0].getText()
+
+        if (actualText.includes(expectedText)) return ownerElements[0]
+      }
+
       throw new Error(`Element couldn't be found by id ${testId} with text ${expectedText}`)
     }
 
