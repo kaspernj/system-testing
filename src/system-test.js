@@ -14,6 +14,7 @@ import {isAppiumNativeAppDriverConfig} from "./drivers/appium-driver.js"
 
 const CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 30000
 const CLIENT_WEBSOCKET_SERVER_LISTEN_TIMEOUT_MS = 15000
+const DEFAULT_INITIAL_ROOT_VISIT_TIMEOUT_MS = 60000
 const INITIAL_ROOT_VISIT_RETRY_DELAY_MS = 100
 const NATIVE_CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 120000
 
@@ -48,6 +49,7 @@ export function defaultClientWebSocketConnectTimeout({driver} = {}) {
  * @property {boolean} [failOnConsoleError] Treat browser console.error calls as registered browser errors.
  * @property {number} [clientWsPort] Port for the browser-command WebSocket server.
  * @property {number} [clientWsConnectTimeout] Timeout for the browser-command WebSocket client connection.
+ * @property {number} [initialRootVisitTimeout] Timeout for retrying the first browser route visit.
  * @property {number} [scoundrelPort] Port for the Scoundrel WebSocket server.
  * @property {Record<string, any>} [urlArgs] Query params appended to the root path.
  * @property {SystemTestDriverConfig} [driver] Driver configuration.
@@ -105,6 +107,7 @@ export default class SystemTest extends Browser {
   _started = false
   _clientWsPort = 1985
   _clientWsConnectTimeout = CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS
+  _initialRootVisitTimeout = DEFAULT_INITIAL_ROOT_VISIT_TIMEOUT_MS
   _httpHost = "localhost"
   _httpPort = 1984
   _failOnBrowserError = true
@@ -399,7 +402,7 @@ export default class SystemTest extends Browser {
    * Creates a new SystemTest instance
    * @param {SystemTestArgs} [args]
    */
-  constructor({clientWsPort = 1985, clientWsConnectTimeout, host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, httpConnectHost, debug = false, errorFilter, failOnBrowserError = true, failOnConsoleError = false, scoundrelPort = 8090, urlArgs, driver, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
+  constructor({clientWsPort = 1985, clientWsConnectTimeout, initialRootVisitTimeout = DEFAULT_INITIAL_ROOT_VISIT_TIMEOUT_MS, host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, httpConnectHost, debug = false, errorFilter, failOnBrowserError = true, failOnConsoleError = false, scoundrelPort = 8090, urlArgs, driver, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
     super({debug, driver})
 
     const restArgsKeys = Object.keys(restArgs)
@@ -412,6 +415,7 @@ export default class SystemTest extends Browser {
     this._port = port
     this._clientWsPort = clientWsPort
     this._clientWsConnectTimeout = clientWsConnectTimeout ?? defaultClientWebSocketConnectTimeout({driver})
+    this._initialRootVisitTimeout = initialRootVisitTimeout
     this._httpHost = httpHost
     this._httpPort = httpPort
     this._httpConnectHost = httpConnectHost
@@ -885,7 +889,7 @@ export default class SystemTest extends Browser {
    * @returns {Promise<void>}
    */
   async visitInitialRootPath(rootPath) {
-    const deadline = Date.now() + this.getTimeouts()
+    const deadline = Date.now() + this._initialRootVisitTimeout
 
     while (true) {
       try {

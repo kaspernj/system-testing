@@ -138,6 +138,48 @@ describe("SystemTest root path", () => {
     ])
   })
 
+  it("does not bound initial root path network retries by the normal driver command timeout", async () => {
+    process.env.SYSTEM_TEST_HOST = "dist"
+    const adapter = {
+      getTimeouts: () => 1,
+      setBaseUrl: jasmine.createSpy("setBaseUrl"),
+      setTimeouts: jasmine.createSpy("setTimeouts").and.resolveTo(undefined),
+      start: jasmine.createSpy("start").and.resolveTo(undefined)
+    }
+    const visitAttempts = []
+
+    spyOn(SystemTestHttpServer.prototype, "start").and.resolveTo(undefined)
+    spyOn(SystemTestHttpServer.prototype, "assertReachable").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "getDriverAdapter").and.returnValue(/** @type {any} */ (adapter))
+    spyOn(SystemTest.prototype, "startScoundrel").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "startWebSocketServer").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "waitForClientWebSocket").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "find").and.resolveTo(/** @type {any} */ ({}))
+    spyOn(SystemTest.prototype, "findByTestID").and.resolveTo(/** @type {any} */ ({}))
+    spyOn(SystemTest.prototype, "driverVisit").and.callFake((path) => {
+      visitAttempts.push(path)
+
+      if (visitAttempts.length < 3) {
+        return Promise.reject("unknown error: net::ERR_ADDRESS_UNREACHABLE")
+      }
+
+      return Promise.resolve()
+    })
+
+    await new SystemTest({
+      httpConnectHost: "10.0.2.2",
+      httpHost: "0.0.0.0",
+      httpPort: 1984,
+      initialRootVisitTimeout: 350
+    }).start()
+
+    expect(visitAttempts).toEqual([
+      "/blank?systemTest=true",
+      "/blank?systemTest=true",
+      "/blank?systemTest=true"
+    ])
+  })
+
   it("starts the client WebSocket before launching native Appium sessions even when serving dist", async () => {
     process.env.SYSTEM_TEST_HOST = "dist"
     const startupCalls = []

@@ -263,6 +263,100 @@ describe("AppiumDriver", () => {
     expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
   })
 
+  it("falls back to owner element text when native scoped text selectors miss", async () => {
+    const testId = "accountShowScreen/name/value"
+    const ownerSelector = androidResourceIdSelector(testId)
+    const element = {
+      getId: async () => "native-owner-text-element",
+      getText: async () => "Show Test Account"
+    }
+    const driver = new AppiumDriver({
+      browser: {
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      },
+      options: {
+        capabilities: {
+          platformName: "Android"
+        }
+      }
+    })
+    const setTimeouts = jasmine.createSpy("setTimeouts").and.resolveTo()
+    const findElements = jasmine.createSpy("findElements").and.callFake(async (locator) => {
+      if (locator.value === ownerSelector) return [element]
+
+      return []
+    })
+
+    driver.setWebDriver(/** @type {import("selenium-webdriver").WebDriver} */ ({
+      findElements,
+      manage: () => ({
+        getTimeouts: async () => ({implicit: 5000}),
+        setTimeouts
+      })
+    }))
+
+    await expectAsync(driver.waitForTestIDText(testId, "Show Test Account", {timeout: 0})).toBeResolved()
+    expect(findElements.calls.allArgs().map(([locator]) => locator.value)).toContain(ownerSelector)
+    expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
+  })
+
+  it("polls visible native text owners without viewport scanning while text is pending", async () => {
+    const testId = "accountShowScreen/name/value"
+    const ownerSelector = androidResourceIdSelector(testId)
+    const childTextSelector = `${ownerSelector}.childSelector(${androidTextContainsSelector("Show Test Account")})`
+    const element = {getId: async () => "native-test-id-text-element"}
+    const ownerElement = {
+      getId: async () => "native-owner-text-element",
+      getText: async () => "Loading account"
+    }
+    const driver = new AppiumDriver({
+      browser: {
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      },
+      options: {
+        capabilities: {
+          platformName: "Android"
+        }
+      }
+    })
+    let childTextLookups = 0
+    const setTimeouts = jasmine.createSpy("setTimeouts").and.resolveTo()
+    const executeScript = jasmine.createSpy("executeScript").and.rejectWith(new Error("Native viewport scan was attempted"))
+    const findElements = jasmine.createSpy("findElements").and.callFake(async (locator) => {
+      if (locator.value === childTextSelector) {
+        childTextLookups += 1
+
+        return childTextLookups > 2 ? [element] : []
+      }
+
+      if (locator.value === ownerSelector) return [ownerElement]
+      if (locator.value?.includes("scrollIntoView(")) throw new Error(`Native UiScrollable was attempted: ${locator.value}`)
+
+      return []
+    })
+
+    driver.setWebDriver(/** @type {import("selenium-webdriver").WebDriver} */ ({
+      executeScript,
+      findElements,
+      manage: () => ({
+        getTimeouts: async () => ({implicit: 5000}),
+        setTimeouts,
+        window: () => ({
+          getRect: async () => ({x: 0, y: 0, width: 400, height: 800})
+        })
+      })
+    }))
+
+    await expectAsync(driver.waitForTestIDText(testId, "Show Test Account", {timeout: 200})).toBeResolved()
+    expect(executeScript).not.toHaveBeenCalled()
+    expect(childTextLookups).toBeGreaterThan(2)
+    expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
+  })
+
   it("scrolls native text waits by owner id instead of text selectors", async () => {
     const element = {getId: async () => "native-test-id-text-element"}
     const testId = "accountShowScreen/name/value"
@@ -281,12 +375,13 @@ describe("AppiumDriver", () => {
       }
     })
     let childTextLookups = 0
+    let downScrolls = 0
     const setTimeouts = jasmine.createSpy("setTimeouts").and.resolveTo()
     const findElements = jasmine.createSpy("findElements").and.callFake(async (locator) => {
       if (locator.value === childTextSelector) {
         childTextLookups += 1
 
-        return childTextLookups > 1 ? [element] : []
+        return downScrolls > 0 ? [element] : []
       }
 
       if (locator.value?.includes("scrollIntoView(") && locator.value.includes("Show Test Account")) {
@@ -297,10 +392,19 @@ describe("AppiumDriver", () => {
     })
 
     driver.setWebDriver(/** @type {import("selenium-webdriver").WebDriver} */ ({
+      executeScript: jasmine.createSpy("executeScript").and.callFake(async (script, args) => {
+        if (script !== "mobile: scrollGesture") return undefined
+        if (args.direction === "down") downScrolls += 1
+
+        return true
+      }),
       findElements,
       manage: () => ({
         getTimeouts: async () => ({implicit: 5000}),
-        setTimeouts
+        setTimeouts,
+        window: () => ({
+          getRect: async () => ({x: 0, y: 0, width: 400, height: 800})
+        })
       })
     }))
 
@@ -308,6 +412,8 @@ describe("AppiumDriver", () => {
     expect(findElements.calls.allArgs().some(([locator]) => (
       locator.value === `new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(${ownerSelector})`
     ))).toBeTrue()
+    expect(downScrolls).toBeGreaterThan(0)
+    expect(childTextLookups).toBeGreaterThan(1)
     expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
   })
 

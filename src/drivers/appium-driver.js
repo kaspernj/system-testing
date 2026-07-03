@@ -789,6 +789,15 @@ export default class AppiumDriver extends WebDriverDriver {
     const ownerSelector = androidResourceIdSelector(testId)
     const selectors = nativeTestIDTextSelectors(testId, expectedText)
     const scopedTextXpath = androidScopedTextXpath(testId, expectedText)
+    const findOwner = async () => {
+      const ownerElements = await this.getWebDriver().findElements(new By("-android uiautomator", ownerSelector))
+      if (ownerElements.length > 1) {
+        throw new Error(`More than 1 elements (${ownerElements.length}) were found by id ${testId}`)
+      }
+      if (ownerElements[0]) return ownerElements[0]
+
+      throw new Error(`Element couldn't be found by id ${testId}`)
+    }
     const directFind = async () => {
       for (const selector of selectors) {
         const elements = await this.getWebDriver().findElements(new By("-android uiautomator", selector))
@@ -805,7 +814,11 @@ export default class AppiumDriver extends WebDriverDriver {
       }
       if (scopedTextElements[0]) return scopedTextElements[0]
 
-      throw new Error(`Element couldn't be found by id ${testId} with text ${expectedText}`)
+      const ownerElement = await findOwner()
+      const actualText = await ownerElement.getText()
+      if (actualText.includes(expectedText)) return ownerElement
+
+      throw new Error(`Timed out waiting for text ${expectedText}. Last text was ${actualText}`)
     }
 
     await this.withNativeImplicitWait(0, async () => {
@@ -813,14 +826,28 @@ export default class AppiumDriver extends WebDriverDriver {
         await directFind()
         return
       } catch (error) {
-        if (!isNativeControlLookupMiss(error)) throw error
+        if (!isNativeControlLookupMiss(error)) {
+          if (waitTimeout === 0) throw error
+
+          await waitFor({timeout: waitTimeout}, directFind)
+          return
+        }
       }
 
       if (scrollTo) {
         try {
-          await this.scrollNativeUiSelectorIntoView(ownerSelector, scrollContainerTestIDs)
+          await this.findNativeControlWithScrolling({
+            description: `id ${testId}`,
+            directFind: findOwner,
+            scrollSelectors: [ownerSelector]
+          }, {
+            ...args,
+            scrollContainerTestIDs,
+            scrollTo,
+            timeout: 0
+          })
         } catch (error) {
-          void error
+          if (!isNativeControlLookupMiss(error)) throw error
         }
       }
 
