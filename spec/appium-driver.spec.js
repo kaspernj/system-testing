@@ -302,6 +302,61 @@ describe("AppiumDriver", () => {
     expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
   })
 
+  it("polls visible native text owners without viewport scanning while text is pending", async () => {
+    const testId = "accountShowScreen/name/value"
+    const ownerSelector = androidResourceIdSelector(testId)
+    const childTextSelector = `${ownerSelector}.childSelector(${androidTextContainsSelector("Show Test Account")})`
+    const element = {getId: async () => "native-test-id-text-element"}
+    const ownerElement = {
+      getId: async () => "native-owner-text-element",
+      getText: async () => "Loading account"
+    }
+    const driver = new AppiumDriver({
+      browser: {
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      },
+      options: {
+        capabilities: {
+          platformName: "Android"
+        }
+      }
+    })
+    let childTextLookups = 0
+    const setTimeouts = jasmine.createSpy("setTimeouts").and.resolveTo()
+    const executeScript = jasmine.createSpy("executeScript").and.rejectWith(new Error("Native viewport scan was attempted"))
+    const findElements = jasmine.createSpy("findElements").and.callFake(async (locator) => {
+      if (locator.value === childTextSelector) {
+        childTextLookups += 1
+
+        return childTextLookups > 2 ? [element] : []
+      }
+
+      if (locator.value === ownerSelector) return [ownerElement]
+      if (locator.value?.includes("scrollIntoView(")) throw new Error(`Native UiScrollable was attempted: ${locator.value}`)
+
+      return []
+    })
+
+    driver.setWebDriver(/** @type {import("selenium-webdriver").WebDriver} */ ({
+      executeScript,
+      findElements,
+      manage: () => ({
+        getTimeouts: async () => ({implicit: 5000}),
+        setTimeouts,
+        window: () => ({
+          getRect: async () => ({x: 0, y: 0, width: 400, height: 800})
+        })
+      })
+    }))
+
+    await expectAsync(driver.waitForTestIDText(testId, "Show Test Account", {timeout: 200})).toBeResolved()
+    expect(executeScript).not.toHaveBeenCalled()
+    expect(childTextLookups).toBeGreaterThan(2)
+    expect(setTimeouts.calls.allArgs()).toEqual([[{implicit: 0}], [{implicit: 5000}]])
+  })
+
   it("scrolls native text waits by owner id instead of text selectors", async () => {
     const element = {getId: async () => "native-test-id-text-element"}
     const testId = "accountShowScreen/name/value"
