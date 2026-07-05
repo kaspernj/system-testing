@@ -521,6 +521,9 @@ export default class Browser {
 
     if (typeof currentValue != "string" || currentValue.length === 0) return currentValue
 
+    // BACK_SPACE deletes the character before the caret wherever the caret is, so one press
+    // per character of the full value deletes everything before the caret (at most
+    // `currentValue.length` characters can be before it; surplus presses no-op at position 0).
     for (let characterIndex = 0; characterIndex < currentValue.length; characterIndex++) {
       await this.interact(elementOrIdentifier, "sendKeys", Key.BACK_SPACE)
     }
@@ -529,6 +532,10 @@ export default class Browser {
 
     if (typeof valueAfterBackspaces != "string" || valueAfterBackspaces.length === 0) return valueAfterBackspaces
 
+    // After the backspace pass exhausted everything before the caret, the caret is at
+    // position 0 and the remaining value is exactly the text that was after it. DELETE
+    // deletes the character after the caret, so one press per remaining character empties
+    // the field. The caller re-reads the returned value to verify.
     for (let characterIndex = 0; characterIndex < valueAfterBackspaces.length; characterIndex++) {
       await this.interact(elementOrIdentifier, "sendKeys", Key.DELETE)
     }
