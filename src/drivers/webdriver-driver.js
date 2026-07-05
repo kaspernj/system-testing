@@ -111,6 +111,7 @@ function shouldIgnoreBrowserLogEntry(entry, message) {
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
  * @property {"actions" | "human" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"human"` uses multiple pointer moves and pauses before clicking; `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context and is for diagnostics only, not committed stabilization fixes.
+ * @property {boolean} [checkInterception] Hit-test `actions`/`human` pointer clicks first and fail like `element.click()` when another element would receive the click, instead of silently clicking whatever is painted on top.
  * @property {number} [clickOffsetX] X offset for `actions`/`human` pointer clicks relative to the target element.
  * @property {number} [clickOffsetY] Y offset for `actions`/`human` pointer clicks relative to the target element.
  * @property {number} [humanStepDelay] Pause duration in ms between human pointer moves.
@@ -128,6 +129,11 @@ function shouldIgnoreBrowserLogEntry(entry, message) {
  */
 
 class ElementNotFoundError extends Error { }
+
+// Named like Selenium's own error so the shared retry/rethrow handling in `click`/`interact`
+// treats pointer-action obstruction failures exactly like `element.click()` interception errors.
+class ElementClickInterceptedError extends Error { }
+
 const {WebDriverError} = SeleniumError
 
 /**
@@ -346,6 +352,30 @@ export default class WebDriverDriver {
    */
   pageLoadTimeoutMs() {
     return DEFAULT_PAGE_LOAD_TIMEOUT_MS
+  }
+
+  /**
+   * Runs a callback with the driver page-load timeout temporarily lowered, restoring the
+   * default afterwards. Used to bound individual navigation attempts that have their own
+   * outer retry budget, so one hung navigation cannot consume the whole budget. Skipped
+   * for sessions without a page-load timeout (native Appium contexts).
+   * @template T
+   * @param {number} pageLoadTimeoutMs
+   * @param {() => Promise<T>} callback
+   * @returns {Promise<T>}
+   */
+  async withPageLoadTimeout(pageLoadTimeoutMs, callback) {
+    const defaultPageLoadTimeout = this.pageLoadTimeoutMs()
+
+    if (defaultPageLoadTimeout === undefined) return await callback()
+
+    await this.getWebDriver().manage().setTimeouts({pageLoad: pageLoadTimeoutMs})
+
+    try {
+      return await callback()
+    } finally {
+      await this.getWebDriver().manage().setTimeouts({pageLoad: defaultPageLoadTimeout})
+    }
   }
 
   /**
@@ -725,7 +755,7 @@ export default class WebDriverDriver {
    * @returns {Promise<void>}
    */
   async click(elementOrIdentifier, args) {
-    const {clickOffsetX, clickOffsetY, humanStepDelay, humanSteps, method, scrollTo = false, ...findArgs} = args || {}
+    const {checkInterception = false, clickOffsetX, clickOffsetY, humanStepDelay, humanSteps, method, scrollTo = false, ...findArgs} = args || {}
     const clickArgs = {clickOffsetX, clickOffsetY, humanStepDelay, humanSteps}
     let tries = 0
 
@@ -747,8 +777,10 @@ export default class WebDriverDriver {
             moveArgs = {origin: element, x: clickOffsetX ?? 0, y: clickOffsetY ?? 0}
           }
 
+          if (checkInterception) await this.throwOnObstructedClickTarget(element, clickOffsetX, clickOffsetY)
           await this.getWebDriver().actions({async: true}).move(moveArgs).click().perform()
         } else if (method === "human") {
+          if (checkInterception) await this.throwOnObstructedClickTarget(element, clickOffsetX, clickOffsetY)
           await this.humanClick(element, clickArgs)
         } else if (method === "js") {
           await this.getWebDriver().executeScript("arguments[0].click()", element)
@@ -807,6 +839,70 @@ export default class WebDriverDriver {
       .pause(humanStepDelay)
       .click()
       .perform()
+  }
+
+  /**
+   * Mirrors the WebDriver element-click interception check for pointer-action clicks.
+   * `element.click()` refuses to click when another element would receive the click, but
+   * Actions API clicks dispatch pointer events at coordinates and silently hit whatever
+   * is painted on top. This opt-in pre-check (`checkInterception: true`) makes `actions`/
+   * `human` clicks fail loudly (and retryably, through the shared interception handling)
+   * instead of silently dropping the press on an overlay.
+   * @param {import("selenium-webdriver").WebElement} element
+   * @param {number} [clickOffsetX]
+   * @param {number} [clickOffsetY]
+   * @returns {Promise<void>}
+   */
+  async throwOnObstructedClickTarget(element, clickOffsetX, clickOffsetY) {
+    const obstruction = await this.findPointerClickObstruction(element, clickOffsetX ?? 0, clickOffsetY ?? 0)
+
+    if (obstruction) {
+      throw new ElementClickInterceptedError(`Another element would receive the click at (${obstruction.x}, ${obstruction.y}): ${obstruction.description}`)
+    }
+  }
+
+  /**
+   * Hit-tests the pointer click point and returns the element that would intercept the
+   * click when it is neither the target nor one of its descendants, matching
+   * `element.click()` interception semantics (`pointer-events: none` elements are
+   * transparent to the hit-test, descendants of the target are fine).
+   * @param {import("selenium-webdriver").WebElement} element
+   * @param {number} clickOffsetX
+   * @param {number} clickOffsetY
+   * @returns {Promise<{description: string, x: number, y: number} | null>}
+   */
+  async findPointerClickObstruction(element, clickOffsetX, clickOffsetY) {
+    return await this.getWebDriver().executeScript(`
+      const element = arguments[0]
+      const offsetX = arguments[1]
+      const offsetY = arguments[2]
+      const rect = element.getBoundingClientRect()
+      const visibleLeft = Math.max(rect.left, 0)
+      const visibleRight = Math.min(rect.right, window.innerWidth)
+      const visibleTop = Math.max(rect.top, 0)
+      const visibleBottom = Math.min(rect.bottom, window.innerHeight)
+
+      // Outside the viewport there is nothing to hit-test; the pointer action itself
+      // reports a move-target-out-of-bounds error in that case.
+      if (visibleRight <= visibleLeft || visibleBottom <= visibleTop) return null
+
+      const clickX = ((visibleLeft + visibleRight) / 2) + offsetX
+      const clickY = ((visibleTop + visibleBottom) / 2) + offsetY
+      const hitElement = document.elementFromPoint(clickX, clickY)
+
+      if (!hitElement || hitElement === element || element.contains(hitElement)) return null
+
+      const descriptionParts = [hitElement.tagName.toLowerCase()]
+
+      if (hitElement.id) descriptionParts.push("#" + hitElement.id)
+
+      const testId = hitElement.getAttribute("data-testid")
+
+      if (testId) descriptionParts.push("[data-testid='" + testId + "']")
+      if (typeof hitElement.className == "string" && hitElement.className.trim().length > 0) descriptionParts.push("." + hitElement.className.trim().split(/\\s+/).join("."))
+
+      return {description: descriptionParts.join(""), x: clickX, y: clickY}
+    `, element, clickOffsetX, clickOffsetY)
   }
 
   /**
@@ -978,6 +1074,7 @@ export default class WebDriverDriver {
         delete sanitizedFindArgs.selector
         delete sanitizedFindArgs.method
         delete sanitizedFindArgs.withFallback
+        delete sanitizedFindArgs.checkInterception
         findArgs = sanitizedFindArgs
       }
 
@@ -996,6 +1093,7 @@ export default class WebDriverDriver {
           if (isWebDriverElement(element)) {
             /** @type {FindArgs} */
             const clickArgs = {}
+            if (interactArgs?.checkInterception !== undefined) clickArgs.checkInterception = interactArgs.checkInterception
             if (interactArgs?.method !== undefined) clickArgs.method = interactArgs.method
             if (interactArgs?.scrollTo !== undefined) clickArgs.scrollTo = interactArgs.scrollTo
 

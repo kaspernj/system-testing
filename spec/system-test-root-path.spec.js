@@ -104,7 +104,8 @@ describe("SystemTest root path", () => {
       getTimeouts: () => 100,
       setBaseUrl: jasmine.createSpy("setBaseUrl"),
       setTimeouts: jasmine.createSpy("setTimeouts").and.resolveTo(undefined),
-      start: jasmine.createSpy("start").and.resolveTo(undefined)
+      start: jasmine.createSpy("start").and.resolveTo(undefined),
+      withPageLoadTimeout: jasmine.createSpy("withPageLoadTimeout").and.callFake(async (_pageLoadTimeoutMs, callback) => await callback())
     }
     const visitAttempts = []
 
@@ -144,7 +145,8 @@ describe("SystemTest root path", () => {
       getTimeouts: () => 1,
       setBaseUrl: jasmine.createSpy("setBaseUrl"),
       setTimeouts: jasmine.createSpy("setTimeouts").and.resolveTo(undefined),
-      start: jasmine.createSpy("start").and.resolveTo(undefined)
+      start: jasmine.createSpy("start").and.resolveTo(undefined),
+      withPageLoadTimeout: jasmine.createSpy("withPageLoadTimeout").and.callFake(async (_pageLoadTimeoutMs, callback) => await callback())
     }
     const visitAttempts = []
 
@@ -178,6 +180,86 @@ describe("SystemTest root path", () => {
       "/blank?systemTest=true",
       "/blank?systemTest=true"
     ])
+  })
+
+  it("retries the initial root path visit when the browser renderer times out and warns about it", async () => {
+    process.env.SYSTEM_TEST_HOST = "dist"
+    const adapter = {
+      getTimeouts: () => 100,
+      setBaseUrl: jasmine.createSpy("setBaseUrl"),
+      setTimeouts: jasmine.createSpy("setTimeouts").and.resolveTo(undefined),
+      start: jasmine.createSpy("start").and.resolveTo(undefined),
+      withPageLoadTimeout: jasmine.createSpy("withPageLoadTimeout").and.callFake(async (_pageLoadTimeoutMs, callback) => await callback())
+    }
+    const onWarning = jasmine.createSpy("onWarning")
+    const visitAttempts = []
+
+    spyOn(SystemTestHttpServer.prototype, "start").and.resolveTo(undefined)
+    spyOn(SystemTestHttpServer.prototype, "assertReachable").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "getDriverAdapter").and.returnValue(/** @type {any} */ (adapter))
+    spyOn(SystemTest.prototype, "startScoundrel").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "startWebSocketServer").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "waitForClientWebSocket").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "find").and.resolveTo(/** @type {any} */ ({}))
+    spyOn(SystemTest.prototype, "findByTestID").and.resolveTo(/** @type {any} */ ({}))
+    spyOn(SystemTest.prototype, "driverVisit").and.callFake((path) => {
+      visitAttempts.push(path)
+
+      if (visitAttempts.length === 1) {
+        return Promise.reject(new Error("timeout: Timed out receiving message from renderer: -0.004"))
+      }
+
+      return Promise.resolve()
+    })
+
+    await new SystemTest({
+      httpConnectHost: "10.0.2.2",
+      httpHost: "0.0.0.0",
+      httpPort: 1984,
+      onWarning
+    }).start()
+
+    expect(visitAttempts).toEqual([
+      "/blank?systemTest=true",
+      "/blank?systemTest=true"
+    ])
+    expect(onWarning).toHaveBeenCalledTimes(1)
+    expect(onWarning.calls.argsFor(0)[0]).toContain("Timed out receiving message from renderer")
+    expect(onWarning.calls.argsFor(0)[0]).toContain("retrying")
+
+    // Each attempt must be bounded well below the overall retry budget: with the default
+    // 60s page-load timeout, one hung navigation would consume the whole 60s budget and
+    // make the renderer-timeout retry unreachable (which is exactly what happened on CI).
+    expect(adapter.withPageLoadTimeout.calls.count()).toBe(2)
+    expect(adapter.withPageLoadTimeout.calls.argsFor(0)[0]).toBe(20000)
+  })
+
+  it("still throws the renderer timeout when the initial visit budget is exhausted", async () => {
+    process.env.SYSTEM_TEST_HOST = "dist"
+    const adapter = {
+      getTimeouts: () => 100,
+      setBaseUrl: jasmine.createSpy("setBaseUrl"),
+      setTimeouts: jasmine.createSpy("setTimeouts").and.resolveTo(undefined),
+      start: jasmine.createSpy("start").and.resolveTo(undefined),
+      withPageLoadTimeout: jasmine.createSpy("withPageLoadTimeout").and.callFake(async (_pageLoadTimeoutMs, callback) => await callback())
+    }
+
+    spyOn(SystemTestHttpServer.prototype, "start").and.resolveTo(undefined)
+    spyOn(SystemTestHttpServer.prototype, "assertReachable").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "getDriverAdapter").and.returnValue(/** @type {any} */ (adapter))
+    spyOn(SystemTest.prototype, "startScoundrel").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "startWebSocketServer").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "waitForClientWebSocket").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "find").and.resolveTo(/** @type {any} */ ({}))
+    spyOn(SystemTest.prototype, "findByTestID").and.resolveTo(/** @type {any} */ ({}))
+    spyOn(SystemTest.prototype, "driverVisit").and.rejectWith(new Error("timeout: Timed out receiving message from renderer: -0.004"))
+
+    await expectAsync(new SystemTest({
+      httpConnectHost: "10.0.2.2",
+      httpHost: "0.0.0.0",
+      httpPort: 1984,
+      initialRootVisitTimeout: 1
+    }).start()).toBeRejectedWithError(/Timed out receiving message from renderer/)
   })
 
   it("starts the client WebSocket before launching native Appium sessions even when serving dist", async () => {

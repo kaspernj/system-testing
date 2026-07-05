@@ -15,6 +15,7 @@ import {testIdSelector} from "./test-id-selector.js"
  * @property {boolean} [debug] Enable debug logging.
  * @property {BrowserDriverConfig} [driver] Driver configuration.
  * @property {import("./system-test-communicator.js").default} [communicator] Optional command communicator for helper-driven navigation.
+ * @property {(message: string) => void} [onWarning] Callback for retry/fallback warnings from verified helpers. Defaults to `console.warn`.
  * @property {string} [screenshotsPath] Directory used for saved screenshots and browser artifacts.
  */
 /**
@@ -47,6 +48,11 @@ import {testIdSelector} from "./test-id-selector.js"
  * @property {number} [timeout] Override timeout for the input lookup.
  */
 /**
+ * @typedef {object} BrowserClickEffectArgs
+ * @property {number} [effectTimeout] How long to await the expected effect after each click before re-clicking (default 2000 ms).
+ * @property {number} [timeout] Overall time budget for clicking and awaiting the expected effect.
+ */
+/**
  * @typedef {object} BrowserStepEvent
  * @property {string} name Step name.
  * @property {string} path Full `parent > child` step path.
@@ -55,6 +61,17 @@ import {testIdSelector} from "./test-id-selector.js"
  * @property {string} [finishedAt] ISO timestamp when the step settled.
  * @property {string} [error] Failure message when the step failed.
  */
+
+/**
+ * @param {string} message
+ * @param {unknown} cause
+ * @returns {Error & {cause: unknown}}
+ */
+function errorWithCause(message, cause) {
+  const error = /** @type {Error & {cause: unknown}} */ (new Error(message))
+  error.cause = cause
+  return error
+}
 
 /**
  * Extracts the RGB channels from CSS `rgb(...)`/`rgba(...)` values or an RGB fragment.
@@ -112,7 +129,7 @@ export default class Browser {
   _lastFailedStepPath = undefined
 
   /** @param {BrowserArgs} [args] */
-  constructor({debug = false, driver, communicator, screenshotsPath = `${process.cwd()}/tmp/screenshots`, ...restArgs} = {}) {
+  constructor({debug = false, driver, communicator, onWarning, screenshotsPath = `${process.cwd()}/tmp/screenshots`, ...restArgs} = {}) {
     const restArgsKeys = Object.keys(restArgs)
 
     if (restArgsKeys.length > 0) {
@@ -121,6 +138,7 @@ export default class Browser {
 
     this._debug = debug
     this._driverConfig = driver
+    this._onWarning = onWarning
     this._screenshotsPath = screenshotsPath
     this.communicator = communicator
     this.driverAdapter = this.createDriver(driver)
@@ -194,6 +212,20 @@ export default class Browser {
   debugLog(...args) {
     if (this._debug) {
       console.log("[Browser debug]", ...args)
+    }
+  }
+
+  /**
+   * Reports a retry/fallback warning through the configured `onWarning` callback so
+   * callers can handle or silence it, falling back to `console.warn` when none is set.
+   * @param {string} message
+   * @returns {void}
+   */
+  warn(message) {
+    if (this._onWarning) {
+      this._onWarning(message)
+    } else {
+      console.warn("[Browser warning]", message)
     }
   }
 
@@ -413,6 +445,9 @@ export default class Browser {
 
   /**
    * Clears an input and sends replacement keys through retryable browser interactions.
+   * Uses standard select-all + backspace + sendKeys semantics. On CI environments where
+   * the select-all chord can silently no-op, prefer the opt-in `replaceInputValue`,
+   * which clears per character and verifies every step.
    * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
    * @param {string} nextValue
    * @returns {Promise<void>}
@@ -443,6 +478,92 @@ export default class Browser {
   }
 
   /**
+   * Replaces an input's value with chord-free, verified key presses. Select-all shortcuts
+   * can silently no-op on some headless CI Chrome sessions while subsequent typing still
+   * lands (leaving old + typed text in the field), so this clears per character on both
+   * sides of the caret, verifies the field is empty before typing, types the replacement
+   * one character at a time and verifies the final value. Throws with the expected and
+   * actual values when the field never reaches the requested text. Opt-in alternative to
+   * `clearAndSendKeys`, which keeps standard select-all + sendKeys semantics.
+   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
+   * @param {string} nextValue
+   * @returns {Promise<void>}
+   */
+  async replaceInputValue(elementOrIdentifier, nextValue) {
+    let actualValue
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await this.interact(this.textEntryClickTarget(elementOrIdentifier), "click")
+
+      const clearedValue = await this.clearTextEntryValue(elementOrIdentifier)
+
+      if (typeof clearedValue == "string" && clearedValue.length > 0) {
+        if (attempt >= 3) {
+          throw new Error(`Input clearing did not empty the element value after ${attempt} attempts. The field still contains ${JSON.stringify(clearedValue)} before typing ${JSON.stringify(nextValue)}.`)
+        }
+
+        this.warn(`replaceInputValue clearing left ${JSON.stringify(clearedValue)} in the field on attempt ${attempt}; retrying`)
+        await wait(50)
+        continue
+      }
+
+      for (const character of Array.from(nextValue)) {
+        await this.interact(elementOrIdentifier, "sendKeys", character)
+      }
+
+      actualValue = await this.interact(elementOrIdentifier, "getProperty", "value")
+
+      if (actualValue === nextValue) return
+
+      if (attempt < 3) {
+        this.warn(`replaceInputValue got ${typeof actualValue == "string" ? JSON.stringify(actualValue) : actualValue} instead of ${JSON.stringify(nextValue)} on attempt ${attempt}; retrying`)
+        await wait(50)
+      }
+    }
+
+    const actualValueDescription = typeof actualValue == "string" ? JSON.stringify(actualValue) : `missing (${actualValue})`
+
+    throw new Error(`Input replacement did not update the element value after 3 attempts. Expected ${JSON.stringify(nextValue)}, got ${actualValueDescription}.`)
+  }
+
+  /**
+   * Empties a text entry on both sides of the caret and returns the value left in the
+   * field so callers can verify the clearing actually took effect. The focusing click can
+   * land the caret anywhere in the value — for example mid-line in a multiline textarea,
+   * where END only reaches the end of the current line — so one BACK_SPACE per character
+   * deletes everything before the caret and one DELETE per remaining character deletes
+   * everything after it, regardless of where the caret ended up.
+   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
+   * @returns {Promise<string | undefined>}
+   */
+  async clearTextEntryValue(elementOrIdentifier) {
+    const currentValue = await this.interact(elementOrIdentifier, "getProperty", "value")
+
+    if (typeof currentValue != "string" || currentValue.length === 0) return currentValue
+
+    // BACK_SPACE deletes the character before the caret wherever the caret is, so one press
+    // per character of the full value deletes everything before the caret (at most
+    // `currentValue.length` characters can be before it; surplus presses no-op at position 0).
+    for (let characterIndex = 0; characterIndex < currentValue.length; characterIndex++) {
+      await this.interact(elementOrIdentifier, "sendKeys", Key.BACK_SPACE)
+    }
+
+    const valueAfterBackspaces = await this.interact(elementOrIdentifier, "getProperty", "value")
+
+    if (typeof valueAfterBackspaces != "string" || valueAfterBackspaces.length === 0) return valueAfterBackspaces
+
+    // After the backspace pass exhausted everything before the caret, the caret is at
+    // position 0 and the remaining value is exactly the text that was after it. DELETE
+    // deletes the character after the caret, so one press per remaining character empties
+    // the field. The caller re-reads the returned value to verify.
+    for (let characterIndex = 0; characterIndex < valueAfterBackspaces.length; characterIndex++) {
+      await this.interact(elementOrIdentifier, "sendKeys", Key.DELETE)
+    }
+
+    return await this.interact(elementOrIdentifier, "getProperty", "value")
+  }
+
+  /**
    * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
    * @returns {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs}
    */
@@ -456,6 +577,47 @@ export default class Browser {
     }
 
     return elementOrIdentifier
+  }
+
+  /**
+   * Clicks an element and awaits a caller-observable effect, re-clicking while the effect
+   * has not appeared yet. This closes the silent-drop failure mode where a click reports
+   * success but the app never handles the press: the click only counts once the expected
+   * effect callback stops throwing. Only use this for clicks where clicking again before
+   * the effect has appeared is safe, such as opening a menu/modal or navigating.
+   * @param {string|import("selenium-webdriver").WebElement} elementOrIdentifier
+   * @param {() => Promise<any> | any} expectedEffectCallback Throws while the expected effect has not happened yet.
+   * @param {import("./system-test.js").FindArgs & BrowserClickEffectArgs} [args] Click args plus effect/overall timeouts.
+   * @returns {Promise<void>}
+   */
+  async clickAndWaitForEffect(elementOrIdentifier, expectedEffectCallback, args = {}) {
+    const {effectTimeout = 2000, timeout: timeoutOverride, ...clickArgs} = args
+    const totalTimeout = this.getCommandTimeout(timeoutOverride)
+    const startedAt = Date.now()
+    let clicks = 0
+
+    while (true) {
+      clicks++
+      await this.click(elementOrIdentifier, clickArgs)
+
+      // Each probe is clamped to the remaining overall budget so a small `timeout`
+      // is honored even when it is shorter than the per-click `effectTimeout`.
+      const remainingTimeout = totalTimeout - (Date.now() - startedAt)
+
+      try {
+        await waitFor({timeout: Math.max(1, Math.min(effectTimeout, remainingTimeout))}, async () => await expectedEffectCallback())
+
+        return
+      } catch (effectError) {
+        const effectErrorMessage = effectError instanceof Error ? effectError.message : String(effectError)
+
+        if (Date.now() - startedAt >= totalTimeout) {
+          throw errorWithCause(`Click produced no observed effect after ${clicks} clicks within ${totalTimeout}ms. Last effect check failure: ${effectErrorMessage}`, effectError)
+        }
+
+        this.warn(`Click produced no observed effect on attempt ${clicks} (${effectErrorMessage}); retrying`)
+      }
+    }
   }
 
   /**

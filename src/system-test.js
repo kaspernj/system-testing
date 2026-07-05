@@ -16,6 +16,10 @@ const CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 30000
 const CLIENT_WEBSOCKET_SERVER_LISTEN_TIMEOUT_MS = 15000
 const DEFAULT_INITIAL_ROOT_VISIT_TIMEOUT_MS = 60000
 const INITIAL_ROOT_VISIT_RETRY_DELAY_MS = 100
+// Bounds each initial root visit attempt so a single hung navigation (for example a
+// renderer-communication timeout on a loaded host) cannot consume the whole
+// initialRootVisitTimeout budget and leave no room for a retry.
+const INITIAL_ROOT_VISIT_ATTEMPT_PAGE_LOAD_TIMEOUT_MS = 20000
 const NATIVE_CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 120000
 
 /**
@@ -47,6 +51,7 @@ export function defaultClientWebSocketConnectTimeout({driver} = {}) {
  * @property {(error: any) => boolean} [errorFilter] Filter for browser errors (return false to ignore).
  * @property {boolean} [failOnBrowserError] Throw registered browser errors from finder/interact helpers.
  * @property {boolean} [failOnConsoleError] Treat browser console.error calls as registered browser errors.
+ * @property {(message: string) => void} [onWarning] Callback for retry/fallback warnings from verified helpers. Defaults to `console.warn`.
  * @property {number} [clientWsPort] Port for the browser-command WebSocket server.
  * @property {number} [clientWsConnectTimeout] Timeout for the browser-command WebSocket client connection.
  * @property {number} [initialRootVisitTimeout] Timeout for retrying the first browser route visit.
@@ -67,6 +72,7 @@ export function defaultClientWebSocketConnectTimeout({driver} = {}) {
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
  * @property {"actions" | "human" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"human"` uses multiple pointer moves and pauses before clicking; `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context and is for diagnostics only, not committed stabilization fixes.
+ * @property {boolean} [checkInterception] Hit-test `actions`/`human` pointer clicks first and fail like `element.click()` when another element would receive the click, instead of silently clicking whatever is painted on top.
  * @property {number} [clickOffsetX] X offset for `actions`/`human` pointer clicks relative to the target element.
  * @property {number} [clickOffsetY] Y offset for `actions`/`human` pointer clicks relative to the target element.
  * @property {number} [humanStepDelay] Pause duration in ms between human pointer moves.
@@ -402,8 +408,8 @@ export default class SystemTest extends Browser {
    * Creates a new SystemTest instance
    * @param {SystemTestArgs} [args]
    */
-  constructor({clientWsPort = 1985, clientWsConnectTimeout, initialRootVisitTimeout = DEFAULT_INITIAL_ROOT_VISIT_TIMEOUT_MS, host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, httpConnectHost, debug = false, errorFilter, failOnBrowserError = true, failOnConsoleError = false, scoundrelPort = 8090, urlArgs, driver, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
-    super({debug, driver})
+  constructor({clientWsPort = 1985, clientWsConnectTimeout, initialRootVisitTimeout = DEFAULT_INITIAL_ROOT_VISIT_TIMEOUT_MS, host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, httpConnectHost, debug = false, errorFilter, failOnBrowserError = true, failOnConsoleError = false, onWarning, scoundrelPort = 8090, urlArgs, driver, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
+    super({debug, driver, onWarning})
 
     const restArgsKeys = Object.keys(restArgs)
 
@@ -893,18 +899,30 @@ export default class SystemTest extends Browser {
 
     while (true) {
       try {
-        await this.driverVisit(rootPath)
+        await this.getDriverAdapter().withPageLoadTimeout(
+          Math.min(INITIAL_ROOT_VISIT_ATTEMPT_PAGE_LOAD_TIMEOUT_MS, this._initialRootVisitTimeout),
+          async () => await this.driverVisit(rootPath)
+        )
         return
       } catch (error) {
         const visitError = ensureError(error, "initial root path visit error")
         const message = visitError.message
         const retryableNetworkError = message.includes("net::ERR_ADDRESS_UNREACHABLE") || message.includes("net::ERR_CONNECTION_REFUSED")
+        // Chromedriver can report a renderer-communication timeout for the very first
+        // navigation when the host is under heavy load (for example concurrent emulator
+        // builds). The initial visit is idempotent, so retry within the same budget.
+        const retryableRendererTimeout = message.includes("Timed out receiving message from renderer")
 
-        if (!retryableNetworkError || Date.now() >= deadline) {
+        if ((!retryableNetworkError && !retryableRendererTimeout) || Date.now() >= deadline) {
           throw visitError
         }
 
-        this.debugLog(`Initial root path visit waiting for driver network readiness: ${message}`)
+        if (retryableRendererTimeout) {
+          this.warn(`Initial root path visit timed out waiting for the browser renderer (${message}); retrying`)
+        } else {
+          this.debugLog(`Initial root path visit waiting for driver network readiness: ${message}`)
+        }
+
         await wait(Math.min(INITIAL_ROOT_VISIT_RETRY_DELAY_MS, Math.max(0, deadline - Date.now())))
       }
     }

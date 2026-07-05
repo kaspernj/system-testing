@@ -2,6 +2,7 @@
 
 import SystemTest, {defaultClientWebSocketConnectTimeout} from "../src/system-test.js"
 import {
+  SYSTEM_TEST_INITIAL_ROOT_VISIT_TIMEOUT_MS,
   defaultSystemTestJasmineStartupTimeoutInterval,
   defaultSystemTestJasmineTimeoutInterval
 } from "./support/system-test-helper.js"
@@ -80,18 +81,26 @@ describe("SystemTest client WebSocket timeout", () => {
   it("keeps the startup timeout above the sum of SystemTest.start internal phase timeouts", () => {
     process.env.SYSTEM_TEST_HOST = "dist"
 
-    // Selenium session creation (60s) + systemTestingComponent lookup (30s) + client WebSocket connect.
-    // The shared startup beforeAll must dominate this sum so a hung phase surfaces its own specific
-    // error instead of the outer hook timing out first with an opaque "beforeAll failed" cascade.
-    const internalStartupPhaseSum = 60000 + 30000 + defaultClientWebSocketConnectTimeout()
+    // Selenium session creation (60s) + initial root visit budget + systemTestingComponent lookup
+    // (30s) + client WebSocket connect. The shared startup beforeAll must dominate this sum so a
+    // hung phase surfaces its own specific error instead of the outer hook timing out first with
+    // an opaque "beforeAll failed" cascade.
+    const internalStartupPhaseSum = 60000 + SYSTEM_TEST_INITIAL_ROOT_VISIT_TIMEOUT_MS + 30000 + defaultClientWebSocketConnectTimeout()
 
     expect(defaultSystemTestJasmineStartupTimeoutInterval()).toBeGreaterThan(internalStartupPhaseSum)
+  })
+
+  it("rides out concurrent Android SDK installs with the suite's initial root visit budget", () => {
+    // Cold Android SDK installs on the same CI host saturate disk for roughly 2.5 minutes and
+    // starve the Chrome renderer during the first navigation. The suite's own visit budget must
+    // outlast that window so the bounded per-attempt retries can succeed once the install ends.
+    expect(SYSTEM_TEST_INITIAL_ROOT_VISIT_TIMEOUT_MS).toBeGreaterThanOrEqual(180000)
   })
 
   it("scales the startup timeout above the internal phases for the native client WebSocket window", () => {
     process.env.SYSTEM_TEST_HOST = "native"
 
-    const internalStartupPhaseSum = 60000 + 30000 + defaultClientWebSocketConnectTimeout()
+    const internalStartupPhaseSum = 60000 + SYSTEM_TEST_INITIAL_ROOT_VISIT_TIMEOUT_MS + 30000 + defaultClientWebSocketConnectTimeout()
 
     expect(defaultSystemTestJasmineStartupTimeoutInterval()).toBeGreaterThan(internalStartupPhaseSum)
   })

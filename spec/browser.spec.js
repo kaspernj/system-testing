@@ -167,6 +167,117 @@ describe("Browser", () => {
     ).toBeRejectedWithError("Expected panel to include rgb(30, 41, 59), got background-color rgb(130, 41, 59)")
   })
 
+  it("reports replaceInputValue retries through the onWarning callback", async () => {
+    const onWarning = jasmine.createSpy("onWarning")
+    const browser = new Browser({onWarning})
+    let value = "stuck"
+    let backspacePresses = 0
+
+    browser.interact = /** @type {any} */ (async (_target, methodName, ...args) => {
+      if (methodName === "getProperty") return value
+
+      if (methodName === "sendKeys") {
+        const key = String(args[0])
+
+        if (key === Key.BACK_SPACE) {
+          // The first clearing attempt is silently dropped, forcing a retry.
+          backspacePresses += 1
+          if (backspacePresses > 5) value = value.slice(0, -1)
+        } else if (key !== Key.DELETE) {
+          value += key
+        }
+      }
+
+      return undefined
+    })
+
+    await browser.replaceInputValue("#warn-target", "fixed")
+
+    expect(value).toEqual("fixed")
+    expect(onWarning).toHaveBeenCalledTimes(1)
+    expect(onWarning.calls.argsFor(0)[0]).toContain("\"stuck\"")
+    expect(onWarning.calls.argsFor(0)[0]).toContain("retrying")
+  })
+
+  it("falls back to console.warn for replaceInputValue retries when no onWarning callback is configured", async () => {
+    const consoleWarnSpy = spyOn(console, "warn")
+    const browser = new Browser()
+    let value = "stuck"
+    let backspacePresses = 0
+
+    browser.interact = /** @type {any} */ (async (_target, methodName, ...args) => {
+      if (methodName === "getProperty") return value
+
+      if (methodName === "sendKeys") {
+        const key = String(args[0])
+
+        if (key === Key.BACK_SPACE) {
+          backspacePresses += 1
+          if (backspacePresses > 5) value = value.slice(0, -1)
+        } else if (key !== Key.DELETE) {
+          value += key
+        }
+      }
+
+      return undefined
+    })
+
+    await browser.replaceInputValue("#warn-target", "fixed")
+
+    expect(consoleWarnSpy).toHaveBeenCalledTimes(1)
+    expect(consoleWarnSpy.calls.argsFor(0)[0]).toEqual("[Browser warning]")
+    expect(consoleWarnSpy.calls.argsFor(0)[1]).toContain("retrying")
+  })
+
+  it("does not warn when replaceInputValue succeeds on the first attempt", async () => {
+    const onWarning = jasmine.createSpy("onWarning")
+    const browser = new Browser({onWarning})
+    let value = ""
+
+    browser.interact = /** @type {any} */ (async (_target, methodName, ...args) => {
+      if (methodName === "getProperty") return value
+      if (methodName === "sendKeys") value += String(args[0])
+
+      return undefined
+    })
+
+    await browser.replaceInputValue("#warn-target", "ok")
+
+    expect(onWarning).not.toHaveBeenCalled()
+  })
+
+  it("reports clickAndWaitForEffect retries through the onWarning callback", async () => {
+    const onWarning = jasmine.createSpy("onWarning")
+    const browser = new Browser({onWarning})
+    let clicks = 0
+
+    browser.driverAdapter = /** @type {any} */ ({getTimeouts: () => 5000})
+    browser.click = /** @type {any} */ (async () => {
+      clicks += 1
+    })
+
+    await browser.clickAndWaitForEffect("#effect-target", () => {
+      if (clicks < 2) throw new Error("effect not visible yet")
+    }, {effectTimeout: 50})
+
+    expect(clicks).toBe(2)
+    expect(onWarning).toHaveBeenCalledTimes(1)
+    expect(onWarning.calls.argsFor(0)[0]).toContain("effect not visible yet")
+    expect(onWarning.calls.argsFor(0)[0]).toContain("retrying")
+  })
+
+  it("does not warn when clickAndWaitForEffect observes the effect after the first click", async () => {
+    const onWarning = jasmine.createSpy("onWarning")
+    const browser = new Browser({onWarning})
+
+    browser.driverAdapter = /** @type {any} */ ({getTimeouts: () => 5000})
+    browser.click = /** @type {any} */ (async () => undefined)
+
+    await browser.clickAndWaitForEffect("#effect-target", () => undefined, {effectTimeout: 50})
+
+    expect(onWarning).not.toHaveBeenCalled()
+  })
+
   it("replaces input values by test id through shared retryable interactions", async () => {
     const browser = new Browser()
     const calls = []

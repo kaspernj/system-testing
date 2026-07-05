@@ -457,6 +457,95 @@ describe("WebDriverDriver interact", () => {
     expect(actions.perform).toHaveBeenCalled()
   })
 
+  it("refuses actions clicks when the click point is obstructed by another element", async () => {
+    const element = {
+      getId: async () => "webdriver-element-id"
+    }
+    /** @type {{click: jasmine.Spy, move: jasmine.Spy, perform: jasmine.Spy}} */
+    const actions = /** @type {any} */ ({})
+    actions.click = jasmine.createSpy("click").and.returnValue(actions)
+    actions.move = jasmine.createSpy("move").and.returnValue(actions)
+    actions.perform = jasmine.createSpy("perform").and.resolveTo(undefined)
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver._findElement = async () => /** @type {any} */ (element)
+    driver.setWebDriver(/** @type {any} */ ({
+      actions: () => actions,
+      executeScript: async () => ({description: "div#overlay[data-testid='flashNotification']", x: 120, y: 240})
+    }))
+
+    await expectAsync(driver.click(element, {checkInterception: true, method: "actions"}))
+      .toBeRejectedWithError(/would receive the click.+div#overlay\[data-testid='flashNotification'\]/)
+
+    expect(actions.perform).not.toHaveBeenCalled()
+  })
+
+  it("refuses human clicks when the click point is obstructed by another element", async () => {
+    const element = {
+      getId: async () => "webdriver-element-id"
+    }
+    /** @type {{click: jasmine.Spy, move: jasmine.Spy, pause: jasmine.Spy, perform: jasmine.Spy}} */
+    const actions = /** @type {any} */ ({})
+    actions.click = jasmine.createSpy("click").and.returnValue(actions)
+    actions.move = jasmine.createSpy("move").and.returnValue(actions)
+    actions.pause = jasmine.createSpy("pause").and.returnValue(actions)
+    actions.perform = jasmine.createSpy("perform").and.resolveTo(undefined)
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver._findElement = async () => /** @type {any} */ (element)
+    driver.setWebDriver(/** @type {any} */ ({
+      actions: () => actions,
+      executeScript: async () => ({description: "div#overlay", x: 12, y: 24})
+    }))
+
+    await expectAsync(driver.click(element, {checkInterception: true, method: "human"}))
+      .toBeRejectedWithError(/would receive the click.+div#overlay/)
+
+    expect(actions.perform).not.toHaveBeenCalled()
+  })
+
+  it("checks the obstruction hit-test at the offset actions click point", async () => {
+    const element = {
+      getId: async () => "webdriver-element-id"
+    }
+    /** @type {{click: jasmine.Spy, move: jasmine.Spy, perform: jasmine.Spy}} */
+    const actions = /** @type {any} */ ({})
+    actions.click = jasmine.createSpy("click").and.returnValue(actions)
+    actions.move = jasmine.createSpy("move").and.returnValue(actions)
+    actions.perform = jasmine.createSpy("perform").and.resolveTo(undefined)
+    const executeScriptSpy = jasmine.createSpy("executeScript").and.resolveTo(null)
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver._findElement = async () => /** @type {any} */ (element)
+    driver.setWebDriver(/** @type {any} */ ({
+      actions: () => actions,
+      executeScript: executeScriptSpy
+    }))
+
+    await driver.click(element, {checkInterception: true, clickOffsetX: 10, clickOffsetY: -5, method: "actions"})
+
+    expect(executeScriptSpy).toHaveBeenCalledWith(jasmine.any(String), element, 10, -5)
+    expect(actions.perform).toHaveBeenCalled()
+  })
+
   it("dispatches element.click() via executeScript when method is 'js'", async () => {
     const element = {
       getId: async () => "webdriver-element-id"
