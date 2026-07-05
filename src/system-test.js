@@ -67,6 +67,7 @@ export function defaultClientWebSocketConnectTimeout({driver} = {}) {
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
  * @property {"actions" | "human" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"human"` uses multiple pointer moves and pauses before clicking; `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context and is for diagnostics only, not committed stabilization fixes.
+ * @property {boolean} [checkInterception] Hit-test `actions`/`human` pointer clicks first and fail like `element.click()` when another element would receive the click, instead of silently clicking whatever is painted on top.
  * @property {number} [clickOffsetX] X offset for `actions`/`human` pointer clicks relative to the target element.
  * @property {number} [clickOffsetY] Y offset for `actions`/`human` pointer clicks relative to the target element.
  * @property {number} [humanStepDelay] Pause duration in ms between human pointer moves.
