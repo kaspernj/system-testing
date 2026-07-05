@@ -430,9 +430,10 @@ export default class Browser {
   /**
    * Clears an input and sends replacement keys through retryable browser interactions.
    * Clearing is chord-free because select-all shortcuts can silently no-op on headless
-   * CI Chrome sessions while subsequent typing still lands: the caret is moved to the
-   * end with END and one BACK_SPACE is sent per character. The field is verified empty
-   * before the replacement text is typed and the final value is verified afterwards.
+   * CI Chrome sessions while subsequent typing still lands: the value is deleted on both
+   * sides of the caret with per-character BACK_SPACE and DELETE presses. The field is
+   * verified empty before the replacement text is typed and the final value is verified
+   * afterwards.
    * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
    * @param {string} nextValue
    * @returns {Promise<void>}
@@ -471,8 +472,12 @@ export default class Browser {
   }
 
   /**
-   * Empties a text entry with END and one BACK_SPACE per character and returns the value
-   * left in the field so callers can verify the clearing actually took effect.
+   * Empties a text entry on both sides of the caret and returns the value left in the
+   * field so callers can verify the clearing actually took effect. The focusing click can
+   * land the caret anywhere in the value — for example mid-line in a multiline textarea,
+   * where END only reaches the end of the current line — so one BACK_SPACE per character
+   * deletes everything before the caret and one DELETE per remaining character deletes
+   * everything after it, regardless of where the caret ended up.
    * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
    * @returns {Promise<string | undefined>}
    */
@@ -481,10 +486,16 @@ export default class Browser {
 
     if (typeof currentValue != "string" || currentValue.length === 0) return currentValue
 
-    await this.interact(elementOrIdentifier, "sendKeys", Key.END)
-
     for (let characterIndex = 0; characterIndex < currentValue.length; characterIndex++) {
       await this.interact(elementOrIdentifier, "sendKeys", Key.BACK_SPACE)
+    }
+
+    const valueAfterBackspaces = await this.interact(elementOrIdentifier, "getProperty", "value")
+
+    if (typeof valueAfterBackspaces != "string" || valueAfterBackspaces.length === 0) return valueAfterBackspaces
+
+    for (let characterIndex = 0; characterIndex < valueAfterBackspaces.length; characterIndex++) {
+      await this.interact(elementOrIdentifier, "sendKeys", Key.DELETE)
     }
 
     return await this.interact(elementOrIdentifier, "getProperty", "value")
@@ -527,8 +538,12 @@ export default class Browser {
       clicks++
       await this.click(elementOrIdentifier, clickArgs)
 
+      // Each probe is clamped to the remaining overall budget so a small `timeout`
+      // is honored even when it is shorter than the per-click `effectTimeout`.
+      const remainingTimeout = totalTimeout - (Date.now() - startedAt)
+
       try {
-        await waitFor({timeout: effectTimeout}, async () => await expectedEffectCallback())
+        await waitFor({timeout: Math.max(1, Math.min(effectTimeout, remainingTimeout))}, async () => await expectedEffectCallback())
 
         return
       } catch (effectError) {

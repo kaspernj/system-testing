@@ -508,7 +508,7 @@ await systemTest.interact({selector: "[data-testid='scanFooterMenuButton']", use
 
 ### Replacing input values
 
-`clearAndSendKeys` (and `replaceTestIDInputValue`) replace an input's value with verified, chord-free key presses. Select-all shortcuts can silently no-op on some headless CI Chrome sessions while subsequent typing still lands, so the helper clears with END plus one BACK_SPACE per character, verifies the field is empty before typing, types the replacement one character at a time, and verifies the final value. It retries internally and throws with the expected and actual values when the field never reaches the requested text.
+`clearAndSendKeys` (and `replaceTestIDInputValue`) replace an input's value with verified, chord-free key presses. Select-all shortcuts can silently no-op on some headless CI Chrome sessions while subsequent typing still lands, and the focusing click can land the caret anywhere in the value (for example mid-line in a multiline textarea), so the helper clears on both sides of the caret — one BACK_SPACE per character followed by one DELETE per remaining character — verifies the field is empty before typing, types the replacement one character at a time, and verifies the final value. It retries internally and throws with the expected and actual values when the field never reaches the requested text.
 
 ```js
 await systemTest.clearAndSendKeys("[data-testid='ticketCountInput']", "20")

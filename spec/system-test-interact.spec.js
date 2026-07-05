@@ -10,17 +10,19 @@ const isNative = process.env.SYSTEM_TEST_NATIVE === "true"
 const itIfWeb = isNative ? xit : it
 
 /**
- * Creates a stateful `interact` fake modelling a real text input receiving keys.
+ * Creates a stateful `interact` fake modelling a real text input receiving keys at a caret.
  * Select-all chords are ignored on purpose, matching headless CI Chrome sessions
  * where CTRL+A silently no-ops while plain typing still lands in the field.
  * @param {string} initialValue Value the input starts with.
- * @param {object} [args] Failure-mode toggles.
+ * @param {object} [args] Caret placement and failure-mode toggles.
  * @param {number} [args.ignoredBackspaces] Number of leading BACK_SPACE presses that are silently dropped.
+ * @param {number} [args.initialCaret] Caret position after the focusing click (defaults to the end of the value).
  * @param {boolean} [args.typingWorks] Whether typed characters land in the value.
  * @returns {{getValue: () => string, interact: (target: any, methodName: string, ...interactArgs: any[]) => Promise<any>, sentKeys: string[]}}
  */
-function fakeTextInput(initialValue, {ignoredBackspaces = 0, typingWorks = true} = {}) {
+function fakeTextInput(initialValue, {ignoredBackspaces = 0, initialCaret = initialValue.length, typingWorks = true} = {}) {
   let value = initialValue
+  let caret = initialCaret
   let backspacePresses = 0
   /** @type {string[]} */
   const sentKeys = []
@@ -36,11 +38,19 @@ function fakeTextInput(initialValue, {ignoredBackspaces = 0, typingWorks = true}
 
         sentKeys.push(key)
 
-        if (key === Key.END) return undefined
-
         if (key === Key.BACK_SPACE) {
           backspacePresses += 1
-          if (backspacePresses > ignoredBackspaces) value = value.slice(0, -1)
+
+          if (backspacePresses > ignoredBackspaces && caret > 0) {
+            value = value.slice(0, caret - 1) + value.slice(caret)
+            caret -= 1
+          }
+
+          return undefined
+        }
+
+        if (key === Key.DELETE) {
+          if (caret < value.length) value = value.slice(0, caret) + value.slice(caret + 1)
 
           return undefined
         }
@@ -48,7 +58,10 @@ function fakeTextInput(initialValue, {ignoredBackspaces = 0, typingWorks = true}
         // Chords and other control keys are silently dropped, like select-all on headless CI Chrome.
         if (/[\uE000-\uF8FF]/.test(key)) return undefined
 
-        if (typingWorks) value += key
+        if (typingWorks) {
+          value = value.slice(0, caret) + key + value.slice(caret)
+          caret += 1
+        }
       }
 
       return undefined
@@ -264,7 +277,7 @@ describe("SystemTest interact", () => {
     })
   })
 
-  it("clears prefilled inputs with END and per-character backspaces before typing", async () => {
+  it("clears prefilled inputs with per-character backspaces before typing", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const fakeInput = fakeTextInput("16")
     const interactSpy = spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
@@ -272,8 +285,21 @@ describe("SystemTest interact", () => {
     await systemTest.clearAndSendKeys("#replace-target", "20")
 
     expect(interactSpy.calls.argsFor(0)).toEqual([{selector: "#replace-target", method: "actions"}, "click"])
-    expect(fakeInput.sentKeys).toEqual([Key.END, Key.BACK_SPACE, Key.BACK_SPACE, "2", "0"])
+    expect(fakeInput.sentKeys).toEqual([Key.BACK_SPACE, Key.BACK_SPACE, "2", "0"])
     expect(fakeInput.getValue()).toBe("20")
+  })
+
+  it("clears text on both sides of a mid-value caret with backspaces and deletes", async () => {
+    // The focusing click can land the caret in the middle of a multiline textarea value,
+    // where backspaces alone only delete the text before the caret.
+    const systemTest = systemTestHelper.getSystemTest()
+    const fakeInput = fakeTextInput("one\ntwo", {initialCaret: 3})
+    spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
+
+    await systemTest.clearAndSendKeys("#replace-target", "replaced")
+
+    expect(fakeInput.sentKeys.filter((key) => key === Key.DELETE).length).toBe(4)
+    expect(fakeInput.getValue()).toBe("replaced")
   })
 
   it("replaces prefilled values without select-all chords so ignored chords cannot leave old text behind", async () => {
@@ -369,6 +395,45 @@ describe("SystemTest interact", () => {
     })
   })
 
+  itIfWeb("replaces a multiline textarea value end-to-end even when the click lands the caret mid-text", async () => {
+    await SystemTest.run(async (runningSystemTest) => {
+      try {
+        await runningSystemTest.getDriver().executeScript(`
+          const elementId = "system-test-clear-and-send-keys-textarea"
+          let element = document.getElementById(elementId)
+
+          if (element) {
+            element.remove()
+          }
+
+          element = document.createElement("textarea")
+          element.id = elementId
+          element.setAttribute("data-testid", "clearAndSendKeysTextarea")
+          element.rows = 3
+          element.value = "one\\ntwo\\nthree\\nfour\\nfive\\nsix"
+          element.style.position = "fixed"
+          element.style.top = "12px"
+          element.style.left = "12px"
+          element.style.zIndex = "9999"
+          document.body.appendChild(element)
+          return true
+        `)
+
+        await runningSystemTest.clearAndSendKeys({selector: "[data-testid='clearAndSendKeysTextarea']", useBaseSelector: false}, "replaced")
+
+        const textareaValue = await runningSystemTest.interact({selector: "[data-testid='clearAndSendKeysTextarea']", useBaseSelector: false}, "getProperty", "value")
+
+        expect(textareaValue).toBe("replaced")
+      } finally {
+        await runningSystemTest.getDriver().executeScript(`
+          const element = document.getElementById("system-test-clear-and-send-keys-textarea")
+          if (element) element.remove()
+          return true
+        `)
+      }
+    })
+  })
+
   itIfWeb("refuses actions clicks when another element would receive the click", async () => {
     await SystemTest.run(async (runningSystemTest) => {
       try {
@@ -444,6 +509,22 @@ describe("SystemTest interact", () => {
 
     expect(clickSpy.calls.count()).toBe(2)
     expect(clickSpy).toHaveBeenCalledWith("#effect-target", {method: "actions"})
+  })
+
+  it("clamps each clickAndWaitForEffect probe to the remaining overall timeout", async () => {
+    const systemTest = systemTestHelper.getSystemTest()
+    spyOn(systemTest, "click").and.resolveTo(undefined)
+    const startedAt = Date.now()
+
+    // With the default 2000ms effectTimeout, an unclamped first probe alone would
+    // blow way past the 300ms overall budget.
+    await expectAsync(
+      systemTest.clickAndWaitForEffect("#effect-target", () => {
+        throw new Error("effect never appeared")
+      }, {timeout: 300})
+    ).toBeRejectedWithError(/no observed effect/)
+
+    expect(Date.now() - startedAt).toBeLessThan(1500)
   })
 
   it("throws with the last effect failure when clickAndWaitForEffect never observes the effect", async () => {

@@ -182,7 +182,7 @@ describe("Browser", () => {
 
         if (key === Key.BACK_SPACE) {
           value = value.slice(0, -1)
-        } else if (key !== Key.END) {
+        } else if (key !== Key.DELETE) {
           value += key
         }
       }
@@ -192,8 +192,8 @@ describe("Browser", () => {
 
     await browser.replaceTestIDInputValue("name\"Input", "Next value", {timeout: 250})
 
-    // click, read "Old", END, 3 backspaces, verify empty, 10 typed characters, final verify
-    expect(calls.length).toEqual(18)
+    // click, read "Old", 3 backspaces, verify empty, 10 typed characters, final verify
+    expect(calls.length).toEqual(17)
     expect(value).toEqual("Next value")
     expect(calls[0]).toEqual([
       {
@@ -217,17 +217,9 @@ describe("Browser", () => {
         timeout: 250
       },
       "sendKeys",
-      Key.END
-    ])
-    expect(calls[3]).toEqual([
-      {
-        selector: "[data-testid=\"name\\\"Input\"]",
-        timeout: 250
-      },
-      "sendKeys",
       Key.BACK_SPACE
     ])
-    expect(calls[6]).toEqual([
+    expect(calls[5]).toEqual([
       {
         selector: "[data-testid=\"name\\\"Input\"]",
         timeout: 250
@@ -235,7 +227,7 @@ describe("Browser", () => {
       "getProperty",
       "value"
     ])
-    expect(calls[7]).toEqual([
+    expect(calls[6]).toEqual([
       {
         selector: "[data-testid=\"name\\\"Input\"]",
         timeout: 250
@@ -243,7 +235,7 @@ describe("Browser", () => {
       "sendKeys",
       "N"
     ])
-    expect(calls[17]).toEqual([
+    expect(calls[16]).toEqual([
       {
         selector: "[data-testid=\"name\\\"Input\"]",
         timeout: 250
