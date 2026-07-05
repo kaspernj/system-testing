@@ -156,6 +156,53 @@ describe("AppiumDriver", () => {
     expect(locator.value).toEqual('new UiSelector().resourceIdMatches("(^|.*:id/)systemTestingComponent$")')
   })
 
+  it("skips the pointer-click obstruction hit-test for native app sessions", async () => {
+    const driver = new AppiumDriver({
+      browser: {
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      },
+      options: {
+        capabilities: {
+          platformName: "Android"
+        }
+      }
+    })
+    const executeScript = jasmine.createSpy("executeScript")
+
+    driver.setWebDriver(/** @type {import("selenium-webdriver").WebDriver} */ ({executeScript}))
+
+    const obstruction = await driver.findPointerClickObstruction(/** @type {any} */ ({getId: async () => "native-element"}), 0, 0)
+
+    expect(obstruction).toBeNull()
+    expect(executeScript).not.toHaveBeenCalled()
+  })
+
+  it("runs the pointer-click obstruction hit-test for Appium web sessions", async () => {
+    const driver = new AppiumDriver({
+      browser: {
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      },
+      options: {
+        capabilities: {
+          browserName: "Chrome",
+          platformName: "Android"
+        }
+      }
+    })
+    const executeScript = jasmine.createSpy("executeScript").and.resolveTo(null)
+
+    driver.setWebDriver(/** @type {import("selenium-webdriver").WebDriver} */ ({executeScript}))
+
+    const obstruction = await driver.findPointerClickObstruction(/** @type {any} */ ({getId: async () => "web-element"}), 0, 0)
+
+    expect(obstruction).toBeNull()
+    expect(executeScript).toHaveBeenCalled()
+  })
+
   it("finds native text through visible text and accessibility label selectors", async () => {
     const element = {getId: async () => "native-text-element"}
     const driver = new AppiumDriver({

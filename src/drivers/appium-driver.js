@@ -616,6 +616,22 @@ export default class AppiumDriver extends WebDriverDriver {
   }
 
   /**
+   * Skips the pointer-click obstruction hit-test for native app contexts, where there is
+   * no DOM to hit-test with `document.elementFromPoint`.
+   * @param {import("selenium-webdriver").WebElement} element
+   * @param {number} clickOffsetX
+   * @param {number} clickOffsetY
+   * @returns {Promise<{description: string, x: number, y: number} | null>}
+   */
+  async findPointerClickObstruction(element, clickOffsetX, clickOffsetY) {
+    const browserName = this.options.capabilities?.browserName ?? this.options.browserName
+
+    if (!browserName) return null
+
+    return await super.findPointerClickObstruction(element, clickOffsetX, clickOffsetY)
+  }
+
+  /**
    * @param {string} testId
    * @param {FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}

@@ -128,6 +128,11 @@ function shouldIgnoreBrowserLogEntry(entry, message) {
  */
 
 class ElementNotFoundError extends Error { }
+
+// Named like Selenium's own error so the shared retry/rethrow handling in `click`/`interact`
+// treats pointer-action obstruction failures exactly like `element.click()` interception errors.
+class ElementClickInterceptedError extends Error { }
+
 const {WebDriverError} = SeleniumError
 
 /**
@@ -747,8 +752,10 @@ export default class WebDriverDriver {
             moveArgs = {origin: element, x: clickOffsetX ?? 0, y: clickOffsetY ?? 0}
           }
 
+          await this.throwOnObstructedClickTarget(element, clickOffsetX, clickOffsetY)
           await this.getWebDriver().actions({async: true}).move(moveArgs).click().perform()
         } else if (method === "human") {
+          await this.throwOnObstructedClickTarget(element, clickOffsetX, clickOffsetY)
           await this.humanClick(element, clickArgs)
         } else if (method === "js") {
           await this.getWebDriver().executeScript("arguments[0].click()", element)
@@ -807,6 +814,70 @@ export default class WebDriverDriver {
       .pause(humanStepDelay)
       .click()
       .perform()
+  }
+
+  /**
+   * Mirrors the WebDriver element-click interception check for pointer-action clicks.
+   * `element.click()` refuses to click when another element would receive the click, but
+   * Actions API clicks dispatch pointer events at coordinates and silently hit whatever
+   * is painted on top. This pre-check makes `actions`/`human` clicks fail loudly (and
+   * retryably, through the shared interception handling) instead of silently dropping
+   * the press on an overlay.
+   * @param {import("selenium-webdriver").WebElement} element
+   * @param {number} [clickOffsetX]
+   * @param {number} [clickOffsetY]
+   * @returns {Promise<void>}
+   */
+  async throwOnObstructedClickTarget(element, clickOffsetX, clickOffsetY) {
+    const obstruction = await this.findPointerClickObstruction(element, clickOffsetX ?? 0, clickOffsetY ?? 0)
+
+    if (obstruction) {
+      throw new ElementClickInterceptedError(`Another element would receive the click at (${obstruction.x}, ${obstruction.y}): ${obstruction.description}`)
+    }
+  }
+
+  /**
+   * Hit-tests the pointer click point and returns the element that would intercept the
+   * click when it is neither the target nor one of its descendants, matching
+   * `element.click()` interception semantics (`pointer-events: none` elements are
+   * transparent to the hit-test, descendants of the target are fine).
+   * @param {import("selenium-webdriver").WebElement} element
+   * @param {number} clickOffsetX
+   * @param {number} clickOffsetY
+   * @returns {Promise<{description: string, x: number, y: number} | null>}
+   */
+  async findPointerClickObstruction(element, clickOffsetX, clickOffsetY) {
+    return await this.getWebDriver().executeScript(`
+      const element = arguments[0]
+      const offsetX = arguments[1]
+      const offsetY = arguments[2]
+      const rect = element.getBoundingClientRect()
+      const visibleLeft = Math.max(rect.left, 0)
+      const visibleRight = Math.min(rect.right, window.innerWidth)
+      const visibleTop = Math.max(rect.top, 0)
+      const visibleBottom = Math.min(rect.bottom, window.innerHeight)
+
+      // Outside the viewport there is nothing to hit-test; the pointer action itself
+      // reports a move-target-out-of-bounds error in that case.
+      if (visibleRight <= visibleLeft || visibleBottom <= visibleTop) return null
+
+      const clickX = ((visibleLeft + visibleRight) / 2) + offsetX
+      const clickY = ((visibleTop + visibleBottom) / 2) + offsetY
+      const hitElement = document.elementFromPoint(clickX, clickY)
+
+      if (!hitElement || hitElement === element || element.contains(hitElement)) return null
+
+      const descriptionParts = [hitElement.tagName.toLowerCase()]
+
+      if (hitElement.id) descriptionParts.push("#" + hitElement.id)
+
+      const testId = hitElement.getAttribute("data-testid")
+
+      if (testId) descriptionParts.push("[data-testid='" + testId + "']")
+      if (typeof hitElement.className == "string" && hitElement.className.trim().length > 0) descriptionParts.push("." + hitElement.className.trim().split(/\\s+/).join("."))
+
+      return {description: descriptionParts.join(""), x: clickX, y: clickY}
+    `, element, clickOffsetX, clickOffsetY)
   }
 
   /**
