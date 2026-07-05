@@ -15,9 +15,16 @@ const JASMINE_TIMEOUT_INTERVAL_HEADROOM_MS = 30000
 // "beforeAll failed" across the entire run. These mirror the per-phase budgets in
 // SystemTest.start()/SeleniumDriver.start().
 const SELENIUM_DRIVER_START_TIMEOUT_MS = 60000 // src/drivers/selenium-driver.js DEFAULT_DRIVER_START_TIMEOUT_MS
-const STARTUP_NAVIGATION_BUDGET_MS = 30000 // HTTP reachability + initial root visit + body/#root lookup
+const STARTUP_NAVIGATION_BUDGET_MS = 30000 // HTTP reachability + body/#root lookup
 const SYSTEM_TESTING_COMPONENT_TIMEOUT_MS = 30000 // SystemTest.start() findByTestID("systemTestingComponent")
 const STARTUP_TIMEOUT_HEADROOM_MS = 30000
+
+// This suite runs on CI hosts where a concurrent Android build's cold SDK install can
+// saturate disk for roughly 2.5 minutes and starve the Chrome renderer during the first
+// navigation ("Timed out receiving message from renderer"). The initial root visit runs
+// bounded, retried attempts, so give it a budget that outlasts that window instead of the
+// package's 60s default. Quiet hosts pay nothing: the first attempt succeeds immediately.
+export const SYSTEM_TEST_INITIAL_ROOT_VISIT_TIMEOUT_MS = 180000
 
 const sharedState = globalThis.__systemTestHelperState ??= {
   refCount: 0,
@@ -70,6 +77,7 @@ export function defaultSystemTestJasmineStartupTimeoutInterval(driver) {
   const startupPhaseBudget =
     SELENIUM_DRIVER_START_TIMEOUT_MS +
     STARTUP_NAVIGATION_BUDGET_MS +
+    SYSTEM_TEST_INITIAL_ROOT_VISIT_TIMEOUT_MS +
     SYSTEM_TESTING_COMPONENT_TIMEOUT_MS +
     defaultClientWebSocketConnectTimeout({driver}) +
     STARTUP_TIMEOUT_HEADROOM_MS
@@ -119,6 +127,7 @@ export default class SystemTestHelper {
       this.debugLog("[system-test] beforeAll: creating SystemTest")
       this.systemTest = SystemTest.current({
         debug: this.debug,
+        initialRootVisitTimeout: SYSTEM_TEST_INITIAL_ROOT_VISIT_TIMEOUT_MS,
         host: process.env.SYSTEM_TEST_APP_HOST || "127.0.0.1",
         port: integerEnv("SYSTEM_TEST_APP_PORT", 3601),
         httpHost: process.env.SYSTEM_TEST_HTTP_HOST || "0.0.0.0",
