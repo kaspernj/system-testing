@@ -170,31 +170,19 @@ describe("Browser", () => {
   it("replaces input values by test id through shared retryable interactions", async () => {
     const browser = new Browser()
     const calls = []
-    let value = "Old"
 
     browser.interact = /** @type {any} */ (async (...args) => {
       calls.push(args)
 
-      if (args[1] === "getProperty") return value
-
-      if (args[1] === "sendKeys") {
-        const key = String(args[2])
-
-        if (key === Key.BACK_SPACE) {
-          value = value.slice(0, -1)
-        } else if (key !== Key.DELETE) {
-          value += key
-        }
-      }
+      if (args[1] === "getTagName") return "input"
+      if (args[1] === "getProperty") return "Next value"
 
       return undefined
     })
 
     await browser.replaceTestIDInputValue("name\"Input", "Next value", {timeout: 250})
 
-    // click, read "Old", 3 backspaces, verify empty, 10 typed characters, final verify
-    expect(calls.length).toEqual(17)
-    expect(value).toEqual("Next value")
+    expect(calls.length).toEqual(14)
     expect(calls[0]).toEqual([
       {
         method: "actions",
@@ -208,8 +196,8 @@ describe("Browser", () => {
         selector: "[data-testid=\"name\\\"Input\"]",
         timeout: 250
       },
-      "getProperty",
-      "value"
+      "sendKeys",
+      Key.chord(Key.CONTROL, "a")
     ])
     expect(calls[2]).toEqual([
       {
@@ -219,15 +207,7 @@ describe("Browser", () => {
       "sendKeys",
       Key.BACK_SPACE
     ])
-    expect(calls[5]).toEqual([
-      {
-        selector: "[data-testid=\"name\\\"Input\"]",
-        timeout: 250
-      },
-      "getProperty",
-      "value"
-    ])
-    expect(calls[6]).toEqual([
+    expect(calls[3]).toEqual([
       {
         selector: "[data-testid=\"name\\\"Input\"]",
         timeout: 250
@@ -235,7 +215,15 @@ describe("Browser", () => {
       "sendKeys",
       "N"
     ])
-    expect(calls[16]).toEqual([
+    expect(calls[12]).toEqual([
+      {
+        selector: "[data-testid=\"name\\\"Input\"]",
+        timeout: 250
+      },
+      "sendKeys",
+      "e"
+    ])
+    expect(calls[13]).toEqual([
       {
         selector: "[data-testid=\"name\\\"Input\"]",
         timeout: 250

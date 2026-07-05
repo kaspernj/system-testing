@@ -348,7 +348,7 @@ describe("WebDriverDriver interact", () => {
 
     driver._findElement = /** @type {any} */ (findElementSpy)
     driver.scrollElementIntoView = /** @type {any} */ (scrollSpy)
-    driver.setWebDriver(/** @type {any} */ ({actions: actionsSpy, executeScript: async () => null}))
+    driver.setWebDriver(/** @type {any} */ ({actions: actionsSpy}))
 
     await driver.click("[data-testid='project-environment-agent-submit']", {method: "actions", scrollTo: true, visible: false})
 
@@ -382,8 +382,7 @@ describe("WebDriverDriver interact", () => {
     driver._findElement = async () => /** @type {any} */ (element)
     driver.scrollElementIntoView = /** @type {any} */ (scrollSpy)
     driver.setWebDriver(/** @type {any} */ ({
-      actions: () => actions,
-      executeScript: async () => null
+      actions: () => actions
     }))
 
     await driver.click(element, {method: "actions"})
@@ -415,8 +414,7 @@ describe("WebDriverDriver interact", () => {
     driver._findElement = async () => /** @type {any} */ (element)
     driver.scrollElementIntoView = /** @type {any} */ (scrollSpy)
     driver.setWebDriver(/** @type {any} */ ({
-      actions: () => actions,
-      executeScript: async () => null
+      actions: () => actions
     }))
 
     await driver.click(element, {method: "actions", scrollTo: true})
@@ -447,8 +445,7 @@ describe("WebDriverDriver interact", () => {
 
     driver._findElement = async () => /** @type {any} */ (element)
     driver.setWebDriver(/** @type {any} */ ({
-      actions: jasmine.createSpy("actions").and.returnValue(actions),
-      executeScript: async () => null
+      actions: jasmine.createSpy("actions").and.returnValue(actions)
     }))
 
     await driver.click(element, {clickOffsetX: 32, clickOffsetY: 28, humanStepDelay: 75, humanSteps: 5, method: "human"})
@@ -483,7 +480,7 @@ describe("WebDriverDriver interact", () => {
       executeScript: async () => ({description: "div#overlay[data-testid='flashNotification']", x: 120, y: 240})
     }))
 
-    await expectAsync(driver.click(element, {method: "actions"}))
+    await expectAsync(driver.click(element, {checkInterception: true, method: "actions"}))
       .toBeRejectedWithError(/would receive the click.+div#overlay\[data-testid='flashNotification'\]/)
 
     expect(actions.perform).not.toHaveBeenCalled()
@@ -513,7 +510,7 @@ describe("WebDriverDriver interact", () => {
       executeScript: async () => ({description: "div#overlay", x: 12, y: 24})
     }))
 
-    await expectAsync(driver.click(element, {method: "human"}))
+    await expectAsync(driver.click(element, {checkInterception: true, method: "human"}))
       .toBeRejectedWithError(/would receive the click.+div#overlay/)
 
     expect(actions.perform).not.toHaveBeenCalled()
@@ -543,7 +540,7 @@ describe("WebDriverDriver interact", () => {
       executeScript: executeScriptSpy
     }))
 
-    await driver.click(element, {clickOffsetX: 10, clickOffsetY: -5, method: "actions"})
+    await driver.click(element, {checkInterception: true, clickOffsetX: 10, clickOffsetY: -5, method: "actions"})
 
     expect(executeScriptSpy).toHaveBeenCalledWith(jasmine.any(String), element, 10, -5)
     expect(actions.perform).toHaveBeenCalled()

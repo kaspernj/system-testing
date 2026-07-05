@@ -508,16 +508,25 @@ await systemTest.interact({selector: "[data-testid='scanFooterMenuButton']", use
 
 ### Replacing input values
 
-`clearAndSendKeys` (and `replaceTestIDInputValue`) replace an input's value with verified, chord-free key presses. Select-all shortcuts can silently no-op on some headless CI Chrome sessions while subsequent typing still lands, and the focusing click can land the caret anywhere in the value (for example mid-line in a multiline textarea), so the helper clears on both sides of the caret — one BACK_SPACE per character followed by one DELETE per remaining character — verifies the field is empty before typing, types the replacement one character at a time, and verifies the final value. It retries internally and throws with the expected and actual values when the field never reaches the requested text.
+`clearAndSendKeys` (and `replaceTestIDInputValue`) keep standard input-replacement semantics: click to focus, select-all + backspace, then `sendKeys` the replacement and verify the resulting value.
+
+Some headless CI Chrome sessions silently ignore the select-all chord while subsequent typing still lands, which leaves old + typed text in the field. For those environments, opt into `replaceInputValue`, which replaces the value with chord-free, verified key presses: it clears per character on both sides of the caret (one BACK_SPACE per character before it, one DELETE per remaining character after it — the focusing click can land the caret anywhere, for example mid-line in a multiline textarea), verifies the field is empty before typing, types the replacement one character at a time, and verifies the final value. It retries internally and throws with the expected and actual values when the field never reaches the requested text.
 
 ```js
 await systemTest.clearAndSendKeys("[data-testid='ticketCountInput']", "20")
 await systemTest.replaceTestIDInputValue("ticketCountInput", "20")
+
+// Verified, chord-free replacement for environments where select-all silently no-ops:
+await systemTest.replaceInputValue("[data-testid='ticketCountInput']", "20")
 ```
 
 ### Verified clicks
 
-`click`/`interact` clicks with `method: "actions"` or `method: "human"` hit-test the click point first and throw an `ElementClickInterceptedError`-style error when another element (for example a flash-notification overlay or a fading modal backdrop) would receive the click, matching `element.click()` interception semantics instead of silently dropping the press on the overlay. These interception errors stay retryable through `interact`'s normal retry handling.
+`click`/`interact` clicks with `method: "actions"` or `method: "human"` can opt into `checkInterception: true` to hit-test the click point first and throw an `ElementClickInterceptedError`-style error when another element (for example a flash-notification overlay or a fading modal backdrop) would receive the click, matching `element.click()` interception semantics instead of silently dropping the press on the overlay. These interception errors stay retryable through `interact`'s normal retry handling. Without the flag, pointer-action clicks keep their default behavior and dispatch at the click point unconditionally.
+
+```js
+await systemTest.interact({selector: "[data-testid='buyButton']", method: "actions", checkInterception: true}, "click")
+```
 
 When a click reports success but the app effect is what actually matters (the silent-drop failure mode), use `clickAndWaitForEffect` to make the click count only once a caller-observable effect appears. The effect callback should throw while the effect has not happened yet; the click is re-sent until the effect appears or the time budget runs out. Only use it for clicks where clicking again before the effect has appeared is safe, such as opening a menu or navigating.
 

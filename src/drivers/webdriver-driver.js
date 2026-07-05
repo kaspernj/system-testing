@@ -111,6 +111,7 @@ function shouldIgnoreBrowserLogEntry(entry, message) {
  * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean | null} [visible] Whether to require elements to be visible (`true`) or hidden (`false`). Use `null` to disable visibility filtering.
  * @property {"actions" | "human" | "js"} [method] Override the click path. `"actions"` uses the Selenium Actions API (real pointer move + click); `"human"` uses multiple pointer moves and pauses before clicking; `"js"` dispatches `element.click()` via `executeScript` inside the page's JS context and is for diagnostics only, not committed stabilization fixes.
+ * @property {boolean} [checkInterception] Hit-test `actions`/`human` pointer clicks first and fail like `element.click()` when another element would receive the click, instead of silently clicking whatever is painted on top.
  * @property {number} [clickOffsetX] X offset for `actions`/`human` pointer clicks relative to the target element.
  * @property {number} [clickOffsetY] Y offset for `actions`/`human` pointer clicks relative to the target element.
  * @property {number} [humanStepDelay] Pause duration in ms between human pointer moves.
@@ -730,7 +731,7 @@ export default class WebDriverDriver {
    * @returns {Promise<void>}
    */
   async click(elementOrIdentifier, args) {
-    const {clickOffsetX, clickOffsetY, humanStepDelay, humanSteps, method, scrollTo = false, ...findArgs} = args || {}
+    const {checkInterception = false, clickOffsetX, clickOffsetY, humanStepDelay, humanSteps, method, scrollTo = false, ...findArgs} = args || {}
     const clickArgs = {clickOffsetX, clickOffsetY, humanStepDelay, humanSteps}
     let tries = 0
 
@@ -752,10 +753,10 @@ export default class WebDriverDriver {
             moveArgs = {origin: element, x: clickOffsetX ?? 0, y: clickOffsetY ?? 0}
           }
 
-          await this.throwOnObstructedClickTarget(element, clickOffsetX, clickOffsetY)
+          if (checkInterception) await this.throwOnObstructedClickTarget(element, clickOffsetX, clickOffsetY)
           await this.getWebDriver().actions({async: true}).move(moveArgs).click().perform()
         } else if (method === "human") {
-          await this.throwOnObstructedClickTarget(element, clickOffsetX, clickOffsetY)
+          if (checkInterception) await this.throwOnObstructedClickTarget(element, clickOffsetX, clickOffsetY)
           await this.humanClick(element, clickArgs)
         } else if (method === "js") {
           await this.getWebDriver().executeScript("arguments[0].click()", element)
@@ -820,9 +821,9 @@ export default class WebDriverDriver {
    * Mirrors the WebDriver element-click interception check for pointer-action clicks.
    * `element.click()` refuses to click when another element would receive the click, but
    * Actions API clicks dispatch pointer events at coordinates and silently hit whatever
-   * is painted on top. This pre-check makes `actions`/`human` clicks fail loudly (and
-   * retryably, through the shared interception handling) instead of silently dropping
-   * the press on an overlay.
+   * is painted on top. This opt-in pre-check (`checkInterception: true`) makes `actions`/
+   * `human` clicks fail loudly (and retryably, through the shared interception handling)
+   * instead of silently dropping the press on an overlay.
    * @param {import("selenium-webdriver").WebElement} element
    * @param {number} [clickOffsetX]
    * @param {number} [clickOffsetY]
@@ -1049,6 +1050,7 @@ export default class WebDriverDriver {
         delete sanitizedFindArgs.selector
         delete sanitizedFindArgs.method
         delete sanitizedFindArgs.withFallback
+        delete sanitizedFindArgs.checkInterception
         findArgs = sanitizedFindArgs
       }
 
@@ -1067,6 +1069,7 @@ export default class WebDriverDriver {
           if (isWebDriverElement(element)) {
             /** @type {FindArgs} */
             const clickArgs = {}
+            if (interactArgs?.checkInterception !== undefined) clickArgs.checkInterception = interactArgs.checkInterception
             if (interactArgs?.method !== undefined) clickArgs.method = interactArgs.method
             if (interactArgs?.scrollTo !== undefined) clickArgs.scrollTo = interactArgs.scrollTo
 

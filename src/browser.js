@@ -429,16 +429,51 @@ export default class Browser {
 
   /**
    * Clears an input and sends replacement keys through retryable browser interactions.
-   * Clearing is chord-free because select-all shortcuts can silently no-op on headless
-   * CI Chrome sessions while subsequent typing still lands: the value is deleted on both
-   * sides of the caret with per-character BACK_SPACE and DELETE presses. The field is
-   * verified empty before the replacement text is typed and the final value is verified
-   * afterwards.
+   * Uses standard select-all + backspace + sendKeys semantics. On CI environments where
+   * the select-all chord can silently no-op, prefer the opt-in `replaceInputValue`,
+   * which clears per character and verifies every step.
    * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
    * @param {string} nextValue
    * @returns {Promise<void>}
    */
   async clearAndSendKeys(elementOrIdentifier, nextValue) {
+    let actualValue
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await this.interact(this.textEntryClickTarget(elementOrIdentifier), "click")
+
+      await this.interact(elementOrIdentifier, "sendKeys", Key.chord(Key.CONTROL, "a"))
+      await this.interact(elementOrIdentifier, "sendKeys", Key.BACK_SPACE)
+
+      for (const character of Array.from(nextValue)) {
+        await this.interact(elementOrIdentifier, "sendKeys", character)
+      }
+
+      actualValue = await this.interact(elementOrIdentifier, "getProperty", "value")
+
+      if (actualValue === nextValue) return
+
+      if (attempt < 3) await wait(50)
+    }
+
+    const actualLength = typeof actualValue == "string" ? actualValue.length : "missing"
+
+    throw new Error(`Input replacement did not update the element value after 3 attempts. Expected length ${nextValue.length}, got ${actualLength}.`)
+  }
+
+  /**
+   * Replaces an input's value with chord-free, verified key presses. Select-all shortcuts
+   * can silently no-op on some headless CI Chrome sessions while subsequent typing still
+   * lands (leaving old + typed text in the field), so this clears per character on both
+   * sides of the caret, verifies the field is empty before typing, types the replacement
+   * one character at a time and verifies the final value. Throws with the expected and
+   * actual values when the field never reaches the requested text. Opt-in alternative to
+   * `clearAndSendKeys`, which keeps standard select-all + sendKeys semantics.
+   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
+   * @param {string} nextValue
+   * @returns {Promise<void>}
+   */
+  async replaceInputValue(elementOrIdentifier, nextValue) {
     let actualValue
 
     for (let attempt = 1; attempt <= 3; attempt++) {

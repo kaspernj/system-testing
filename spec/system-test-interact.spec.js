@@ -277,61 +277,117 @@ describe("SystemTest interact", () => {
     })
   })
 
-  it("clears prefilled inputs with per-character backspaces before typing", async () => {
+  it("clears input elements with select-all and backspace before sending replacement keys", async () => {
+    const systemTest = systemTestHelper.getSystemTest()
+    const interactSpy = spyOn(systemTest, "interact").and.callFake(async (_selector, methodName) => {
+      if (methodName === "getTagName") return "input"
+      if (methodName === "getProperty") return "new value"
+
+      return undefined
+    })
+
+    await systemTest.clearAndSendKeys("#replace-target", "new value")
+
+    expect(interactSpy.calls.argsFor(0)).toEqual([{selector: "#replace-target", method: "actions"}, "click"])
+    expect(interactSpy.calls.argsFor(1)).toEqual(["#replace-target", "sendKeys", Key.chord(Key.CONTROL, "a")])
+    expect(interactSpy.calls.argsFor(2)).toEqual(["#replace-target", "sendKeys", Key.BACK_SPACE])
+    expect(interactSpy.calls.argsFor(3)).toEqual(["#replace-target", "sendKeys", "n"])
+    expect(interactSpy.calls.argsFor(12)).toEqual(["#replace-target", "getProperty", "value"])
+  })
+
+  it("types replacement input text one character at a time", async () => {
+    const systemTest = systemTestHelper.getSystemTest()
+    const interactSpy = spyOn(systemTest, "interact").and.callFake(async (_selector, methodName) => {
+      if (methodName === "getTagName") return "input"
+      if (methodName === "getProperty") return "new"
+
+      return undefined
+    })
+
+    await systemTest.clearAndSendKeys("#replace-target", "new")
+
+    expect(interactSpy.calls.argsFor(3)).toEqual(["#replace-target", "sendKeys", "n"])
+    expect(interactSpy.calls.argsFor(4)).toEqual(["#replace-target", "sendKeys", "e"])
+    expect(interactSpy.calls.argsFor(5)).toEqual(["#replace-target", "sendKeys", "w"])
+    expect(interactSpy.calls.argsFor(6)).toEqual(["#replace-target", "getProperty", "value"])
+  })
+
+  it("retries clear and replacement keys until the requested value is visible", async () => {
+    const systemTest = systemTestHelper.getSystemTest()
+    const observedValues = ["", "new value"]
+    const interactSpy = spyOn(systemTest, "interact").and.callFake(async (_selector, methodName) => {
+      if (methodName === "getTagName") return "input"
+      if (methodName === "getProperty") return observedValues.shift()
+
+      return undefined
+    })
+
+    await systemTest.clearAndSendKeys("#replace-target", "new value")
+
+    const getValueCalls = interactSpy.calls
+      .allArgs()
+      .filter((callArgs) => callArgs[1] === "getProperty")
+
+    expect(interactSpy.calls.argsFor(0)).toEqual([{selector: "#replace-target", method: "actions"}, "click"])
+    expect(interactSpy.calls.argsFor(13)).toEqual([{selector: "#replace-target", method: "actions"}, "click"])
+    expect(getValueCalls.length).toBe(2)
+  })
+
+  it("replaceInputValue clears prefilled inputs with per-character backspaces before typing", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const fakeInput = fakeTextInput("16")
     const interactSpy = spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
 
-    await systemTest.clearAndSendKeys("#replace-target", "20")
+    await systemTest.replaceInputValue("#replace-target", "20")
 
     expect(interactSpy.calls.argsFor(0)).toEqual([{selector: "#replace-target", method: "actions"}, "click"])
     expect(fakeInput.sentKeys).toEqual([Key.BACK_SPACE, Key.BACK_SPACE, "2", "0"])
     expect(fakeInput.getValue()).toBe("20")
   })
 
-  it("clears text on both sides of a mid-value caret with backspaces and deletes", async () => {
+  it("replaceInputValue clears text on both sides of a mid-value caret with backspaces and deletes", async () => {
     // The focusing click can land the caret in the middle of a multiline textarea value,
     // where backspaces alone only delete the text before the caret.
     const systemTest = systemTestHelper.getSystemTest()
     const fakeInput = fakeTextInput("one\ntwo", {initialCaret: 3})
     spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
 
-    await systemTest.clearAndSendKeys("#replace-target", "replaced")
+    await systemTest.replaceInputValue("#replace-target", "replaced")
 
     expect(fakeInput.sentKeys.filter((key) => key === Key.DELETE).length).toBe(4)
     expect(fakeInput.getValue()).toBe("replaced")
   })
 
-  it("replaces prefilled values without select-all chords so ignored chords cannot leave old text behind", async () => {
+  it("replaceInputValue replaces prefilled values without select-all chords so ignored chords cannot leave old text behind", async () => {
     // Models the deterministic CI failure mode where CTRL+A+BACKSPACE had zero effect
     // while subsequent typing landed, leaving old + typed text in the field.
     const systemTest = systemTestHelper.getSystemTest()
     const fakeInput = fakeTextInput("16")
     spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
 
-    await systemTest.clearAndSendKeys("#replace-target", "20")
+    await systemTest.replaceInputValue("#replace-target", "20")
 
     expect(fakeInput.sentKeys.some((key) => key.includes(Key.CONTROL))).toBeFalse()
     expect(fakeInput.getValue()).toBe("20")
   })
 
-  it("types replacement text one character at a time and skips clearing keys when the input is already empty", async () => {
+  it("replaceInputValue types replacement text one character at a time and skips clearing keys when the input is already empty", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const fakeInput = fakeTextInput("")
     spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
 
-    await systemTest.clearAndSendKeys("#replace-target", "new")
+    await systemTest.replaceInputValue("#replace-target", "new")
 
     expect(fakeInput.sentKeys).toEqual(["n", "e", "w"])
     expect(fakeInput.getValue()).toBe("new")
   })
 
-  it("retries clearing until the field is verified empty before typing", async () => {
+  it("replaceInputValue retries clearing until the field is verified empty before typing", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const fakeInput = fakeTextInput("old", {ignoredBackspaces: 3})
     const interactSpy = spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
 
-    await systemTest.clearAndSendKeys("#replace-target", "new")
+    await systemTest.replaceInputValue("#replace-target", "new")
 
     const clickCalls = interactSpy.calls.allArgs().filter((callArgs) => callArgs[1] === "click")
 
@@ -339,25 +395,25 @@ describe("SystemTest interact", () => {
     expect(fakeInput.getValue()).toBe("new")
   })
 
-  it("throws with the expected and actual values when typing does not land", async () => {
+  it("replaceInputValue throws with the expected and actual values when typing does not land", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const fakeInput = fakeTextInput("", {typingWorks: false})
     spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
 
-    await expectAsync(systemTest.clearAndSendKeys("#replace-target", "new value"))
+    await expectAsync(systemTest.replaceInputValue("#replace-target", "new value"))
       .toBeRejectedWithError(/did not update the element value after 3 attempts.+Expected "new value", got ""/)
   })
 
-  it("throws with the remaining value when clearing never empties the field", async () => {
+  it("replaceInputValue throws with the remaining value when clearing never empties the field", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const fakeInput = fakeTextInput("stuck", {ignoredBackspaces: Number.POSITIVE_INFINITY})
     spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
 
-    await expectAsync(systemTest.clearAndSendKeys("#replace-target", "new value"))
+    await expectAsync(systemTest.replaceInputValue("#replace-target", "new value"))
       .toBeRejectedWithError(/clearing did not empty the element value after 3 attempts.+"stuck".+"new value"/)
   })
 
-  itIfWeb("replaces a prefilled input value end-to-end", async () => {
+  itIfWeb("replaceInputValue replaces a prefilled input value end-to-end", async () => {
     await SystemTest.run(async (runningSystemTest) => {
       try {
         await runningSystemTest.getDriver().executeScript(`
@@ -380,7 +436,7 @@ describe("SystemTest interact", () => {
           return true
         `)
 
-        await runningSystemTest.clearAndSendKeys({selector: "[data-testid='clearAndSendKeysTarget']", useBaseSelector: false}, "20")
+        await runningSystemTest.replaceInputValue({selector: "[data-testid='clearAndSendKeysTarget']", useBaseSelector: false}, "20")
 
         const inputValue = await runningSystemTest.interact({selector: "[data-testid='clearAndSendKeysTarget']", useBaseSelector: false}, "getProperty", "value")
 
@@ -395,7 +451,7 @@ describe("SystemTest interact", () => {
     })
   })
 
-  itIfWeb("replaces a multiline textarea value end-to-end even when the click lands the caret mid-text", async () => {
+  itIfWeb("replaceInputValue replaces a multiline textarea value end-to-end even when the click lands the caret mid-text", async () => {
     await SystemTest.run(async (runningSystemTest) => {
       try {
         await runningSystemTest.getDriver().executeScript(`
@@ -419,7 +475,7 @@ describe("SystemTest interact", () => {
           return true
         `)
 
-        await runningSystemTest.clearAndSendKeys({selector: "[data-testid='clearAndSendKeysTextarea']", useBaseSelector: false}, "replaced")
+        await runningSystemTest.replaceInputValue({selector: "[data-testid='clearAndSendKeysTextarea']", useBaseSelector: false}, "replaced")
 
         const textareaValue = await runningSystemTest.interact({selector: "[data-testid='clearAndSendKeysTextarea']", useBaseSelector: false}, "getProperty", "value")
 
@@ -470,7 +526,7 @@ describe("SystemTest interact", () => {
         `)
 
         await expectAsync(
-          runningSystemTest.interact({selector: "[data-testid='actionsClickTarget']", method: "actions", useBaseSelector: false}, "click")
+          runningSystemTest.interact({checkInterception: true, selector: "[data-testid='actionsClickTarget']", method: "actions", useBaseSelector: false}, "click")
         ).toBeRejectedWithError(/ElementClickInterceptedError.+actionsClickOverlay/)
 
         const clickedWhileObstructed = await runningSystemTest.interact({selector: "[data-testid='actionsClickTarget']", useBaseSelector: false}, "getAttribute", "data-clicked")
