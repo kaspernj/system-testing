@@ -355,6 +355,30 @@ export default class WebDriverDriver {
   }
 
   /**
+   * Runs a callback with the driver page-load timeout temporarily lowered, restoring the
+   * default afterwards. Used to bound individual navigation attempts that have their own
+   * outer retry budget, so one hung navigation cannot consume the whole budget. Skipped
+   * for sessions without a page-load timeout (native Appium contexts).
+   * @template T
+   * @param {number} pageLoadTimeoutMs
+   * @param {() => Promise<T>} callback
+   * @returns {Promise<T>}
+   */
+  async withPageLoadTimeout(pageLoadTimeoutMs, callback) {
+    const defaultPageLoadTimeout = this.pageLoadTimeoutMs()
+
+    if (defaultPageLoadTimeout === undefined) return await callback()
+
+    await this.getWebDriver().manage().setTimeouts({pageLoad: pageLoadTimeoutMs})
+
+    try {
+      return await callback()
+    } finally {
+      await this.getWebDriver().manage().setTimeouts({pageLoad: defaultPageLoadTimeout})
+    }
+  }
+
+  /**
    * Runs a callback with Selenium's implicit wait temporarily changed. Finder
    * methods do their own explicit polling, so leaving Selenium's implicit wait
    * enabled would make short lookup timeouts block for the global driver wait.

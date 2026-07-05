@@ -104,7 +104,8 @@ describe("SystemTest root path", () => {
       getTimeouts: () => 100,
       setBaseUrl: jasmine.createSpy("setBaseUrl"),
       setTimeouts: jasmine.createSpy("setTimeouts").and.resolveTo(undefined),
-      start: jasmine.createSpy("start").and.resolveTo(undefined)
+      start: jasmine.createSpy("start").and.resolveTo(undefined),
+      withPageLoadTimeout: jasmine.createSpy("withPageLoadTimeout").and.callFake(async (_pageLoadTimeoutMs, callback) => await callback())
     }
     const visitAttempts = []
 
@@ -144,7 +145,8 @@ describe("SystemTest root path", () => {
       getTimeouts: () => 1,
       setBaseUrl: jasmine.createSpy("setBaseUrl"),
       setTimeouts: jasmine.createSpy("setTimeouts").and.resolveTo(undefined),
-      start: jasmine.createSpy("start").and.resolveTo(undefined)
+      start: jasmine.createSpy("start").and.resolveTo(undefined),
+      withPageLoadTimeout: jasmine.createSpy("withPageLoadTimeout").and.callFake(async (_pageLoadTimeoutMs, callback) => await callback())
     }
     const visitAttempts = []
 
@@ -186,7 +188,8 @@ describe("SystemTest root path", () => {
       getTimeouts: () => 100,
       setBaseUrl: jasmine.createSpy("setBaseUrl"),
       setTimeouts: jasmine.createSpy("setTimeouts").and.resolveTo(undefined),
-      start: jasmine.createSpy("start").and.resolveTo(undefined)
+      start: jasmine.createSpy("start").and.resolveTo(undefined),
+      withPageLoadTimeout: jasmine.createSpy("withPageLoadTimeout").and.callFake(async (_pageLoadTimeoutMs, callback) => await callback())
     }
     const onWarning = jasmine.createSpy("onWarning")
     const visitAttempts = []
@@ -223,6 +226,12 @@ describe("SystemTest root path", () => {
     expect(onWarning).toHaveBeenCalledTimes(1)
     expect(onWarning.calls.argsFor(0)[0]).toContain("Timed out receiving message from renderer")
     expect(onWarning.calls.argsFor(0)[0]).toContain("retrying")
+
+    // Each attempt must be bounded well below the overall retry budget: with the default
+    // 60s page-load timeout, one hung navigation would consume the whole 60s budget and
+    // make the renderer-timeout retry unreachable (which is exactly what happened on CI).
+    expect(adapter.withPageLoadTimeout.calls.count()).toBe(2)
+    expect(adapter.withPageLoadTimeout.calls.argsFor(0)[0]).toBe(20000)
   })
 
   it("still throws the renderer timeout when the initial visit budget is exhausted", async () => {
@@ -231,7 +240,8 @@ describe("SystemTest root path", () => {
       getTimeouts: () => 100,
       setBaseUrl: jasmine.createSpy("setBaseUrl"),
       setTimeouts: jasmine.createSpy("setTimeouts").and.resolveTo(undefined),
-      start: jasmine.createSpy("start").and.resolveTo(undefined)
+      start: jasmine.createSpy("start").and.resolveTo(undefined),
+      withPageLoadTimeout: jasmine.createSpy("withPageLoadTimeout").and.callFake(async (_pageLoadTimeoutMs, callback) => await callback())
     }
 
     spyOn(SystemTestHttpServer.prototype, "start").and.resolveTo(undefined)

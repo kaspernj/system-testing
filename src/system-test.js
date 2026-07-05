@@ -16,6 +16,10 @@ const CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 30000
 const CLIENT_WEBSOCKET_SERVER_LISTEN_TIMEOUT_MS = 15000
 const DEFAULT_INITIAL_ROOT_VISIT_TIMEOUT_MS = 60000
 const INITIAL_ROOT_VISIT_RETRY_DELAY_MS = 100
+// Bounds each initial root visit attempt so a single hung navigation (for example a
+// renderer-communication timeout on a loaded host) cannot consume the whole
+// initialRootVisitTimeout budget and leave no room for a retry.
+const INITIAL_ROOT_VISIT_ATTEMPT_PAGE_LOAD_TIMEOUT_MS = 20000
 const NATIVE_CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 120000
 
 /**
@@ -895,7 +899,10 @@ export default class SystemTest extends Browser {
 
     while (true) {
       try {
-        await this.driverVisit(rootPath)
+        await this.getDriverAdapter().withPageLoadTimeout(
+          Math.min(INITIAL_ROOT_VISIT_ATTEMPT_PAGE_LOAD_TIMEOUT_MS, this._initialRootVisitTimeout),
+          async () => await this.driverVisit(rootPath)
+        )
         return
       } catch (error) {
         const visitError = ensureError(error, "initial root path visit error")

@@ -20,6 +20,73 @@ function newDriver() {
 }
 
 describe("WebDriverDriver lifecycle", () => {
+  it("bounds and restores the page-load timeout around withPageLoadTimeout callbacks", async () => {
+    const setTimeoutsCalls = []
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver.setWebDriver(/** @type {any} */ ({
+      manage: () => ({
+        setTimeouts: async (timeouts) => {
+          setTimeoutsCalls.push(timeouts)
+        }
+      })
+    }))
+
+    const result = await driver.withPageLoadTimeout(20000, async () => "visited")
+
+    expect(result).toBe("visited")
+    expect(setTimeoutsCalls).toEqual([{pageLoad: 20000}, {pageLoad: 60000}])
+  })
+
+  it("restores the page-load timeout when the withPageLoadTimeout callback throws", async () => {
+    const setTimeoutsCalls = []
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver.setWebDriver(/** @type {any} */ ({
+      manage: () => ({
+        setTimeouts: async (timeouts) => {
+          setTimeoutsCalls.push(timeouts)
+        }
+      })
+    }))
+
+    await expectAsync(driver.withPageLoadTimeout(20000, async () => {
+      throw new Error("timeout: Timed out receiving message from renderer: -0.005")
+    })).toBeRejectedWithError(/Timed out receiving message from renderer/)
+
+    expect(setTimeoutsCalls).toEqual([{pageLoad: 20000}, {pageLoad: 60000}])
+  })
+
+  it("skips page-load timeout juggling when the driver has no page-load timeout", async () => {
+    const setTimeoutsSpy = jasmine.createSpy("setTimeouts")
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver.setWebDriver(/** @type {any} */ ({
+      manage: () => ({setTimeouts: setTimeoutsSpy})
+    }))
+    spyOn(driver, "pageLoadTimeoutMs").and.returnValue(undefined)
+
+    const result = await driver.withPageLoadTimeout(20000, async () => "visited")
+
+    expect(result).toBe("visited")
+    expect(setTimeoutsSpy).not.toHaveBeenCalled()
+  })
+
   it("installs SIGINT/SIGTERM/beforeExit listeners when installExitHandlers() is called", () => {
     const before = {
       sigint: process.listenerCount("SIGINT"),
