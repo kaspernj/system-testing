@@ -47,6 +47,7 @@ export function defaultClientWebSocketConnectTimeout({driver} = {}) {
  * @property {(error: any) => boolean} [errorFilter] Filter for browser errors (return false to ignore).
  * @property {boolean} [failOnBrowserError] Throw registered browser errors from finder/interact helpers.
  * @property {boolean} [failOnConsoleError] Treat browser console.error calls as registered browser errors.
+ * @property {(message: string) => void} [onWarning] Callback for retry/fallback warnings from verified helpers. Defaults to `console.warn`.
  * @property {number} [clientWsPort] Port for the browser-command WebSocket server.
  * @property {number} [clientWsConnectTimeout] Timeout for the browser-command WebSocket client connection.
  * @property {number} [initialRootVisitTimeout] Timeout for retrying the first browser route visit.
@@ -403,8 +404,8 @@ export default class SystemTest extends Browser {
    * Creates a new SystemTest instance
    * @param {SystemTestArgs} [args]
    */
-  constructor({clientWsPort = 1985, clientWsConnectTimeout, initialRootVisitTimeout = DEFAULT_INITIAL_ROOT_VISIT_TIMEOUT_MS, host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, httpConnectHost, debug = false, errorFilter, failOnBrowserError = true, failOnConsoleError = false, scoundrelPort = 8090, urlArgs, driver, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
-    super({debug, driver})
+  constructor({clientWsPort = 1985, clientWsConnectTimeout, initialRootVisitTimeout = DEFAULT_INITIAL_ROOT_VISIT_TIMEOUT_MS, host = "localhost", port = 8081, httpHost = "localhost", httpPort = 1984, httpConnectHost, debug = false, errorFilter, failOnBrowserError = true, failOnConsoleError = false, onWarning, scoundrelPort = 8090, urlArgs, driver, ...restArgs} = {host: "localhost", port: 8081, httpHost: "localhost", httpPort: 1984, debug: false}) {
+    super({debug, driver, onWarning})
 
     const restArgsKeys = Object.keys(restArgs)
 

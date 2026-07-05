@@ -15,6 +15,7 @@ import {testIdSelector} from "./test-id-selector.js"
  * @property {boolean} [debug] Enable debug logging.
  * @property {BrowserDriverConfig} [driver] Driver configuration.
  * @property {import("./system-test-communicator.js").default} [communicator] Optional command communicator for helper-driven navigation.
+ * @property {(message: string) => void} [onWarning] Callback for retry/fallback warnings from verified helpers. Defaults to `console.warn`.
  * @property {string} [screenshotsPath] Directory used for saved screenshots and browser artifacts.
  */
 /**
@@ -128,7 +129,7 @@ export default class Browser {
   _lastFailedStepPath = undefined
 
   /** @param {BrowserArgs} [args] */
-  constructor({debug = false, driver, communicator, screenshotsPath = `${process.cwd()}/tmp/screenshots`, ...restArgs} = {}) {
+  constructor({debug = false, driver, communicator, onWarning, screenshotsPath = `${process.cwd()}/tmp/screenshots`, ...restArgs} = {}) {
     const restArgsKeys = Object.keys(restArgs)
 
     if (restArgsKeys.length > 0) {
@@ -137,6 +138,7 @@ export default class Browser {
 
     this._debug = debug
     this._driverConfig = driver
+    this._onWarning = onWarning
     this._screenshotsPath = screenshotsPath
     this.communicator = communicator
     this.driverAdapter = this.createDriver(driver)
@@ -210,6 +212,20 @@ export default class Browser {
   debugLog(...args) {
     if (this._debug) {
       console.log("[Browser debug]", ...args)
+    }
+  }
+
+  /**
+   * Reports a retry/fallback warning through the configured `onWarning` callback so
+   * callers can handle or silence it, falling back to `console.warn` when none is set.
+   * @param {string} message
+   * @returns {void}
+   */
+  warn(message) {
+    if (this._onWarning) {
+      this._onWarning(message)
+    } else {
+      console.warn("[Browser warning]", message)
     }
   }
 
@@ -486,6 +502,7 @@ export default class Browser {
           throw new Error(`Input clearing did not empty the element value after ${attempt} attempts. The field still contains ${JSON.stringify(clearedValue)} before typing ${JSON.stringify(nextValue)}.`)
         }
 
+        this.warn(`replaceInputValue clearing left ${JSON.stringify(clearedValue)} in the field on attempt ${attempt}; retrying`)
         await wait(50)
         continue
       }
@@ -498,7 +515,10 @@ export default class Browser {
 
       if (actualValue === nextValue) return
 
-      if (attempt < 3) await wait(50)
+      if (attempt < 3) {
+        this.warn(`replaceInputValue got ${typeof actualValue == "string" ? JSON.stringify(actualValue) : actualValue} instead of ${JSON.stringify(nextValue)} on attempt ${attempt}; retrying`)
+        await wait(50)
+      }
     }
 
     const actualValueDescription = typeof actualValue == "string" ? JSON.stringify(actualValue) : `missing (${actualValue})`
@@ -589,11 +609,13 @@ export default class Browser {
 
         return
       } catch (effectError) {
-        if (Date.now() - startedAt >= totalTimeout) {
-          const effectErrorMessage = effectError instanceof Error ? effectError.message : String(effectError)
+        const effectErrorMessage = effectError instanceof Error ? effectError.message : String(effectError)
 
+        if (Date.now() - startedAt >= totalTimeout) {
           throw errorWithCause(`Click produced no observed effect after ${clicks} clicks within ${totalTimeout}ms. Last effect check failure: ${effectErrorMessage}`, effectError)
         }
+
+        this.warn(`Click produced no observed effect on attempt ${clicks} (${effectErrorMessage}); retrying`)
       }
     }
   }

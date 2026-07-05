@@ -540,6 +540,16 @@ await systemTest.clickAndWaitForEffect(
 
 `clickAndWaitForEffect` accepts the normal click/finder options plus `effectTimeout` (how long to await the effect after each click before re-clicking, default 2000 ms) and `timeout` (the overall budget).
 
+### Retry warnings
+
+When a verified helper hits a retry (for example `replaceInputValue` finding leftover text after clearing, or `clickAndWaitForEffect` re-clicking because the effect has not appeared), it reports a warning so the retry does not happen silently. Configure the `onWarning` callback (a `Browser`/`SystemTest` constructor option) to handle or silence these warnings; without a callback they fall back to `console.warn`.
+
+```js
+const systemTest = SystemTest.current({
+  onWarning: (message) => myLogger.warn(message)
+})
+```
+
 ### Reinitialize a system test
 
 Some test failures can leave the app in a broken state (for example a crashed React tree or a stuck WebSocket session). In those cases, fully restart the SystemTest instance to restore a clean browser/app state before continuing.
