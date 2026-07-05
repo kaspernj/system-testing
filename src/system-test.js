@@ -901,12 +901,21 @@ export default class SystemTest extends Browser {
         const visitError = ensureError(error, "initial root path visit error")
         const message = visitError.message
         const retryableNetworkError = message.includes("net::ERR_ADDRESS_UNREACHABLE") || message.includes("net::ERR_CONNECTION_REFUSED")
+        // Chromedriver can report a renderer-communication timeout for the very first
+        // navigation when the host is under heavy load (for example concurrent emulator
+        // builds). The initial visit is idempotent, so retry within the same budget.
+        const retryableRendererTimeout = message.includes("Timed out receiving message from renderer")
 
-        if (!retryableNetworkError || Date.now() >= deadline) {
+        if ((!retryableNetworkError && !retryableRendererTimeout) || Date.now() >= deadline) {
           throw visitError
         }
 
-        this.debugLog(`Initial root path visit waiting for driver network readiness: ${message}`)
+        if (retryableRendererTimeout) {
+          this.warn(`Initial root path visit timed out waiting for the browser renderer (${message}); retrying`)
+        } else {
+          this.debugLog(`Initial root path visit waiting for driver network readiness: ${message}`)
+        }
+
         await wait(Math.min(INITIAL_ROOT_VISIT_RETRY_DELAY_MS, Math.max(0, deadline - Date.now())))
       }
     }

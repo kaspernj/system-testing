@@ -5,3 +5,5 @@ Add an opt-in `checkInterception: true` click/interact argument that hit-tests `
 Add `clickAndWaitForEffect(elementOrIdentifier, expectedEffectCallback, args)` so callers can await a caller-observable effect of a click and re-click while the effect has not appeared, closing the silent-drop failure mode where a click reports success but the press effect never happens. Each effect probe is clamped to the remaining overall `timeout`.
 
 Report verified-helper retries (`replaceInputValue` clearing/typing retries and `clickAndWaitForEffect` re-clicks) through a new `onWarning` `Browser`/`SystemTest` constructor callback so users can handle or silence them, falling back to `console.warn` when no callback is configured.
+
+Retry the initial root path visit when chromedriver reports a renderer-communication timeout ("Timed out receiving message from renderer"), within the existing `initialRootVisitTimeout` budget and reported through `onWarning` — the same treatment startup already gives `net::ERR_ADDRESS_UNREACHABLE`/`net::ERR_CONNECTION_REFUSED`. The startup visit is idempotent, so this cannot mask product bugs; budget exhaustion still throws the original error.
