@@ -16,16 +16,30 @@ const itIfWeb = isNative ? xit : it
  * @param {string} initialValue Value the input starts with.
  * @param {object} [args] Caret placement and failure-mode toggles.
  * @param {number} [args.ignoredBackspaces] Number of leading BACK_SPACE presses that are silently dropped.
+ * @param {number} [args.dropKeyProbability] Probability (0-1) that any given BACK_SPACE/DELETE press is silently dropped, modelling keystrokes lost intermittently under CI load.
+ * @param {number} [args.dropSeed] Seed for the deterministic pseudo-random drop sequence.
  * @param {number} [args.initialCaret] Caret position after the focusing click (defaults to the end of the value).
  * @param {boolean} [args.typingWorks] Whether typed characters land in the value.
  * @returns {{getValue: () => string, interact: (target: any, methodName: string, ...interactArgs: any[]) => Promise<any>, sentKeys: string[]}}
  */
-function fakeTextInput(initialValue, {ignoredBackspaces = 0, initialCaret = initialValue.length, typingWorks = true} = {}) {
+function fakeTextInput(initialValue, {ignoredBackspaces = 0, dropKeyProbability = 0, dropSeed = 1, initialCaret = initialValue.length, typingWorks = true} = {}) {
   let value = initialValue
   let caret = initialCaret
   let backspacePresses = 0
+  let dropRngState = dropSeed >>> 0
   /** @type {string[]} */
   const sentKeys = []
+
+  // Models a keystroke silently dropped under load. A deterministic LCG keeps the drop
+  // sequence reproducible while staying aperiodic relative to the clear-pass structure, so a
+  // trailing single character cannot land in a resonance where the same slot drops forever.
+  const isDroppedDeletionKey = () => {
+    if (dropKeyProbability <= 0) return false
+
+    dropRngState = (Math.imul(dropRngState, 1664525) + 1013904223) >>> 0
+
+    return dropRngState / 0x100000000 < dropKeyProbability
+  }
 
   return {
     getValue: () => value,
@@ -41,6 +55,8 @@ function fakeTextInput(initialValue, {ignoredBackspaces = 0, initialCaret = init
         if (key === Key.BACK_SPACE) {
           backspacePresses += 1
 
+          if (isDroppedDeletionKey()) return undefined
+
           if (backspacePresses > ignoredBackspaces && caret > 0) {
             value = value.slice(0, caret - 1) + value.slice(caret)
             caret -= 1
@@ -50,6 +66,8 @@ function fakeTextInput(initialValue, {ignoredBackspaces = 0, initialCaret = init
         }
 
         if (key === Key.DELETE) {
+          if (isDroppedDeletionKey()) return undefined
+
           if (caret < value.length) value = value.slice(0, caret) + value.slice(caret + 1)
 
           return undefined
@@ -382,7 +400,10 @@ describe("SystemTest interact", () => {
     expect(fakeInput.getValue()).toBe("new")
   })
 
-  it("replaceInputValue retries clearing until the field is verified empty before typing", async () => {
+  it("replaceInputValue clears adaptively until the field is verified empty before typing", async () => {
+    // A whole clearing pass is silently dropped (like a burst of load), so the field is
+    // still full after the first pass; the adaptive loop re-reads the residual and deletes
+    // it on the next pass without needing another focusing click.
     const systemTest = systemTestHelper.getSystemTest()
     const fakeInput = fakeTextInput("old", {ignoredBackspaces: 3})
     const interactSpy = spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
@@ -391,8 +412,23 @@ describe("SystemTest interact", () => {
 
     const clickCalls = interactSpy.calls.allArgs().filter((callArgs) => callArgs[1] === "click")
 
-    expect(clickCalls.length).toBe(2)
+    expect(clickCalls.length).toBe(1)
     expect(fakeInput.getValue()).toBe("new")
+  })
+
+  it("replaceInputValue empties the field even when key presses are intermittently dropped under load", async () => {
+    // Roughly half the clearing key presses are dropped pseudo-randomly, needing more than
+    // the old fixed 3 retry passes to empty the field — the CI-load failure where the
+    // fixed-count clear left residual text and the field never emptied. The adaptive loop
+    // re-reads the actual residual each pass and re-deletes exactly what remains, so it still
+    // converges to an empty field and types the replacement.
+    const systemTest = systemTestHelper.getSystemTest()
+    const fakeInput = fakeTextInput("user@example.com", {dropKeyProbability: 0.5, dropSeed: 1})
+    spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
+
+    await systemTest.replaceInputValue("#replace-target", "john.doe@example.com")
+
+    expect(fakeInput.getValue()).toBe("john.doe@example.com")
   })
 
   it("replaceInputValue throws with the expected and actual values when typing does not land", async () => {
@@ -404,13 +440,15 @@ describe("SystemTest interact", () => {
       .toBeRejectedWithError(/did not update the element value after 3 attempts.+Expected "new value", got ""/)
   })
 
-  it("replaceInputValue throws with the remaining value when clearing never empties the field", async () => {
+  it("replaceInputValue throws with the remaining value when clearing can never make progress", async () => {
+    // A read-only-like field where no key press ever lands: the adaptive loop makes zero
+    // progress on every pass and gives up with a diagnostic naming the residual value.
     const systemTest = systemTestHelper.getSystemTest()
     const fakeInput = fakeTextInput("stuck", {ignoredBackspaces: Number.POSITIVE_INFINITY})
     spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
 
     await expectAsync(systemTest.replaceInputValue("#replace-target", "new value"))
-      .toBeRejectedWithError(/clearing did not empty the element value after 3 attempts.+"stuck".+"new value"/)
+      .toBeRejectedWithError(/clearing made no progress across 3 passes.+"stuck"/)
   })
 
   itIfWeb("replaceInputValue replaces a prefilled input value end-to-end", async () => {

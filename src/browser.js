@@ -480,11 +480,12 @@ export default class Browser {
   /**
    * Replaces an input's value with chord-free, verified key presses. Select-all shortcuts
    * can silently no-op on some headless CI Chrome sessions while subsequent typing still
-   * lands (leaving old + typed text in the field), so this clears per character on both
-   * sides of the caret, verifies the field is empty before typing, types the replacement
-   * one character at a time and verifies the final value. Throws with the expected and
-   * actual values when the field never reaches the requested text. Opt-in alternative to
-   * `clearAndSendKeys`, which keeps standard select-all + sendKeys semantics.
+   * lands (leaving old + typed text in the field), so this clears the field adaptively via
+   * `clearTextEntryValue` (re-reading the residual and deleting exactly what remains on each
+   * pass, on both sides of the caret, until the field is verified empty), then types the
+   * replacement one character at a time and verifies the final value. Throws with the
+   * expected and actual values when the field never reaches the requested text. Opt-in
+   * alternative to `clearAndSendKeys`, which keeps standard select-all + sendKeys semantics.
    * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
    * @param {string} nextValue
    * @returns {Promise<void>}
@@ -495,17 +496,7 @@ export default class Browser {
     for (let attempt = 1; attempt <= 3; attempt++) {
       await this.interact(this.textEntryClickTarget(elementOrIdentifier), "click")
 
-      const clearedValue = await this.clearTextEntryValue(elementOrIdentifier)
-
-      if (typeof clearedValue == "string" && clearedValue.length > 0) {
-        if (attempt >= 3) {
-          throw new Error(`Input clearing did not empty the element value after ${attempt} attempts. The field still contains ${JSON.stringify(clearedValue)} before typing ${JSON.stringify(nextValue)}.`)
-        }
-
-        this.warn(`replaceInputValue clearing left ${JSON.stringify(clearedValue)} in the field on attempt ${attempt}; retrying`)
-        await wait(50)
-        continue
-      }
+      await this.clearTextEntryValue(elementOrIdentifier)
 
       for (const character of Array.from(nextValue)) {
         await this.interact(elementOrIdentifier, "sendKeys", character)
@@ -527,40 +518,75 @@ export default class Browser {
   }
 
   /**
-   * Empties a text entry on both sides of the caret and returns the value left in the
-   * field so callers can verify the clearing actually took effect. The focusing click can
-   * land the caret anywhere in the value — for example mid-line in a multiline textarea,
-   * where END only reaches the end of the current line — so one BACK_SPACE per character
-   * deletes everything before the caret and one DELETE per remaining character deletes
-   * everything after it, regardless of where the caret ended up.
+   * Empties a text entry adaptively and returns the (empty) value left in the field. Each
+   * pass re-reads the element's actual current value and deletes exactly the characters that
+   * remain, repeating until the field is verified empty. The focusing click can land the
+   * caret anywhere in the value — for example mid-line in a multiline textarea, where END
+   * only reaches the end of the current line — so every pass issues one BACK_SPACE per
+   * remaining character (deletes everything before the caret; surplus presses no-op at
+   * position 0) then one DELETE per still-remaining character (deletes everything after the
+   * caret), regardless of where the caret ended up. Under CI load individual key presses are
+   * intermittently dropped, so a single fixed-count pass can leave residual text; re-reading
+   * and re-deleting exactly the residual on every pass keeps clearing robust as long as each
+   * pass makes progress. Throws with the residual value once progress stalls (the value
+   * length is unchanged across `maxStalledPasses` consecutive passes), which surfaces
+   * genuinely un-clearable fields such as read-only inputs instead of looping forever.
    * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
-   * @returns {Promise<string | undefined>}
+   * @returns {Promise<string>}
    */
   async clearTextEntryValue(elementOrIdentifier) {
-    const currentValue = await this.interact(elementOrIdentifier, "getProperty", "value")
+    // A pass that deletes at least one character resets the counter, so clearing only fails
+    // when this many consecutive passes each land zero of their key presses — a truly stuck
+    // field — rather than on the intermittent single-key drops this loop is built to absorb.
+    const maxStalledPasses = 3
+    const initialValue = await this.interact(elementOrIdentifier, "getProperty", "value")
 
-    if (typeof currentValue != "string" || currentValue.length === 0) return currentValue
+    if (typeof initialValue != "string" || initialValue.length === 0) return ""
 
-    // BACK_SPACE deletes the character before the caret wherever the caret is, so one press
-    // per character of the full value deletes everything before the caret (at most
-    // `currentValue.length` characters can be before it; surplus presses no-op at position 0).
-    for (let characterIndex = 0; characterIndex < currentValue.length; characterIndex++) {
-      await this.interact(elementOrIdentifier, "sendKeys", Key.BACK_SPACE)
+    let residual = initialValue
+    let stalledPasses = 0
+
+    while (residual.length > 0) {
+      const residualLengthBeforePass = residual.length
+
+      // BACK_SPACE deletes the character before the caret wherever the caret is, so one press
+      // per remaining character deletes everything before the caret; surplus presses no-op at
+      // position 0.
+      for (let characterIndex = 0; characterIndex < residualLengthBeforePass; characterIndex++) {
+        await this.interact(elementOrIdentifier, "sendKeys", Key.BACK_SPACE)
+      }
+
+      const valueAfterBackspaces = await this.interact(elementOrIdentifier, "getProperty", "value")
+
+      // Once the backspaces exhausted everything before the caret it sits at position 0, so
+      // one DELETE per still-remaining character deletes everything that was after it.
+      if (typeof valueAfterBackspaces == "string" && valueAfterBackspaces.length > 0) {
+        for (let characterIndex = 0; characterIndex < valueAfterBackspaces.length; characterIndex++) {
+          await this.interact(elementOrIdentifier, "sendKeys", Key.DELETE)
+        }
+      }
+
+      const valueAfterPass = await this.interact(elementOrIdentifier, "getProperty", "value")
+
+      residual = typeof valueAfterPass == "string" ? valueAfterPass : ""
+
+      if (residual.length === 0) break
+
+      if (residual.length < residualLengthBeforePass) {
+        stalledPasses = 0
+      } else {
+        stalledPasses += 1
+
+        if (stalledPasses >= maxStalledPasses) {
+          throw new Error(`Input clearing made no progress across ${maxStalledPasses} passes; the field still contains ${JSON.stringify(residual)}.`)
+        }
+      }
+
+      this.warn(`Input clearing left ${JSON.stringify(residual)} in the field; retrying`)
+      await wait(50)
     }
 
-    const valueAfterBackspaces = await this.interact(elementOrIdentifier, "getProperty", "value")
-
-    if (typeof valueAfterBackspaces != "string" || valueAfterBackspaces.length === 0) return valueAfterBackspaces
-
-    // After the backspace pass exhausted everything before the caret, the caret is at
-    // position 0 and the remaining value is exactly the text that was after it. DELETE
-    // deletes the character after the caret, so one press per remaining character empties
-    // the field. The caller re-reads the returned value to verify.
-    for (let characterIndex = 0; characterIndex < valueAfterBackspaces.length; characterIndex++) {
-      await this.interact(elementOrIdentifier, "sendKeys", Key.DELETE)
-    }
-
-    return await this.interact(elementOrIdentifier, "getProperty", "value")
+    return residual
   }
 
   /**
