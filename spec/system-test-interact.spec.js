@@ -19,14 +19,19 @@ const itIfWeb = isNative ? xit : it
  * @param {number} [args.dropKeyProbability] Probability (0-1) that any given BACK_SPACE/DELETE press is silently dropped, modelling keystrokes lost intermittently under CI load.
  * @param {number} [args.dropSeed] Seed for the deterministic pseudo-random drop sequence.
  * @param {number} [args.initialCaret] Caret position after the focusing click (defaults to the end of the value).
+ * @param {number} [args.focusRequiredClicks] Number of focus clicks needed before the caret lands and deletions take effect (0 means focused from the start). Models a click that reports success without focusing the field until re-clicked.
  * @param {boolean} [args.typingWorks] Whether typed characters land in the value.
  * @returns {{getValue: () => string, interact: (target: any, methodName: string, ...interactArgs: any[]) => Promise<any>, sentKeys: string[]}}
  */
-function fakeTextInput(initialValue, {ignoredBackspaces = 0, dropKeyProbability = 0, dropSeed = 1, initialCaret = initialValue.length, typingWorks = true} = {}) {
+function fakeTextInput(initialValue, {ignoredBackspaces = 0, dropKeyProbability = 0, dropSeed = 1, initialCaret = initialValue.length, focusRequiredClicks = 0, typingWorks = true} = {}) {
   let value = initialValue
   let caret = initialCaret
   let backspacePresses = 0
   let dropRngState = dropSeed >>> 0
+  let clickCount = 0
+  // A click that reports success but does not land the caret leaves the field unfocused, so
+  // deletion keys no-op until enough focus clicks have landed.
+  let focused = focusRequiredClicks <= 0
   /** @type {string[]} */
   const sentKeys = []
 
@@ -47,6 +52,17 @@ function fakeTextInput(initialValue, {ignoredBackspaces = 0, dropKeyProbability 
     interact: async (_target, methodName, ...interactArgs) => {
       if (methodName === "getProperty") return value
 
+      if (methodName === "click") {
+        clickCount += 1
+
+        if (!focused && clickCount >= focusRequiredClicks) {
+          focused = true
+          caret = value.length
+        }
+
+        return undefined
+      }
+
       if (methodName === "sendKeys") {
         const key = String(interactArgs[0])
 
@@ -57,7 +73,7 @@ function fakeTextInput(initialValue, {ignoredBackspaces = 0, dropKeyProbability 
 
           if (isDroppedDeletionKey()) return undefined
 
-          if (backspacePresses > ignoredBackspaces && caret > 0) {
+          if (focused && backspacePresses > ignoredBackspaces && caret > 0) {
             value = value.slice(0, caret - 1) + value.slice(caret)
             caret -= 1
           }
@@ -68,7 +84,7 @@ function fakeTextInput(initialValue, {ignoredBackspaces = 0, dropKeyProbability 
         if (key === Key.DELETE) {
           if (isDroppedDeletionKey()) return undefined
 
-          if (caret < value.length) value = value.slice(0, caret) + value.slice(caret + 1)
+          if (focused && caret < value.length) value = value.slice(0, caret) + value.slice(caret + 1)
 
           return undefined
         }
@@ -431,6 +447,23 @@ describe("SystemTest interact", () => {
     expect(fakeInput.getValue()).toBe("john.doe@example.com")
   })
 
+  it("replaceInputValue re-focuses and recovers when the initial focus click never landed the caret", async () => {
+    // The initial focusing click reports success but does not land the caret, so deletions
+    // no-op against a dead focus state; only a second focus click (issued by the adaptive
+    // clear loop after it stalls) actually focuses the field. The loop must re-focus and
+    // recover rather than throwing on the unchanged residual.
+    const systemTest = systemTestHelper.getSystemTest()
+    const fakeInput = fakeTextInput("stale", {focusRequiredClicks: 2})
+    const interactSpy = spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
+
+    await systemTest.replaceInputValue("#replace-target", "fresh")
+
+    const clickCalls = interactSpy.calls.allArgs().filter((callArgs) => callArgs[1] === "click")
+
+    expect(clickCalls.length).toBe(2)
+    expect(fakeInput.getValue()).toBe("fresh")
+  })
+
   it("replaceInputValue throws with the expected and actual values when typing does not land", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const fakeInput = fakeTextInput("", {typingWorks: false})
@@ -442,7 +475,8 @@ describe("SystemTest interact", () => {
 
   it("replaceInputValue throws with the remaining value when clearing can never make progress", async () => {
     // A read-only-like field where no key press ever lands: the adaptive loop makes zero
-    // progress on every pass and gives up with a diagnostic naming the residual value.
+    // progress even after exhausting its re-focus recovery attempts, then gives up with a
+    // diagnostic naming the residual value.
     const systemTest = systemTestHelper.getSystemTest()
     const fakeInput = fakeTextInput("stuck", {ignoredBackspaces: Number.POSITIVE_INFINITY})
     spyOn(systemTest, "interact").and.callFake(fakeInput.interact)

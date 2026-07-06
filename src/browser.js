@@ -528,23 +528,33 @@ export default class Browser {
    * caret), regardless of where the caret ended up. Under CI load individual key presses are
    * intermittently dropped, so a single fixed-count pass can leave residual text; re-reading
    * and re-deleting exactly the residual on every pass keeps clearing robust as long as each
-   * pass makes progress. Throws with the residual value once progress stalls (the value
-   * length is unchanged across `maxStalledPasses` consecutive passes), which surfaces
-   * genuinely un-clearable fields such as read-only inputs instead of looping forever.
+   * pass makes progress. When progress stalls (the value length is unchanged across
+   * `maxStalledPasses` consecutive passes) the focusing click may have reported success
+   * without actually landing the caret in the field, so deletions no-op against a dead focus
+   * state; before giving up, it re-issues the same focus click `maxRefocusRecoveries` times
+   * and keeps clearing, mirroring the outer re-click the caller used to rely on. Only once
+   * re-focusing still yields no progress does it throw with the residual value, which
+   * surfaces genuinely un-clearable fields such as read-only inputs instead of looping
+   * forever.
    * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
    * @returns {Promise<string>}
    */
   async clearTextEntryValue(elementOrIdentifier) {
-    // A pass that deletes at least one character resets the counter, so clearing only fails
-    // when this many consecutive passes each land zero of their key presses — a truly stuck
-    // field — rather than on the intermittent single-key drops this loop is built to absorb.
+    // A pass that deletes at least one character resets the counter, so a stall only trips
+    // when this many consecutive passes each land zero of their key presses — rather than on
+    // the intermittent single-key drops this loop is built to absorb.
     const maxStalledPasses = 3
+    // A stall can mean the focus click never actually landed the caret, so re-focus this many
+    // times (re-clicking the field like the caller does initially) before declaring the field
+    // genuinely un-clearable.
+    const maxRefocusRecoveries = 2
     const initialValue = await this.interact(elementOrIdentifier, "getProperty", "value")
 
     if (typeof initialValue != "string" || initialValue.length === 0) return ""
 
     let residual = initialValue
     let stalledPasses = 0
+    let refocusRecoveries = 0
 
     while (residual.length > 0) {
       const residualLengthBeforePass = residual.length
@@ -578,7 +588,19 @@ export default class Browser {
         stalledPasses += 1
 
         if (stalledPasses >= maxStalledPasses) {
-          throw new Error(`Input clearing made no progress across ${maxStalledPasses} passes; the field still contains ${JSON.stringify(residual)}.`)
+          if (refocusRecoveries >= maxRefocusRecoveries) {
+            throw new Error(`Input clearing made no progress across ${maxStalledPasses} passes after ${refocusRecoveries} re-focus attempts; the field still contains ${JSON.stringify(residual)}.`)
+          }
+
+          // The deletions may be no-oping because the focus click never landed the caret in
+          // the field; re-click it (the same focus action the caller used initially) and keep
+          // clearing before giving up.
+          refocusRecoveries += 1
+          stalledPasses = 0
+          this.warn(`Input clearing stalled with ${JSON.stringify(residual)} in the field; re-focusing and retrying`)
+          await this.interact(this.textEntryClickTarget(elementOrIdentifier), "click")
+          await wait(50)
+          continue
         }
       }
 
