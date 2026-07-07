@@ -166,25 +166,26 @@ describe("Browser", () => {
     ).toBeRejectedWithError("Expected panel to include rgb(30, 41, 59), got background-color rgb(130, 41, 59)")
   })
 
-  it("reports clearAndSendKeys retries through the onWarning callback", async () => {
+  it("reports fill retries through the onWarning callback", async () => {
     const onWarning = jasmine.createSpy("onWarning")
     const browser = new Browser({onWarning})
-    let value = "stuck"
-    let clears = 0
+    let value = "prefilled"
+    let sendKeysCalls = 0
 
     browser.interact = /** @type {any} */ (async (_target, methodName, ...args) => {
       if (methodName === "getProperty") return value
 
       if (methodName === "clear") {
-        clears += 1
         value = ""
 
         return undefined
       }
 
-      // Typing only lands after the field has been cleared a second time, so the first
-      // clear+type+verify attempt leaves an empty field and forces a retry.
-      if (methodName === "sendKeys" && clears >= 2) value += String(args[0])
+      // The first whole-string sendKeys is silently dropped, forcing a fill retry.
+      if (methodName === "sendKeys") {
+        sendKeysCalls += 1
+        if (sendKeysCalls >= 2) value += String(args[0])
+      }
 
       return undefined
     })
@@ -197,23 +198,25 @@ describe("Browser", () => {
     expect(onWarning.calls.argsFor(0)[0]).toContain("retrying")
   })
 
-  it("falls back to console.warn for clearAndSendKeys retries when no onWarning callback is configured", async () => {
+  it("falls back to console.warn for fill retries when no onWarning callback is configured", async () => {
     const consoleWarnSpy = spyOn(console, "warn")
     const browser = new Browser()
-    let value = "stuck"
-    let clears = 0
+    let value = "prefilled"
+    let sendKeysCalls = 0
 
     browser.interact = /** @type {any} */ (async (_target, methodName, ...args) => {
       if (methodName === "getProperty") return value
 
       if (methodName === "clear") {
-        clears += 1
         value = ""
 
         return undefined
       }
 
-      if (methodName === "sendKeys" && clears >= 2) value += String(args[0])
+      if (methodName === "sendKeys") {
+        sendKeysCalls += 1
+        if (sendKeysCalls >= 2) value += String(args[0])
+      }
 
       return undefined
     })
@@ -275,24 +278,42 @@ describe("Browser", () => {
     expect(onWarning).not.toHaveBeenCalled()
   })
 
-  it("replaces input values by test id through shared retryable interactions with a native clear", async () => {
+  it("replaces input values by test id through a native clear then one whole-string fill", async () => {
     const browser = new Browser()
     const calls = []
+    let value = "Old value"
 
     browser.interact = /** @type {any} */ (async (...args) => {
       calls.push(args)
 
-      if (args[1] === "getTagName") return "input"
-      if (args[1] === "getProperty") return "Next value"
+      if (args[1] === "getProperty") return value
+      if (args[1] === "clear") { value = ""; return undefined }
+      if (args[1] === "sendKeys") { value += String(args[2]); return undefined }
 
       return undefined
     })
 
     await browser.replaceTestIDInputValue("name\"Input", "Next value", {timeout: 250})
 
-    // Focus click, one native element.clear(), the ten typed characters, then the verify read.
-    expect(calls.length).toEqual(13)
+    // Native clear, then fill: read the current value, focus click, one whole-string sendKeys, verify.
+    expect(value).toBe("Next value")
+    expect(calls.length).toEqual(5)
     expect(calls[0]).toEqual([
+      {
+        selector: "[data-testid=\"name\\\"Input\"]",
+        timeout: 250
+      },
+      "clear"
+    ])
+    expect(calls[1]).toEqual([
+      {
+        selector: "[data-testid=\"name\\\"Input\"]",
+        timeout: 250
+      },
+      "getProperty",
+      "value"
+    ])
+    expect(calls[2]).toEqual([
       {
         method: "actions",
         selector: "[data-testid=\"name\\\"Input\"]",
@@ -300,30 +321,15 @@ describe("Browser", () => {
       },
       "click"
     ])
-    expect(calls[1]).toEqual([
-      {
-        selector: "[data-testid=\"name\\\"Input\"]",
-        timeout: 250
-      },
-      "clear"
-    ])
-    expect(calls[2]).toEqual([
+    expect(calls[3]).toEqual([
       {
         selector: "[data-testid=\"name\\\"Input\"]",
         timeout: 250
       },
       "sendKeys",
-      "N"
+      "Next value"
     ])
-    expect(calls[11]).toEqual([
-      {
-        selector: "[data-testid=\"name\\\"Input\"]",
-        timeout: 250
-      },
-      "sendKeys",
-      "e"
-    ])
-    expect(calls[12]).toEqual([
+    expect(calls[4]).toEqual([
       {
         selector: "[data-testid=\"name\\\"Input\"]",
         timeout: 250

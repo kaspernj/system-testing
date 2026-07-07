@@ -444,98 +444,166 @@ export default class Browser {
   }
 
   /**
-   * @typedef {"native" | "js" | "backspace-keys" | "delete-keys"} ClearStrategy
+   * @typedef {"native" | "js" | "backspace-keys" | "delete-keys"} ClearStrategy How a field is emptied.
+   *   `"native"` (default) is a normal Selenium `element.clear()`. `"js"` sets the value to `""` through
+   *   a DOM prototype setter plus input/change events — the only strategy that reliably drives React
+   *   Native Web controlled-input state, kept as an escape hatch. `"backspace-keys"` and `"delete-keys"`
+   *   clear with per-character key presses in a deliberately slow, adaptive, caret-safe,
+   *   drop/refocus-recovering loop (opt-in only). Flaky clearing is a controlled-input smell — see the
+   *   README "Clearing and filling inputs" section.
    */
   /**
-   * @typedef {object} ClearAndSendKeysArgs
-   * @property {ClearStrategy} [clearStrategy] How to clear the field before typing the replacement.
-   *   `"native"` (default) issues a normal Selenium `element.clear()` and is what almost every call
-   *   should use. `"js"` sets the value directly through a DOM prototype setter plus input/change
-   *   events — the only strategy that reliably drives React Native Web controlled-input state, kept as
-   *   an escape hatch. `"backspace-keys"` clears with per-character key presses on both sides of the
-   *   caret (deliberately slow, drop/refocus-recovering) and `"delete-keys"` is the forward-delete-first
-   *   variant; only opt into the key-based strategies for genuinely broken inputs. Flaky clearing/typing
-   *   is a controlled-input smell — see the "Clearing inputs" section of the README.
-   * @property {number} [keyDelay] Milliseconds to wait between individual key presses, applied to the
-   *   key-based clear strategies and to the per-character typing loop. Defaults to `0` (no artificial
-   *   delay, byte-identical to the historic timing). A controlled-input band-aid knob, not a fix.
+   * @typedef {"native" | "js" | "per-character"} FillStrategy How a value is entered.
+   *   `"native"` (default) is a single fast `element.sendKeys(value)` (real keyboard events, whole string
+   *   at once). `"js"` sets the value directly through a DOM prototype setter plus input/change events —
+   *   the React Native Web controlled-input escape hatch. `"per-character"` types the value one key at a
+   *   time (deliberately slow, opt-in). All strategies verify the entered value and retry a bounded number
+   *   of times before throwing.
+   */
+  /**
+   * @typedef {object} ClearArgs
+   * @property {ClearStrategy} [strategy] How to empty the field. Defaults to `"native"`.
+   * @property {number} [keyDelay] Milliseconds to wait between key presses for the key-based strategies.
+   *   Defaults to `0` (no artificial delay). A controlled-input band-aid knob, not a fix.
+   */
+  /**
+   * @typedef {object} FillArgs
+   * @property {FillStrategy} [strategy] How to enter the value. Defaults to `"native"`.
+   * @property {number} [keyDelay] Milliseconds to wait between key presses for the `"per-character"`
+   *   strategy. Defaults to `0`. A controlled-input band-aid knob, not a fix.
+   */
+  /**
+   * @typedef {object} ClearAndFillArgs
+   * @property {ClearStrategy} [clearStrategy] How to empty the field first. Defaults to `"native"`.
+   * @property {FillStrategy} [fillStrategy] How to enter the value. Defaults to `"native"`.
+   * @property {number} [keyDelay] Milliseconds to wait between key presses for the key-based clear and
+   *   fill strategies. Defaults to `0`. A controlled-input band-aid knob, not a fix.
    */
 
   /**
-   * Clears a text entry and types a replacement value, then verifies the field holds it. Clears with a
-   * normal Selenium `element.clear()` by default; pass `clearStrategy` to opt into the `js` DOM-setter
-   * escape hatch or the deliberately slow key-based (`backspace-keys`/`delete-keys`) clears. Retries the
-   * whole clear+type+verify up to three times and throws with the expected and actual values when the
-   * field never reaches the requested text. Flaky clearing/typing is almost always a controlled-input
-   * smell — the real fix is an uncontrolled input (`defaultValue` + `onChangeText`), not a clear strategy
-   * or DOM value injection (those hit real users too); see the README "Clearing inputs" section.
+   * Empties a text entry. Uses a normal Selenium `element.clear()` by default; pass `strategy` to opt into
+   * the `js` DOM-setter escape hatch or the deliberately slow key-based (`backspace-keys`/`delete-keys`)
+   * clears. Needing a non-native clear is a controlled-input smell — the real fix is an uncontrolled input
+   * (`defaultValue` + `onChangeText`), not a clear strategy; see the README "Clearing and filling inputs".
    * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
-   * @param {string} nextValue
-   * @param {ClearAndSendKeysArgs} [args]
+   * @param {ClearArgs} [args]
    * @returns {Promise<void>}
    */
-  async clearAndSendKeys(elementOrIdentifier, nextValue, {clearStrategy = "native", keyDelay = 0} = {}) {
+  async clear(elementOrIdentifier, {strategy = "native", keyDelay = 0} = {}) {
+    if (strategy === "native") {
+      await this.interact(elementOrIdentifier, "clear")
+
+      return
+    }
+
+    if (strategy === "js") {
+      // The DOM-setter escape hatch empties the field by setting its value to "" with input/change events.
+      await this.interact(elementOrIdentifier, "replaceValueWithJs", "")
+
+      return
+    }
+
+    // Key-based strategies need the caret in the field, so focus it before the adaptive clearing loop.
+    await this.interact(this.textEntryClickTarget(elementOrIdentifier), "click")
+    await this.clearTextEntryValue(elementOrIdentifier, {clearStrategy: strategy, keyDelay})
+  }
+
+  /**
+   * Enters `value` into a text entry without clearing it first (pure fill). Uses one fast whole-string
+   * `element.sendKeys(value)` by default; pass `strategy` to opt into the `js` DOM-setter escape hatch or
+   * the deliberately slow `per-character` typing. Reads the current value first, then verifies the field
+   * holds the expected result (`js` replaces the value; the keyboard strategies append at the caret) and
+   * retries the whole fill up to three times before throwing with the expected and actual values. Needing
+   * `js`/`per-character` to make a value land is a controlled-input smell — see the README.
+   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
+   * @param {string} value
+   * @param {FillArgs} [args]
+   * @returns {Promise<void>}
+   */
+  async fill(elementOrIdentifier, value, {strategy = "native", keyDelay = 0} = {}) {
+    const rawBeforeValue = await this.interact(elementOrIdentifier, "getProperty", "value")
+    const beforeValue = typeof rawBeforeValue == "string" ? rawBeforeValue : ""
+    // `js` replaces the whole value; the keyboard strategies append at the caret of the (unclear) field.
+    const expectedValue = strategy === "js" ? value : `${beforeValue}${value}`
     let actualValue
 
     for (let attempt = 1; attempt <= 3; attempt++) {
-      await this.interact(this.textEntryClickTarget(elementOrIdentifier), "click")
+      if (strategy === "js") {
+        await this.interact(elementOrIdentifier, "replaceValueWithJs", value)
+      } else if (strategy === "per-character") {
+        await this.interact(this.textEntryClickTarget(elementOrIdentifier), "click")
 
-      if (clearStrategy === "js") {
-        // The DOM-setter escape hatch replaces the whole value in one shot (clear + set), so it skips the
-        // per-character typing loop that controlled React Native Web inputs drop keystrokes from.
-        await this.interact(elementOrIdentifier, "replaceValueWithJs", nextValue)
-      } else {
-        await this.clearTextEntryValue(elementOrIdentifier, {clearStrategy, keyDelay})
-
-        for (const character of Array.from(nextValue)) {
+        for (const character of Array.from(value)) {
           await this.interact(elementOrIdentifier, "sendKeys", character)
           await this.waitBetweenKeystrokes(keyDelay)
         }
+      } else {
+        // Fast default: one whole-string sendKeys with real keyboard events, not a per-character loop.
+        await this.interact(this.textEntryClickTarget(elementOrIdentifier), "click")
+        await this.interact(elementOrIdentifier, "sendKeys", value)
       }
 
       actualValue = await this.interact(elementOrIdentifier, "getProperty", "value")
 
-      if (actualValue === nextValue) return
+      if (actualValue === expectedValue) return
 
       if (attempt < 3) {
-        this.warn(`clearAndSendKeys got ${typeof actualValue == "string" ? JSON.stringify(actualValue) : actualValue} instead of ${JSON.stringify(nextValue)} on attempt ${attempt}; retrying`)
+        this.warn(`fill got ${typeof actualValue == "string" ? JSON.stringify(actualValue) : actualValue} instead of ${JSON.stringify(expectedValue)} on attempt ${attempt}; retrying`)
         await wait(50)
       }
     }
 
     const actualValueDescription = typeof actualValue == "string" ? JSON.stringify(actualValue) : `missing (${actualValue})`
 
-    throw new Error(`Input replacement did not update the element value after 3 attempts. Expected ${JSON.stringify(nextValue)}, got ${actualValueDescription}.`)
+    throw new Error(`fill did not enter the value after 3 attempts. Expected ${JSON.stringify(expectedValue)}, got ${actualValueDescription}.`)
   }
 
   /**
-   * Empties a text entry and returns the (empty) value left in the field. With the default `native`
-   * strategy this issues a single Selenium `element.clear()`. The deliberately slow, opt-in
-   * `backspace-keys`/`delete-keys` strategies clear with per-character key presses in an adaptive,
-   * caret-safe, drop/refocus-recovering loop: each pass re-reads the element's actual current value and
-   * deletes exactly the characters that remain. The focusing click can land the caret anywhere in the
-   * value — for example mid-line in a multiline textarea — so every pass deletes on both sides of the
-   * caret (one leading key per remaining character clears everything on the caret's leading side; surplus
-   * presses no-op at the boundary; one trailing key per still-remaining character clears the other side).
-   * `backspace-keys` leads with BACK_SPACE (clearing before the caret); `delete-keys` leads with DELETE
-   * (clearing after the caret). Under CI load individual key presses are intermittently dropped, so
-   * re-reading and re-deleting exactly the residual each pass keeps clearing robust as long as each pass
-   * makes progress. When progress stalls (the value length is unchanged across `maxStalledPasses`
-   * consecutive passes) the focus click may never have landed the caret, so it re-issues the focus click
-   * `maxRefocusRecoveries` times before giving up. Only once re-focusing still yields no progress does it
-   * throw with the residual value, surfacing genuinely un-clearable fields such as read-only inputs
-   * instead of looping forever.
+   * Clears a text entry and fills it with `value` — `clear()` then `fill()`. Both default to their fast
+   * native strategies (`element.clear()` then one whole-string `element.sendKeys`), overridable per side
+   * via `clearStrategy`/`fillStrategy`. This is the common replace-the-value flow.
    * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
-   * @param {ClearAndSendKeysArgs} [args]
+   * @param {string} value
+   * @param {ClearAndFillArgs} [args]
+   * @returns {Promise<void>}
+   */
+  async clearAndFill(elementOrIdentifier, value, {clearStrategy = "native", fillStrategy = "native", keyDelay = 0} = {}) {
+    await this.clear(elementOrIdentifier, {strategy: clearStrategy, keyDelay})
+    await this.fill(elementOrIdentifier, value, {strategy: fillStrategy, keyDelay})
+  }
+
+  /**
+   * Convenience alias for `clearAndFill` with fast native defaults, kept so the many existing call sites
+   * keep working while they migrate to `clear`/`fill`/`clearAndFill`. Prefer `clearAndFill` in new code.
+   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
+   * @param {string} value
+   * @param {ClearAndFillArgs} [args]
+   * @returns {Promise<void>}
+   */
+  async clearAndSendKeys(elementOrIdentifier, value, args = {}) {
+    await this.clearAndFill(elementOrIdentifier, value, args)
+  }
+
+  /**
+   * Empties a text entry with per-character key presses and returns the (empty) value left in the field.
+   * Used by the opt-in `backspace-keys`/`delete-keys` clear strategies. Each pass re-reads the element's
+   * actual current value and deletes exactly the characters that remain. The focusing click can land the
+   * caret anywhere in the value — for example mid-line in a multiline textarea — so every pass deletes on
+   * both sides of the caret (one leading key per remaining character clears everything on the caret's
+   * leading side; surplus presses no-op at the boundary; one trailing key per still-remaining character
+   * clears the other side). `backspace-keys` leads with BACK_SPACE (clearing before the caret);
+   * `delete-keys` leads with DELETE (clearing after the caret). Under CI load individual key presses are
+   * intermittently dropped, so re-reading and re-deleting exactly the residual each pass keeps clearing
+   * robust as long as each pass makes progress. When progress stalls (the value length is unchanged across
+   * `maxStalledPasses` consecutive passes) the focus click may never have landed the caret, so it
+   * re-issues the focus click `maxRefocusRecoveries` times before giving up. Only once re-focusing still
+   * yields no progress does it throw with the residual value, surfacing genuinely un-clearable fields such
+   * as read-only inputs instead of looping forever.
+   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
+   * @param {{clearStrategy?: ClearStrategy, keyDelay?: number}} [args]
    * @returns {Promise<string>}
    */
-  async clearTextEntryValue(elementOrIdentifier, {clearStrategy = "native", keyDelay = 0} = {}) {
-    if (clearStrategy === "native") {
-      await this.interact(elementOrIdentifier, "clear")
-
-      return ""
-    }
-
+  async clearTextEntryValue(elementOrIdentifier, {clearStrategy = "backspace-keys", keyDelay = 0} = {}) {
     // Which key clears each side of the caret. `delete-keys` leads with a forward DELETE (clearing after
     // the caret) then mops up with BACK_SPACE; `backspace-keys` is the reverse.
     const leadingKey = clearStrategy === "delete-keys" ? Key.DELETE : Key.BACK_SPACE
@@ -689,7 +757,7 @@ export default class Browser {
    * @returns {Promise<void>}
    */
   async replaceTestIDInputValue(testID, nextValue, args = {}) {
-    await this.clearAndSendKeys({
+    await this.clearAndFill({
       selector: testIdSelector(testID),
       timeout: args.timeout
     }, nextValue)

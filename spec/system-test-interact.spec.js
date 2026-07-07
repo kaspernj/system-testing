@@ -108,9 +108,11 @@ function fakeTextInput(initialValue, {ignoredBackspaces = 0, dropKeyProbability 
         // Chords and other control keys are silently dropped, like select-all on headless CI Chrome.
         if (/[\uE000-\uF8FF]/.test(key)) return undefined
 
+        // `key` can be a single character (per-character typing) or a whole string (one fast sendKeys),
+        // so advance the caret by its full length.
         if (typingWorks) {
           value = value.slice(0, caret) + key + value.slice(caret)
-          caret += 1
+          caret += key.length
         }
       }
 
@@ -327,233 +329,310 @@ describe("SystemTest interact", () => {
     })
   })
 
-  it("clears input elements with a native element.clear() before sending replacement keys by default", async () => {
+  it("clear empties the field with a native element.clear() by default", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const fakeInput = fakeTextInput("old value")
     const interactSpy = spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
 
-    await systemTest.clearAndSendKeys("#replace-target", "new value")
+    await systemTest.clear("#target")
 
     const methodsSeen = interactSpy.calls.allArgs().map((callArgs) => callArgs[1])
 
-    expect(interactSpy.calls.argsFor(0)).toEqual([{selector: "#replace-target", method: "actions"}, "click"])
-    // Native clear is the default: no select-all chord and no per-character clearing keys.
+    // Native clear is the default: element.clear(), no chord and no per-character key presses.
     expect(methodsSeen).toContain("clear")
-    expect(fakeInput.sentKeys.some((key) => key === Key.BACK_SPACE || key === Key.DELETE || key.includes(Key.CONTROL))).toBeFalse()
-    expect(fakeInput.getValue()).toBe("new value")
+    expect(fakeInput.sentKeys).toEqual([])
+    expect(fakeInput.getValue()).toBe("")
   })
 
-  it("types replacement input text one character at a time", async () => {
-    const systemTest = systemTestHelper.getSystemTest()
-    const fakeInput = fakeTextInput("old")
-    spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
-
-    await systemTest.clearAndSendKeys("#replace-target", "new")
-
-    expect(fakeInput.sentKeys).toEqual(["n", "e", "w"])
-    expect(fakeInput.getValue()).toBe("new")
-  })
-
-  it("retries clearing and typing until the requested value is visible", async () => {
-    const systemTest = systemTestHelper.getSystemTest()
-    let value = "old"
-    let clears = 0
-    const interactSpy = spyOn(systemTest, "interact").and.callFake(async (_selector, methodName, ...args) => {
-      if (methodName === "getProperty") return value
-
-      if (methodName === "clear") {
-        clears += 1
-        value = ""
-
-        return undefined
-      }
-
-      // Typing only lands once the field has been cleared a second time, forcing the outer
-      // clear+type+verify loop to retry after the first attempt leaves an empty field.
-      if (methodName === "sendKeys" && clears >= 2) value += String(args[0])
-
-      return undefined
-    })
-
-    await systemTest.clearAndSendKeys("#replace-target", "new")
-
-    const clickCalls = interactSpy.calls.allArgs().filter((callArgs) => callArgs[1] === "click")
-
-    expect(value).toBe("new")
-    expect(clears).toBe(2)
-    expect(clickCalls.length).toBe(2)
-  })
-
-  it("sets the value through the js escape hatch without typing when clearStrategy is 'js'", async () => {
+  it("clear empties the field through the js escape hatch when strategy is 'js'", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const fakeInput = fakeTextInput("old value")
     const interactSpy = spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
 
-    await systemTest.clearAndSendKeys("#replace-target", "new value", {clearStrategy: "js"})
+    await systemTest.clear("#target", {strategy: "js"})
 
-    const methodsSeen = interactSpy.calls.allArgs().map((callArgs) => callArgs[1])
+    const jsSetCalls = interactSpy.calls.allArgs().filter((callArgs) => callArgs[1] === "replaceValueWithJs")
 
-    expect(methodsSeen).toContain("replaceValueWithJs")
-    expect(methodsSeen).not.toContain("clear")
+    expect(jsSetCalls).toEqual([["#target", "replaceValueWithJs", ""]])
     expect(fakeInput.sentKeys).toEqual([])
-    expect(fakeInput.getValue()).toBe("new value")
+    expect(fakeInput.getValue()).toBe("")
   })
 
-  it("clears with forward deletes when clearStrategy is 'delete-keys'", async () => {
-    const systemTest = systemTestHelper.getSystemTest()
-    // The focusing click lands the caret at the start, so a forward-delete-first clear empties it.
-    const fakeInput = fakeTextInput("ab", {initialCaret: 0})
-    spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
-
-    await systemTest.clearAndSendKeys("#replace-target", "xy", {clearStrategy: "delete-keys"})
-
-    expect(fakeInput.sentKeys).toEqual([Key.DELETE, Key.DELETE, "x", "y"])
-    expect(fakeInput.getValue()).toBe("xy")
-  })
-
-  it("waits the configured keyDelay between each typed character", async () => {
-    const systemTest = systemTestHelper.getSystemTest()
-    const fakeInput = fakeTextInput("")
-    spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
-    const keyDelaySpy = spyOn(systemTest, "waitBetweenKeystrokes").and.resolveTo(undefined)
-
-    await systemTest.clearAndSendKeys("#replace-target", "abc", {keyDelay: 25})
-
-    expect(keyDelaySpy).toHaveBeenCalledWith(25)
-    expect(keyDelaySpy.calls.count()).toBe(3)
-  })
-
-  it("waits the configured keyDelay between clearing keystrokes too", async () => {
-    const systemTest = systemTestHelper.getSystemTest()
-    const fakeInput = fakeTextInput("ab")
-    spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
-    const keyDelaySpy = spyOn(systemTest, "waitBetweenKeystrokes").and.resolveTo(undefined)
-
-    await systemTest.clearAndSendKeys("#replace-target", "cd", {clearStrategy: "backspace-keys", keyDelay: 10})
-
-    // Two clearing backspaces plus two typed characters each pause.
-    expect(keyDelaySpy).toHaveBeenCalledWith(10)
-    expect(keyDelaySpy.calls.count()).toBeGreaterThanOrEqual(4)
-  })
-
-  it("clears prefilled inputs with per-character backspaces before typing under the backspace-keys strategy", async () => {
+  it("clear empties prefilled inputs with per-character backspaces under the backspace-keys strategy", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const fakeInput = fakeTextInput("16")
     const interactSpy = spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
 
-    await systemTest.clearAndSendKeys("#replace-target", "20", {clearStrategy: "backspace-keys"})
+    await systemTest.clear("#target", {strategy: "backspace-keys"})
 
-    expect(interactSpy.calls.argsFor(0)).toEqual([{selector: "#replace-target", method: "actions"}, "click"])
-    expect(fakeInput.sentKeys).toEqual([Key.BACK_SPACE, Key.BACK_SPACE, "2", "0"])
-    expect(fakeInput.getValue()).toBe("20")
+    expect(interactSpy.calls.argsFor(0)).toEqual([{selector: "#target", method: "actions"}, "click"])
+    expect(fakeInput.sentKeys).toEqual([Key.BACK_SPACE, Key.BACK_SPACE])
+    expect(fakeInput.getValue()).toBe("")
   })
 
-  it("clears text on both sides of a mid-value caret with backspaces and deletes under the backspace-keys strategy", async () => {
+  it("clear empties on both sides of a mid-value caret under the backspace-keys strategy", async () => {
     // The focusing click can land the caret in the middle of a multiline textarea value,
     // where backspaces alone only delete the text before the caret.
     const systemTest = systemTestHelper.getSystemTest()
     const fakeInput = fakeTextInput("one\ntwo", {initialCaret: 3})
     spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
 
-    await systemTest.clearAndSendKeys("#replace-target", "replaced", {clearStrategy: "backspace-keys"})
+    await systemTest.clear("#target", {strategy: "backspace-keys"})
 
     expect(fakeInput.sentKeys.filter((key) => key === Key.DELETE).length).toBe(4)
-    expect(fakeInput.getValue()).toBe("replaced")
+    expect(fakeInput.getValue()).toBe("")
   })
 
-  it("the backspace-keys strategy replaces prefilled values without select-all chords so ignored chords cannot leave old text behind", async () => {
-    // Models the deterministic CI failure mode where CTRL+A+BACKSPACE had zero effect
-    // while subsequent typing landed, leaving old + typed text in the field.
+  it("clear empties with forward deletes under the delete-keys strategy", async () => {
     const systemTest = systemTestHelper.getSystemTest()
-    const fakeInput = fakeTextInput("16")
+    // The focusing click lands the caret at the start, so a forward-delete-first clear empties it.
+    const fakeInput = fakeTextInput("ab", {initialCaret: 0})
     spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
 
-    await systemTest.clearAndSendKeys("#replace-target", "20", {clearStrategy: "backspace-keys"})
+    await systemTest.clear("#target", {strategy: "delete-keys"})
 
-    expect(fakeInput.sentKeys.some((key) => key.includes(Key.CONTROL))).toBeFalse()
-    expect(fakeInput.getValue()).toBe("20")
+    expect(fakeInput.sentKeys).toEqual([Key.DELETE, Key.DELETE])
+    expect(fakeInput.getValue()).toBe("")
   })
 
-  it("the backspace-keys strategy types one character at a time and skips clearing keys when the input is already empty", async () => {
+  it("clear does nothing without keys when the backspace-keys field is already empty", async () => {
     const systemTest = systemTestHelper.getSystemTest()
     const fakeInput = fakeTextInput("")
     spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
 
-    await systemTest.clearAndSendKeys("#replace-target", "new", {clearStrategy: "backspace-keys"})
+    await systemTest.clear("#target", {strategy: "backspace-keys"})
+
+    expect(fakeInput.sentKeys).toEqual([])
+    expect(fakeInput.getValue()).toBe("")
+  })
+
+  it("clear stays robust when backspace-keys presses are intermittently dropped under load", async () => {
+    // Roughly half the clearing key presses are dropped pseudo-randomly, needing more than a
+    // fixed number of passes to empty the field. The adaptive loop re-reads the actual residual
+    // each pass and re-deletes exactly what remains, so it still converges to an empty field.
+    const systemTest = systemTestHelper.getSystemTest()
+    const fakeInput = fakeTextInput("user@example.com", {dropKeyProbability: 0.5, dropSeed: 1})
+    spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
+
+    await systemTest.clear("#target", {strategy: "backspace-keys"})
+
+    expect(fakeInput.getValue()).toBe("")
+  })
+
+  it("clear re-focuses and recovers when the initial focus click never landed the caret", async () => {
+    // The initial focusing click reports success but does not land the caret, so deletions no-op
+    // against a dead focus state; only a second focus click (issued by the adaptive clear loop
+    // after it stalls) actually focuses the field. It must re-focus and recover.
+    const systemTest = systemTestHelper.getSystemTest()
+    const fakeInput = fakeTextInput("stale", {focusRequiredClicks: 2})
+    const interactSpy = spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
+
+    await systemTest.clear("#target", {strategy: "backspace-keys"})
+
+    const clickCalls = interactSpy.calls.allArgs().filter((callArgs) => callArgs[1] === "click")
+
+    expect(clickCalls.length).toBe(2)
+    expect(fakeInput.getValue()).toBe("")
+  })
+
+  it("clear throws with the remaining value when the backspace-keys strategy can never make progress", async () => {
+    // A read-only-like field where no key press ever lands: the adaptive loop makes zero progress
+    // even after exhausting its re-focus recovery attempts, then gives up naming the residual.
+    const systemTest = systemTestHelper.getSystemTest()
+    const fakeInput = fakeTextInput("stuck", {ignoredBackspaces: Number.POSITIVE_INFINITY})
+    spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
+
+    await expectAsync(systemTest.clear("#target", {strategy: "backspace-keys"}))
+      .toBeRejectedWithError(/clearing made no progress across 3 passes.+"stuck"/)
+  })
+
+  it("clear waits the configured keyDelay between the backspace-keys presses", async () => {
+    const systemTest = systemTestHelper.getSystemTest()
+    const fakeInput = fakeTextInput("ab")
+    spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
+    const keyDelaySpy = spyOn(systemTest, "waitBetweenKeystrokes").and.resolveTo(undefined)
+
+    await systemTest.clear("#target", {strategy: "backspace-keys", keyDelay: 10})
+
+    expect(keyDelaySpy).toHaveBeenCalledWith(10)
+    expect(keyDelaySpy.calls.count()).toBe(2)
+  })
+
+  it("fill enters the value with one fast whole-string sendKeys by default", async () => {
+    const systemTest = systemTestHelper.getSystemTest()
+    const fakeInput = fakeTextInput("")
+    const interactSpy = spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
+
+    await systemTest.fill("#target", "new value")
+
+    const sendKeysCalls = interactSpy.calls.allArgs().filter((callArgs) => callArgs[1] === "sendKeys")
+
+    // One whole-string sendKeys, not a per-character loop.
+    expect(sendKeysCalls).toEqual([["#target", "sendKeys", "new value"]])
+    expect(fakeInput.sentKeys).toEqual(["new value"])
+    expect(fakeInput.getValue()).toBe("new value")
+  })
+
+  it("fill does not clear the field first (pure append)", async () => {
+    const systemTest = systemTestHelper.getSystemTest()
+    const fakeInput = fakeTextInput("ab")
+    const interactSpy = spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
+
+    await systemTest.fill("#target", "cd")
+
+    const methodsSeen = interactSpy.calls.allArgs().map((callArgs) => callArgs[1])
+
+    expect(methodsSeen).not.toContain("clear")
+    expect(fakeInput.getValue()).toBe("abcd")
+  })
+
+  it("fill retries until the entered value is visible", async () => {
+    const systemTest = systemTestHelper.getSystemTest()
+    let value = ""
+    let sendKeysCalls = 0
+    spyOn(systemTest, "interact").and.callFake(async (_selector, methodName, ...args) => {
+      if (methodName === "getProperty") return value
+
+      // The first whole-string sendKeys is silently dropped, forcing a retry.
+      if (methodName === "sendKeys") {
+        sendKeysCalls += 1
+        if (sendKeysCalls >= 2) value += String(args[0])
+      }
+
+      return undefined
+    })
+
+    await systemTest.fill("#target", "new")
+
+    expect(value).toBe("new")
+    expect(sendKeysCalls).toBe(2)
+  })
+
+  it("fill throws with the expected and actual values when the value never lands", async () => {
+    const systemTest = systemTestHelper.getSystemTest()
+    const fakeInput = fakeTextInput("", {typingWorks: false})
+    spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
+
+    await expectAsync(systemTest.fill("#target", "new value"))
+      .toBeRejectedWithError(/fill did not enter the value after 3 attempts.+Expected "new value", got ""/)
+  })
+
+  it("fill sets the value through the js escape hatch without typing when strategy is 'js'", async () => {
+    const systemTest = systemTestHelper.getSystemTest()
+    const fakeInput = fakeTextInput("old")
+    const interactSpy = spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
+
+    await systemTest.fill("#target", "new value", {strategy: "js"})
+
+    const jsSetCalls = interactSpy.calls.allArgs().filter((callArgs) => callArgs[1] === "replaceValueWithJs")
+
+    expect(jsSetCalls).toEqual([["#target", "replaceValueWithJs", "new value"]])
+    expect(fakeInput.sentKeys).toEqual([])
+    expect(fakeInput.getValue()).toBe("new value")
+  })
+
+  it("fill types one character at a time under the per-character strategy", async () => {
+    const systemTest = systemTestHelper.getSystemTest()
+    const fakeInput = fakeTextInput("")
+    spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
+
+    await systemTest.fill("#target", "new", {strategy: "per-character"})
 
     expect(fakeInput.sentKeys).toEqual(["n", "e", "w"])
     expect(fakeInput.getValue()).toBe("new")
   })
 
-  it("the backspace-keys strategy clears adaptively until the field is verified empty before typing", async () => {
-    // A whole clearing pass is silently dropped (like a burst of load), so the field is
-    // still full after the first pass; the adaptive loop re-reads the residual and deletes
-    // it on the next pass without needing another focusing click.
+  it("fill waits the configured keyDelay between each per-character keystroke", async () => {
     const systemTest = systemTestHelper.getSystemTest()
-    const fakeInput = fakeTextInput("old", {ignoredBackspaces: 3})
+    const fakeInput = fakeTextInput("")
+    spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
+    const keyDelaySpy = spyOn(systemTest, "waitBetweenKeystrokes").and.resolveTo(undefined)
+
+    await systemTest.fill("#target", "abc", {strategy: "per-character", keyDelay: 25})
+
+    expect(keyDelaySpy).toHaveBeenCalledWith(25)
+    expect(keyDelaySpy.calls.count()).toBe(3)
+  })
+
+  it("clearAndFill clears natively then fills with one whole-string sendKeys by default", async () => {
+    const systemTest = systemTestHelper.getSystemTest()
+    const fakeInput = fakeTextInput("old value")
     const interactSpy = spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
 
-    await systemTest.clearAndSendKeys("#replace-target", "new", {clearStrategy: "backspace-keys"})
+    await systemTest.clearAndFill("#target", "new value")
 
-    const clickCalls = interactSpy.calls.allArgs().filter((callArgs) => callArgs[1] === "click")
+    const methodsSeen = interactSpy.calls.allArgs().map((callArgs) => callArgs[1])
 
-    expect(clickCalls.length).toBe(1)
-    expect(fakeInput.getValue()).toBe("new")
+    expect(methodsSeen).toContain("clear")
+    expect(fakeInput.sentKeys).toEqual(["new value"])
+    expect(fakeInput.sentKeys.some((key) => key === Key.BACK_SPACE || key === Key.DELETE)).toBeFalse()
+    expect(fakeInput.getValue()).toBe("new value")
   })
 
-  it("the backspace-keys strategy empties the field even when key presses are intermittently dropped under load", async () => {
-    // Roughly half the clearing key presses are dropped pseudo-randomly, needing more than
-    // a fixed 3 retry passes to empty the field — the CI-load failure the adaptive loop is
-    // built for. It re-reads the actual residual each pass and re-deletes exactly what
-    // remains, so it still converges to an empty field and types the replacement.
+  it("clearAndFill composes the backspace-keys clear with the native fill", async () => {
     const systemTest = systemTestHelper.getSystemTest()
-    const fakeInput = fakeTextInput("user@example.com", {dropKeyProbability: 0.5, dropSeed: 1})
+    const fakeInput = fakeTextInput("16")
     spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
 
-    await systemTest.clearAndSendKeys("#replace-target", "john.doe@example.com", {clearStrategy: "backspace-keys"})
+    await systemTest.clearAndFill("#target", "20", {clearStrategy: "backspace-keys"})
 
-    expect(fakeInput.getValue()).toBe("john.doe@example.com")
+    expect(fakeInput.sentKeys).toEqual([Key.BACK_SPACE, Key.BACK_SPACE, "20"])
+    expect(fakeInput.getValue()).toBe("20")
   })
 
-  it("the backspace-keys strategy re-focuses and recovers when the initial focus click never landed the caret", async () => {
-    // The initial focusing click reports success but does not land the caret, so deletions
-    // no-op against a dead focus state; only a second focus click (issued by the adaptive
-    // clear loop after it stalls) actually focuses the field. The loop must re-focus and
-    // recover rather than throwing on the unchanged residual.
+  it("clearAndFill composes the js clear with the js fill", async () => {
     const systemTest = systemTestHelper.getSystemTest()
-    const fakeInput = fakeTextInput("stale", {focusRequiredClicks: 2})
+    const fakeInput = fakeTextInput("old value")
     const interactSpy = spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
 
-    await systemTest.clearAndSendKeys("#replace-target", "fresh", {clearStrategy: "backspace-keys"})
+    await systemTest.clearAndFill("#target", "new value", {clearStrategy: "js", fillStrategy: "js"})
 
-    const clickCalls = interactSpy.calls.allArgs().filter((callArgs) => callArgs[1] === "click")
+    const jsSetCalls = interactSpy.calls.allArgs().filter((callArgs) => callArgs[1] === "replaceValueWithJs")
 
-    expect(clickCalls.length).toBe(2)
-    expect(fakeInput.getValue()).toBe("fresh")
+    expect(jsSetCalls).toEqual([["#target", "replaceValueWithJs", ""], ["#target", "replaceValueWithJs", "new value"]])
+    expect(fakeInput.sentKeys).toEqual([])
+    expect(fakeInput.getValue()).toBe("new value")
   })
 
-  it("throws with the expected and actual values when typing does not land", async () => {
+  it("clearAndFill threads keyDelay into both the key-based clear and the per-character fill", async () => {
     const systemTest = systemTestHelper.getSystemTest()
-    const fakeInput = fakeTextInput("", {typingWorks: false})
+    const fakeInput = fakeTextInput("ab")
+    spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
+    const keyDelaySpy = spyOn(systemTest, "waitBetweenKeystrokes").and.resolveTo(undefined)
+
+    await systemTest.clearAndFill("#target", "cd", {clearStrategy: "backspace-keys", fillStrategy: "per-character", keyDelay: 10})
+
+    // Two clearing backspaces plus two typed characters each pause.
+    expect(keyDelaySpy).toHaveBeenCalledWith(10)
+    expect(keyDelaySpy.calls.count()).toBe(4)
+  })
+
+  it("clearAndSendKeys is a convenience alias for clearAndFill with fast native defaults", async () => {
+    const systemTest = systemTestHelper.getSystemTest()
+    const fakeInput = fakeTextInput("old")
+    const interactSpy = spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
+
+    await systemTest.clearAndSendKeys("#target", "new value")
+
+    const methodsSeen = interactSpy.calls.allArgs().map((callArgs) => callArgs[1])
+
+    expect(methodsSeen).toContain("clear")
+    expect(fakeInput.sentKeys).toEqual(["new value"])
+    expect(fakeInput.getValue()).toBe("new value")
+  })
+
+  it("clearAndSendKeys forwards clear/fill strategy overrides to clearAndFill", async () => {
+    const systemTest = systemTestHelper.getSystemTest()
+    const fakeInput = fakeTextInput("16")
     spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
 
-    await expectAsync(systemTest.clearAndSendKeys("#replace-target", "new value"))
-      .toBeRejectedWithError(/did not update the element value after 3 attempts.+Expected "new value", got ""/)
+    await systemTest.clearAndSendKeys("#target", "20", {clearStrategy: "backspace-keys"})
+
+    expect(fakeInput.sentKeys).toEqual([Key.BACK_SPACE, Key.BACK_SPACE, "20"])
+    expect(fakeInput.getValue()).toBe("20")
   })
 
-  it("the backspace-keys strategy throws with the remaining value when clearing can never make progress", async () => {
-    // A read-only-like field where no key press ever lands: the adaptive loop makes zero
-    // progress even after exhausting its re-focus recovery attempts, then gives up with a
-    // diagnostic naming the residual value.
-    const systemTest = systemTestHelper.getSystemTest()
-    const fakeInput = fakeTextInput("stuck", {ignoredBackspaces: Number.POSITIVE_INFINITY})
-    spyOn(systemTest, "interact").and.callFake(fakeInput.interact)
-
-    await expectAsync(systemTest.clearAndSendKeys("#replace-target", "new value", {clearStrategy: "backspace-keys"}))
-      .toBeRejectedWithError(/clearing made no progress across 3 passes.+"stuck"/)
-  })
-
-  itIfWeb("clearAndSendKeys replaces a prefilled input value end-to-end with the native clear default", async () => {
+  itIfWeb("clearAndFill replaces a prefilled input value end-to-end with the native defaults", async () => {
     await SystemTest.run(async (runningSystemTest) => {
       try {
         await runningSystemTest.getDriver().executeScript(`
@@ -576,7 +655,7 @@ describe("SystemTest interact", () => {
           return true
         `)
 
-        await runningSystemTest.clearAndSendKeys({selector: "[data-testid='clearAndSendKeysTarget']", useBaseSelector: false}, "20")
+        await runningSystemTest.clearAndFill({selector: "[data-testid='clearAndSendKeysTarget']", useBaseSelector: false}, "20")
 
         const inputValue = await runningSystemTest.interact({selector: "[data-testid='clearAndSendKeysTarget']", useBaseSelector: false}, "getProperty", "value")
 
@@ -591,7 +670,7 @@ describe("SystemTest interact", () => {
     })
   })
 
-  itIfWeb("the backspace-keys strategy replaces a multiline textarea value end-to-end even when the click lands the caret mid-text", async () => {
+  itIfWeb("clear with the backspace-keys strategy empties a multiline textarea end-to-end even when the click lands the caret mid-text", async () => {
     await SystemTest.run(async (runningSystemTest) => {
       try {
         await runningSystemTest.getDriver().executeScript(`
@@ -615,7 +694,8 @@ describe("SystemTest interact", () => {
           return true
         `)
 
-        await runningSystemTest.clearAndSendKeys({selector: "[data-testid='clearAndSendKeysTextarea']", useBaseSelector: false}, "replaced", {clearStrategy: "backspace-keys"})
+        await runningSystemTest.clear({selector: "[data-testid='clearAndSendKeysTextarea']", useBaseSelector: false}, {strategy: "backspace-keys"})
+        await runningSystemTest.fill({selector: "[data-testid='clearAndSendKeysTextarea']", useBaseSelector: false}, "replaced")
 
         const textareaValue = await runningSystemTest.interact({selector: "[data-testid='clearAndSendKeysTextarea']", useBaseSelector: false}, "getProperty", "value")
 
@@ -623,6 +703,44 @@ describe("SystemTest interact", () => {
       } finally {
         await runningSystemTest.getDriver().executeScript(`
           const element = document.getElementById("system-test-clear-and-send-keys-textarea")
+          if (element) element.remove()
+          return true
+        `)
+      }
+    })
+  })
+
+  itIfWeb("fill enters a value into an empty input end-to-end with the native whole-string strategy", async () => {
+    await SystemTest.run(async (runningSystemTest) => {
+      try {
+        await runningSystemTest.getDriver().executeScript(`
+          const elementId = "system-test-fill-target"
+          let element = document.getElementById(elementId)
+
+          if (element) {
+            element.remove()
+          }
+
+          element = document.createElement("input")
+          element.id = elementId
+          element.setAttribute("data-testid", "fillTarget")
+          element.value = ""
+          element.style.position = "fixed"
+          element.style.top = "12px"
+          element.style.left = "12px"
+          element.style.zIndex = "9999"
+          document.body.appendChild(element)
+          return true
+        `)
+
+        await runningSystemTest.fill({selector: "[data-testid='fillTarget']", useBaseSelector: false}, "hello world")
+
+        const inputValue = await runningSystemTest.interact({selector: "[data-testid='fillTarget']", useBaseSelector: false}, "getProperty", "value")
+
+        expect(inputValue).toBe("hello world")
+      } finally {
+        await runningSystemTest.getDriver().executeScript(`
+          const element = document.getElementById("system-test-fill-target")
           if (element) element.remove()
           return true
         `)
