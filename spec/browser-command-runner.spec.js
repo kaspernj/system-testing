@@ -80,22 +80,23 @@ describe("BrowserCommandRunner", () => {
     expect(result).toEqual({result: "typed"})
   })
 
-  it("passes interact fallback flags through to the browser", async () => {
+  it("passes the js value-setter escape hatch through as a plain interact method", async () => {
     const browser = {
       interact: async (selectorObject, methodName, ...args) => {
         browser.call = {args, methodName, selectorObject}
-        return "typed"
+        return "set"
       }
     }
     const runner = new BrowserCommandRunner({browser: /** @type {any} */ (browser)})
 
-    await runner.run("interact", {args: ["hello"], methodName: "sendKeys", selector: "[data-testid='email']", withFallback: "true"})
+    const result = await runner.run("interact", {args: ["new value"], methodName: "replaceValueWithJs", selector: "[data-testid='email']"})
 
     expect(browser.call).toEqual({
-      args: ["hello"],
-      methodName: "sendKeys",
-      selectorObject: {selector: "[data-testid='email']", withFallback: true}
+      args: ["new value"],
+      methodName: "replaceValueWithJs",
+      selectorObject: {selector: "[data-testid='email']"}
     })
+    expect(result).toEqual({result: "set"})
   })
 
   it("does not coerce missing optional finder args into falsey defaults", async () => {

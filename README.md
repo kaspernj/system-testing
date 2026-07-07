@@ -309,11 +309,10 @@ npx system-testing browser-command \
   --command=interact \
   --selector='[data-testid="emailInput"]' \
   --method=sendKeys \
-  --arg='user@example.com' \
-  --with-fallback=true
+  --arg='user@example.com'
 ```
 
-`sendKeys` uses the driver's normal typing path by default. If you specifically need the DOM value-setter fallback for React Native Web inputs that do not update from ordinary typing in your environment, opt into it with `withFallback: true` in JS or `--with-fallback=true` in the CLI/browser-command transport.
+`sendKeys` uses the driver's normal typing path and never silently falls back to anything. For the rare React Native Web controlled input that does not update from ordinary typing, the `js` value-setter escape hatch is a first-class interact method — call `--method=replaceValueWithJs --arg='user@example.com'` in the CLI/browser-command transport, or `interact(selector, "replaceValueWithJs", value)` in JS. Prefer fixing the input to be uncontrolled instead (see "Clearing inputs" below); the escape hatch, like the flakiness, is a symptom of a controlled input.
 
 The browser daemon is intended for agent-style development workflows where an AI or script needs to open the app, inspect HTML, locate elements, click controls, and read logs while validating layout or behavior changes.
 
@@ -506,18 +505,31 @@ await systemTest.click("[data-testid='signInButton']", {useBaseSelector: false, 
 await systemTest.interact({selector: "[data-testid='scanFooterMenuButton']", useBaseSelector: false}, "click")
 ```
 
-### Replacing input values
+### Clearing inputs
 
-`clearAndSendKeys` (and `replaceTestIDInputValue`) keep standard input-replacement semantics: click to focus, select-all + backspace, then `sendKeys` the replacement and verify the resulting value.
+`clearAndSendKeys` (and `replaceTestIDInputValue`) clear a field and type a replacement, then verify the resulting value, retrying the whole clear+type+verify up to three times and throwing with the expected and actual values when the field never reaches the requested text.
 
-Some headless CI Chrome sessions silently ignore the select-all chord while subsequent typing still lands, which leaves old + typed text in the field. For those environments, opt into `replaceInputValue`, which replaces the value with chord-free, verified key presses: it clears per character on both sides of the caret (one BACK_SPACE per character before it, one DELETE per remaining character after it — the focusing click can land the caret anywhere, for example mid-line in a multiline textarea), verifies the field is empty before typing, types the replacement one character at a time, and verifies the final value. It retries internally and throws with the expected and actual values when the field never reaches the requested text.
+> **Root cause first — flaky clearing/typing is a controlled-input smell.** If a field needs a special clear strategy or DOM value injection to hold what you typed, the real bug is almost always a **controlled input** (a `value` prop fed from React state). Typing into it can drop or reorder characters for real users too, not just in tests. The fix is an **uncontrolled input**: `defaultValue` + `onChangeText` writing into your form state, with no `value` prop. The strategies below are escape hatches for when you cannot fix the input right now — reach for the uncontrolled input first.
+
+The clear mechanism is selectable via `clearStrategy` (default `"native"`):
+
+- **`"native"`** (default) — a normal Selenium `element.clear()`. Use this everywhere; it fires the same `input` event a real edit does and correctly drives uncontrolled inputs.
+- **`"js"`** — sets the value directly through a DOM prototype setter plus `input`/`change` events. The only strategy that reliably drives React Native Web *controlled*-input state, kept as an escape hatch. It replaces the whole value in one shot (no per-character typing). Also reachable as the `replaceValueWithJs` interact method.
+- **`"backspace-keys"`** — deliberately slow, opt-in per-character clear: caret-safe on both sides (one BACK_SPACE per character before the caret, one DELETE per remaining character after it — the focusing click can land the caret anywhere, e.g. mid-line in a multiline textarea), re-reading the residual each pass and recovering from dropped keystrokes / a focus click that never landed. **Never make this the default — it is intentionally very slow.**
+- **`"delete-keys"`** — the forward-delete-first variant of `backspace-keys`.
+
+`keyDelay` (ms, default `0` — no artificial delay) pauses between individual key presses for the key-based clear strategies and the per-character typing loop. Like the key-based strategies, it is a controlled-input band-aid knob, not a fix.
 
 ```js
+// Default: native element.clear() then type + verify. Use this.
 await systemTest.clearAndSendKeys("[data-testid='ticketCountInput']", "20")
 await systemTest.replaceTestIDInputValue("ticketCountInput", "20")
 
-// Verified, chord-free replacement for environments where select-all silently no-ops:
-await systemTest.replaceInputValue("[data-testid='ticketCountInput']", "20")
+// Escape hatch for a controlled RNW input you cannot make uncontrolled yet:
+await systemTest.clearAndSendKeys("[data-testid='ticketCountInput']", "20", {clearStrategy: "js"})
+
+// Deliberately slow per-character clear, with a pause between keystrokes:
+await systemTest.clearAndSendKeys("[data-testid='ticketCountInput']", "20", {clearStrategy: "backspace-keys", keyDelay: 25})
 ```
 
 ### Verified clicks
@@ -542,7 +554,7 @@ await systemTest.clickAndWaitForEffect(
 
 ### Retry warnings
 
-When a verified helper hits a retry (for example `replaceInputValue` finding leftover text after clearing, or `clickAndWaitForEffect` re-clicking because the effect has not appeared), it reports a warning so the retry does not happen silently. Configure the `onWarning` callback (a `Browser`/`SystemTest` constructor option) to handle or silence these warnings; without a callback they fall back to `console.warn`.
+When a verified helper hits a retry (for example `clearAndSendKeys` finding the wrong value after clearing and typing, or `clickAndWaitForEffect` re-clicking because the effect has not appeared), it reports a warning so the retry does not happen silently. Configure the `onWarning` callback (a `Browser`/`SystemTest` constructor option) to handle or silence these warnings; without a callback they fall back to `console.warn`.
 
 ```js
 const systemTest = SystemTest.current({

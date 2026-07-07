@@ -81,15 +81,29 @@ describe("cli helpers", () => {
       command: "interact",
       method: "sendKeys",
       selector: "[data-testid='field']",
-      timeout: "1500ms",
-      "with-fallback": "true"
+      timeout: "1500ms"
     })).toEqual({
       args: {
         args: ["hello", "world"],
         methodName: "sendKeys",
         selector: "[data-testid='field']",
-        timeout: 1500,
-        withFallback: "true"
+        timeout: 1500
+      },
+      command: "interact"
+    })
+  })
+
+  it("resolves the js value-setter escape hatch as a plain interact method", () => {
+    expect(resolveBrowserCommand({
+      arg: ["new value"],
+      command: "interact",
+      method: "replaceValueWithJs",
+      selector: "[data-testid='field']"
+    })).toEqual({
+      args: {
+        args: ["new value"],
+        methodName: "replaceValueWithJs",
+        selector: "[data-testid='field']"
       },
       command: "interact"
     })

@@ -70,33 +70,6 @@ function getRetryableInteractErrorName(error) {
 }
 
 /**
- * @param {...any} args
- * @returns {string}
- */
-function getSendKeysTextAppend(...args) {
-  return args
-    .map((arg) => {
-      const stringArg = String(arg)
-
-      if (/[\uE009\uE03D]a\uE000/i.test(stringArg)) {
-        return ""
-      }
-
-      return stringArg.replace(/[\uE000-\uF8FF]/g, "")
-    })
-    .join("")
-}
-
-/**
- * @param {...any} args
- * @returns {boolean}
- */
-function getSendKeysUsesSelectAllAndDelete(...args) {
-  return args.some((arg) => /[\uE009\uE03D]a\uE000/i.test(String(arg))) &&
-    args.some((arg) => String(arg).includes("\uE003") || String(arg).includes("\uE017"))
-}
-
-/**
  * @param {{level: {name: string}, message: string}} entry
  * @param {string} message
  * @returns {boolean}
@@ -121,7 +94,7 @@ function shouldIgnoreBrowserLogEntry(entry, message) {
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 /**
- * @typedef {FindArgs & {withFallback?: boolean}} InteractArgs
+ * @typedef {FindArgs} InteractArgs
  */
 /**
  * @typedef {object} WaitForNoSelectorArgs
@@ -709,7 +682,7 @@ export default class WebDriverDriver {
   }
 
   /**
-   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs & {withFallback?: boolean})} elementOrIdentifier
+   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs)} elementOrIdentifier
    * @param {FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
@@ -721,8 +694,6 @@ export default class WebDriverDriver {
       element = await this.find(elementOrIdentifier, args)
     } else if (typeof elementOrIdentifier == "object" && elementOrIdentifier !== null && "selector" in elementOrIdentifier) {
       const {selector, ...restArgs} = elementOrIdentifier
-
-      delete restArgs.withFallback
 
       element = await this.find(selector, restArgs)
     } else {
@@ -914,7 +885,7 @@ export default class WebDriverDriver {
   }
 
   /**
-   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs & {withFallback?: boolean})} elementOrIdentifier
+   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs)} elementOrIdentifier
    * @param {FindArgs} [args]
    * @returns {Promise<import("selenium-webdriver").WebElement>}
    */
@@ -931,7 +902,7 @@ export default class WebDriverDriver {
   }
 
   /**
-   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs & {withFallback?: boolean})} elementOrIdentifier
+   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs)} elementOrIdentifier
    * @param {FindArgs} [args]
    * @returns {boolean}
    */
@@ -947,7 +918,7 @@ export default class WebDriverDriver {
   }
 
   /**
-   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs & {withFallback?: boolean})} elementOrIdentifier
+   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs)} elementOrIdentifier
    * @param {FindArgs | undefined} args
    * @param {unknown} originalError
    * @returns {Promise<import("selenium-webdriver").WebElement>}
@@ -977,7 +948,7 @@ export default class WebDriverDriver {
   }
 
   /**
-   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs & {withFallback?: boolean})} elementOrIdentifier
+   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs)} elementOrIdentifier
    * @param {FindArgs} [args]
    * @returns {{selector: string, findArgs: FindArgs} | undefined}
    */
@@ -988,8 +959,6 @@ export default class WebDriverDriver {
 
     if (typeof elementOrIdentifier == "object" && elementOrIdentifier !== null && "selector" in elementOrIdentifier) {
       const {selector, ...restArgs} = elementOrIdentifier
-
-      delete restArgs.withFallback
 
       return {selector, findArgs: restArgs}
     }
@@ -1021,7 +990,7 @@ export default class WebDriverDriver {
 
   /**
    * Scrolls an element into view.
-   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs & {withFallback?: boolean})} elementOrIdentifier
+   * @param {string|import("selenium-webdriver").WebElement|({selector: string} & FindArgs)} elementOrIdentifier
    * @param {FindArgs} [args]
    * @returns {Promise<void>}
    */
@@ -1068,12 +1037,11 @@ export default class WebDriverDriver {
       let findArgs
 
       if (interactArgs) {
-        /** @type {FindArgs & {selector?: string, method?: any, withFallback?: any}} */
+        /** @type {FindArgs & {selector?: string, method?: any}} */
         const sanitizedFindArgs = {...interactArgs}
 
         delete sanitizedFindArgs.selector
         delete sanitizedFindArgs.method
-        delete sanitizedFindArgs.withFallback
         delete sanitizedFindArgs.checkInterception
         findArgs = sanitizedFindArgs
       }
@@ -1084,11 +1052,9 @@ export default class WebDriverDriver {
 
       try {
         if (methodName === "sendKeys") {
-          if (interactArgs?.withFallback) {
-            return await this.interactSendKeysWithFallback(element, ...args)
-          }
-
           return await element.sendKeys(...args)
+        } else if (methodName === "replaceValueWithJs") {
+          return await this.replaceValueWithJs(element, args[0])
         } else if (methodName === "click") {
           if (isWebDriverElement(element)) {
             /** @type {FindArgs} */
@@ -1141,57 +1107,20 @@ export default class WebDriverDriver {
   }
 
   /**
+   * Replaces an element's value directly through the DOM — native prototype `value` setter, React
+   * value-tracker reset, then `input`/`change` events — bypassing keyboard typing entirely. This is the
+   * only clear strategy that reliably drives React Native Web controlled-input state, exposed as the `js`
+   * escape hatch on `clearAndSendKeys` and reachable via `interact(el, "replaceValueWithJs", value)`.
+   * Prefer fixing the input to be uncontrolled (`defaultValue` + `onChangeText`) instead of leaning on
+   * this; controlled-input breakage hits real users too, not only tests.
    * @param {import("selenium-webdriver").WebElement} element
-   * @returns {Promise<string | undefined>}
-   */
-  async readInteractableValue(element) {
-    const elementWithProperty = /** @type {{getProperty?: (name: string) => Promise<unknown>}} */ (element)
-
-    if (typeof elementWithProperty.getProperty == "function") {
-      const valueProperty = await elementWithProperty.getProperty("value")
-
-      if (typeof valueProperty == "string") {
-        return valueProperty
-      }
-    }
-
-    const valueProperty = await element.getAttribute("value")
-
-    if (typeof valueProperty == "string") {
-      return valueProperty
-    }
-
-    const textContent = await element.getText()
-
-    if (typeof textContent == "string") {
-      return textContent
-    }
-
-    return undefined
-  }
-
-  /**
-   * @param {import("selenium-webdriver").WebElement} element
-   * @param {...any} args
+   * @param {string} nextValue
    * @returns {Promise<unknown>}
    */
-  async interactSendKeysWithFallback(element, ...args) {
-    const expectedAppend = getSendKeysTextAppend(...args)
-    const beforeValue = await this.readInteractableValue(element)
-    const sendKeysResult = await element.sendKeys(...args)
-    const afterValue = await this.readInteractableValue(element)
+  async replaceValueWithJs(element, nextValue) {
+    const targetValue = String(nextValue ?? "")
 
-    if (typeof beforeValue == "string" && typeof afterValue == "string" && afterValue !== beforeValue) {
-      return sendKeysResult
-    }
-
-    const nextValue = getSendKeysUsesSelectAllAndDelete(...args) ? expectedAppend : `${beforeValue || ""}${expectedAppend}`
-
-    if (typeof beforeValue == "string" && nextValue === beforeValue) {
-      return sendKeysResult
-    }
-
-    await this.getWebDriver().executeScript(`
+    return await this.getWebDriver().executeScript(`
       const element = arguments[0]
       const nextValue = String(arguments[1] ?? "")
 
@@ -1226,9 +1155,7 @@ export default class WebDriverDriver {
       }
 
       return null
-    `, element, nextValue)
-
-    return sendKeysResult
+    `, element, targetValue)
   }
 
   /**

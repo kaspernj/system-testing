@@ -1,15 +1,13 @@
 // @ts-check
 
-import {Key, error as SeleniumError} from "selenium-webdriver"
+import {error as SeleniumError} from "selenium-webdriver"
 import WebDriverDriver from "../src/drivers/webdriver-driver.js"
 
 describe("WebDriverDriver interact", () => {
-  it("falls back to a DOM value setter when sendKeys does not update the field value", async () => {
+  it("sets the element value through executeScript for the replaceValueWithJs escape hatch", async () => {
     const executeScriptCalls = []
     const element = {
-      getAttribute: async () => "",
-      getText: async () => "",
-      sendKeys: async () => null
+      getId: async () => "webdriver-element-id"
     }
     const driver = new WebDriverDriver({
       browser: /** @type {any} */ ({
@@ -23,28 +21,22 @@ describe("WebDriverDriver interact", () => {
     driver.setWebDriver(/** @type {any} */ ({
       executeScript: async (...args) => {
         executeScriptCalls.push(args)
-        return "pwd"
+        return "new value"
       }
     }))
 
-    await driver.interact({selector: "textarea[data-testid='project-environment-agent-input']", withFallback: true}, "sendKeys", "pwd")
+    const result = await driver.interact({selector: "textarea[data-testid='project-environment-agent-input']"}, "replaceValueWithJs", "new value")
 
     expect(executeScriptCalls.length).toBe(1)
     expect(executeScriptCalls[0][1]).toBe(element)
-    expect(executeScriptCalls[0][2]).toBe("pwd")
+    expect(executeScriptCalls[0][2]).toBe("new value")
+    expect(result).toBe("new value")
   })
 
-  it("does not use the DOM value-setter fallback when sendKeys updates the field value", async () => {
+  it("coerces a nullish replaceValueWithJs value to an empty string", async () => {
+    const executeScriptCalls = []
     const element = {
-      getPropertyCalls: 0,
-      getAttribute: async () => "",
-      getProperty: async () => {
-        element.getPropertyCalls += 1
-
-        return element.getPropertyCalls === 1 ? "" : "pwd"
-      },
-      getText: async () => "",
-      sendKeys: async () => null
+      getId: async () => "webdriver-element-id"
     }
     const driver = new WebDriverDriver({
       browser: /** @type {any} */ ({
@@ -53,17 +45,22 @@ describe("WebDriverDriver interact", () => {
         throwIfHttpServerError: () => {}
       })
     })
-    const executeScriptSpy = jasmine.createSpy("executeScript")
 
     driver._findElement = async () => /** @type {any} */ (element)
-    driver.setWebDriver(/** @type {any} */ ({executeScript: executeScriptSpy}))
+    driver.setWebDriver(/** @type {any} */ ({
+      executeScript: async (...args) => {
+        executeScriptCalls.push(args)
+        return ""
+      }
+    }))
 
-    await driver.interact({selector: "textarea[data-testid='project-environment-agent-input']", withFallback: true}, "sendKeys", "pwd")
+    await driver.interact({selector: "textarea[data-testid='project-environment-agent-input']"}, "replaceValueWithJs", undefined)
 
-    expect(executeScriptSpy).not.toHaveBeenCalled()
+    expect(executeScriptCalls.length).toBe(1)
+    expect(executeScriptCalls[0][2]).toBe("")
   })
 
-  it("does not use the DOM value-setter fallback unless explicitly requested", async () => {
+  it("does not run executeScript for a plain sendKeys so there is no silent value-setter fallback", async () => {
     const element = {
       getAttribute: async () => "",
       getText: async () => "",
@@ -86,12 +83,10 @@ describe("WebDriverDriver interact", () => {
     expect(executeScriptSpy).not.toHaveBeenCalled()
   })
 
-  it("strips withFallback before selector lookup and preserves regular find args", async () => {
+  it("preserves regular find args when looking up a replaceValueWithJs target", async () => {
     const executeScriptCalls = []
     const element = {
-      getAttribute: async () => "",
-      getText: async () => "",
-      sendKeys: async () => null
+      getId: async () => "webdriver-element-id"
     }
     const driver = new WebDriverDriver({
       browser: /** @type {any} */ ({
@@ -110,7 +105,7 @@ describe("WebDriverDriver interact", () => {
       }
     }))
 
-    await driver.interact({selector: "textarea[data-testid='project-environment-agent-input']", visible: false, withFallback: true}, "sendKeys", "pwd")
+    await driver.interact({selector: "textarea[data-testid='project-environment-agent-input']", visible: false}, "replaceValueWithJs", "pwd")
 
     expect(findSpy).toHaveBeenCalledWith("textarea[data-testid='project-environment-agent-input']", {visible: false})
     expect(executeScriptCalls.length).toBe(1)
@@ -623,75 +618,6 @@ describe("WebDriverDriver interact", () => {
 
     expect(findElementCalls).toBe(2)
     expect(clickSpy.calls.count()).toBe(2)
-  })
-
-  it("does not append webdriver control keys in the DOM value-setter fallback", async () => {
-    const executeScriptCalls = []
-    const element = {
-      getAttribute: async () => "",
-      getText: async () => "",
-      sendKeys: async () => null
-    }
-    const driver = new WebDriverDriver({
-      browser: /** @type {any} */ ({
-        driver: undefined,
-        getSelector: (selector) => selector,
-        throwIfHttpServerError: () => {}
-      })
-    })
-
-    driver._findElement = async () => /** @type {any} */ (element)
-    driver.setWebDriver(/** @type {any} */ ({
-      executeScript: async (...args) => {
-        executeScriptCalls.push(args)
-        return null
-      }
-    }))
-
-    await driver.interact({selector: "textarea[data-testid='project-environment-agent-input']", withFallback: true}, "sendKeys", Key.ENTER)
-
-    expect(executeScriptCalls).toEqual([])
-  })
-
-  it("replaces the current value when sendKeys uses select-all and delete", async () => {
-    const executeScriptCalls = []
-    const element = {
-      value: "old",
-      getAttribute: async () => element.value,
-      getId: async () => "webdriver-element-id",
-      getText: async () => "",
-      sendKeys: async () => null
-    }
-    const driver = new WebDriverDriver({
-      browser: /** @type {any} */ ({
-        driver: undefined,
-        getSelector: (selector) => selector,
-        throwIfHttpServerError: () => {}
-      })
-    })
-    const clickSpy = jasmine.createSpy("click").and.resolveTo(undefined)
-
-    driver._findElement = async () => /** @type {any} */ (element)
-    driver.click = /** @type {any} */ (clickSpy)
-    driver.setWebDriver(/** @type {any} */ ({
-      executeScript: async (...args) => {
-        executeScriptCalls.push(args)
-        element.value = args[2]
-        return args[2]
-      }
-    }))
-
-    await driver.interact(
-      {selector: "textarea[data-testid='project-environment-agent-input']", withFallback: true},
-      "sendKeys",
-      Key.chord(Key.CONTROL, "a"),
-      Key.BACK_SPACE,
-      "new"
-    )
-
-    expect(clickSpy).not.toHaveBeenCalled()
-    expect(executeScriptCalls.length).toBe(1)
-    expect(executeScriptCalls[0][2]).toBe("new")
   })
 
   it("scrolls an element into view with webdriver actions first", async () => {
