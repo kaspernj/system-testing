@@ -3,7 +3,6 @@
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import {Key} from "selenium-webdriver"
 import Browser from "../src/browser.js"
 
 describe("Browser", () => {
@@ -167,81 +166,82 @@ describe("Browser", () => {
     ).toBeRejectedWithError("Expected panel to include rgb(30, 41, 59), got background-color rgb(130, 41, 59)")
   })
 
-  it("reports replaceInputValue retries through the onWarning callback", async () => {
+  it("reports fill retries through the onWarning callback", async () => {
     const onWarning = jasmine.createSpy("onWarning")
     const browser = new Browser({onWarning})
-    let value = "stuck"
-    let backspacePresses = 0
+    let value = "prefilled"
+    let sendKeysCalls = 0
 
     browser.interact = /** @type {any} */ (async (_target, methodName, ...args) => {
       if (methodName === "getProperty") return value
 
-      if (methodName === "sendKeys") {
-        const key = String(args[0])
+      if (methodName === "clear") {
+        value = ""
 
-        if (key === Key.BACK_SPACE) {
-          // The first clearing attempt is silently dropped, forcing a retry.
-          backspacePresses += 1
-          if (backspacePresses > 5) value = value.slice(0, -1)
-        } else if (key !== Key.DELETE) {
-          value += key
-        }
+        return undefined
+      }
+
+      // The first whole-string sendKeys is silently dropped, forcing a fill retry.
+      if (methodName === "sendKeys") {
+        sendKeysCalls += 1
+        if (sendKeysCalls >= 2) value += String(args[0])
       }
 
       return undefined
     })
 
-    await browser.replaceInputValue("#warn-target", "fixed")
+    await browser.clearAndSendKeys("#warn-target", "fixed")
 
     expect(value).toEqual("fixed")
     expect(onWarning).toHaveBeenCalledTimes(1)
-    expect(onWarning.calls.argsFor(0)[0]).toContain("\"stuck\"")
+    expect(onWarning.calls.argsFor(0)[0]).toContain("\"fixed\"")
     expect(onWarning.calls.argsFor(0)[0]).toContain("retrying")
   })
 
-  it("falls back to console.warn for replaceInputValue retries when no onWarning callback is configured", async () => {
+  it("falls back to console.warn for fill retries when no onWarning callback is configured", async () => {
     const consoleWarnSpy = spyOn(console, "warn")
     const browser = new Browser()
-    let value = "stuck"
-    let backspacePresses = 0
+    let value = "prefilled"
+    let sendKeysCalls = 0
 
     browser.interact = /** @type {any} */ (async (_target, methodName, ...args) => {
       if (methodName === "getProperty") return value
 
-      if (methodName === "sendKeys") {
-        const key = String(args[0])
+      if (methodName === "clear") {
+        value = ""
 
-        if (key === Key.BACK_SPACE) {
-          backspacePresses += 1
-          if (backspacePresses > 5) value = value.slice(0, -1)
-        } else if (key !== Key.DELETE) {
-          value += key
-        }
+        return undefined
+      }
+
+      if (methodName === "sendKeys") {
+        sendKeysCalls += 1
+        if (sendKeysCalls >= 2) value += String(args[0])
       }
 
       return undefined
     })
 
-    await browser.replaceInputValue("#warn-target", "fixed")
+    await browser.clearAndSendKeys("#warn-target", "fixed")
 
     expect(consoleWarnSpy).toHaveBeenCalledTimes(1)
     expect(consoleWarnSpy.calls.argsFor(0)[0]).toEqual("[Browser warning]")
     expect(consoleWarnSpy.calls.argsFor(0)[1]).toContain("retrying")
   })
 
-  it("does not warn when replaceInputValue succeeds on the first attempt", async () => {
+  it("does not warn when clearAndSendKeys succeeds on the first attempt", async () => {
     const onWarning = jasmine.createSpy("onWarning")
     const browser = new Browser({onWarning})
     let value = ""
 
     browser.interact = /** @type {any} */ (async (_target, methodName, ...args) => {
       if (methodName === "getProperty") return value
+      if (methodName === "clear") { value = ""; return undefined }
       if (methodName === "sendKeys") value += String(args[0])
 
       return undefined
     })
 
-    await browser.replaceInputValue("#warn-target", "ok")
+    await browser.clearAndSendKeys("#warn-target", "ok")
 
     expect(onWarning).not.toHaveBeenCalled()
   })
@@ -278,23 +278,42 @@ describe("Browser", () => {
     expect(onWarning).not.toHaveBeenCalled()
   })
 
-  it("replaces input values by test id through shared retryable interactions", async () => {
+  it("replaces input values by test id through a native clear then one whole-string fill", async () => {
     const browser = new Browser()
     const calls = []
+    let value = "Old value"
 
     browser.interact = /** @type {any} */ (async (...args) => {
       calls.push(args)
 
-      if (args[1] === "getTagName") return "input"
-      if (args[1] === "getProperty") return "Next value"
+      if (args[1] === "getProperty") return value
+      if (args[1] === "clear") { value = ""; return undefined }
+      if (args[1] === "sendKeys") { value += String(args[2]); return undefined }
 
       return undefined
     })
 
     await browser.replaceTestIDInputValue("name\"Input", "Next value", {timeout: 250})
 
-    expect(calls.length).toEqual(14)
+    // Native clear, then fill: read the current value, focus click, one whole-string sendKeys, verify.
+    expect(value).toBe("Next value")
+    expect(calls.length).toEqual(5)
     expect(calls[0]).toEqual([
+      {
+        selector: "[data-testid=\"name\\\"Input\"]",
+        timeout: 250
+      },
+      "clear"
+    ])
+    expect(calls[1]).toEqual([
+      {
+        selector: "[data-testid=\"name\\\"Input\"]",
+        timeout: 250
+      },
+      "getProperty",
+      "value"
+    ])
+    expect(calls[2]).toEqual([
       {
         method: "actions",
         selector: "[data-testid=\"name\\\"Input\"]",
@@ -302,39 +321,15 @@ describe("Browser", () => {
       },
       "click"
     ])
-    expect(calls[1]).toEqual([
-      {
-        selector: "[data-testid=\"name\\\"Input\"]",
-        timeout: 250
-      },
-      "sendKeys",
-      Key.chord(Key.CONTROL, "a")
-    ])
-    expect(calls[2]).toEqual([
-      {
-        selector: "[data-testid=\"name\\\"Input\"]",
-        timeout: 250
-      },
-      "sendKeys",
-      Key.BACK_SPACE
-    ])
     expect(calls[3]).toEqual([
       {
         selector: "[data-testid=\"name\\\"Input\"]",
         timeout: 250
       },
       "sendKeys",
-      "N"
+      "Next value"
     ])
-    expect(calls[12]).toEqual([
-      {
-        selector: "[data-testid=\"name\\\"Input\"]",
-        timeout: 250
-      },
-      "sendKeys",
-      "e"
-    ])
-    expect(calls[13]).toEqual([
+    expect(calls[4]).toEqual([
       {
         selector: "[data-testid=\"name\\\"Input\"]",
         timeout: 250

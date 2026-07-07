@@ -272,7 +272,6 @@ export function resolveBrowserCommand(flags) {
     if (flags.method) args.methodName = flags.method
     if (flags.arg) args.args = Array.isArray(flags.arg) ? flags.arg : [flags.arg]
     if (flags.command !== "interact") applyPointerFlags(flags, args)
-    if (flags["with-fallback"] !== undefined) args.withFallback = flags["with-fallback"]
     if (timeout !== undefined) args.timeout = timeout
     if (flags["scroll-to"] !== undefined) args.scrollTo = flags["scroll-to"]
     if (flags.visible !== undefined) args.visible = flags.visible

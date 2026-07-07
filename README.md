@@ -309,11 +309,10 @@ npx system-testing browser-command \
   --command=interact \
   --selector='[data-testid="emailInput"]' \
   --method=sendKeys \
-  --arg='user@example.com' \
-  --with-fallback=true
+  --arg='user@example.com'
 ```
 
-`sendKeys` uses the driver's normal typing path by default. If you specifically need the DOM value-setter fallback for React Native Web inputs that do not update from ordinary typing in your environment, opt into it with `withFallback: true` in JS or `--with-fallback=true` in the CLI/browser-command transport.
+`sendKeys` uses the driver's normal typing path and never silently falls back to anything. For the rare React Native Web controlled input that does not update from ordinary typing, the `js` value-setter escape hatch is a first-class interact method — call `--method=replaceValueWithJs --arg='user@example.com'` in the CLI/browser-command transport, or `interact(selector, "replaceValueWithJs", value)` in JS. Prefer fixing the input to be uncontrolled instead (see "Clearing inputs" below); the escape hatch, like the flakiness, is a symptom of a controlled input.
 
 The browser daemon is intended for agent-style development workflows where an AI or script needs to open the app, inspect HTML, locate elements, click controls, and read logs while validating layout or behavior changes.
 
@@ -506,19 +505,48 @@ await systemTest.click("[data-testid='signInButton']", {useBaseSelector: false, 
 await systemTest.interact({selector: "[data-testid='scanFooterMenuButton']", useBaseSelector: false}, "click")
 ```
 
-### Replacing input values
+### Clearing and filling inputs
 
-`clearAndSendKeys` (and `replaceTestIDInputValue`) keep standard input-replacement semantics: click to focus, select-all + backspace, then `sendKeys` the replacement and verify the resulting value.
+Three orthogonal methods handle input values. Each defaults to a **fast** strategy; the slow keyboard and JS strategies are explicit opt-in overrides.
 
-Some headless CI Chrome sessions silently ignore the select-all chord while subsequent typing still lands, which leaves old + typed text in the field. For those environments, opt into `replaceInputValue`, which replaces the value with chord-free, verified key presses: it clears per character on both sides of the caret (one BACK_SPACE per character before it, one DELETE per remaining character after it — the focusing click can land the caret anywhere, for example mid-line in a multiline textarea), verifies the field is empty before typing, types the replacement one character at a time, and verifies the final value. It retries internally and throws with the expected and actual values when the field never reaches the requested text.
+- **`clear(target, {strategy, keyDelay})`** — empties the field.
+- **`fill(target, value, {strategy, keyDelay})`** — enters `value` **without clearing first** (pure fill), then verifies the value landed, retrying a bounded number of times before throwing.
+- **`clearAndFill(target, value, {clearStrategy, fillStrategy, keyDelay})`** — `clear()` then `fill()`; the common replace-the-value flow. `replaceTestIDInputValue(testID, value)` targets a field by test id and uses `clearAndFill`.
+
+> **Root cause first — flaky clearing/typing is a controlled-input smell.** If a field needs a non-default strategy or DOM value injection to hold what you typed, the real bug is almost always a **controlled input** (a `value` prop fed from React state). Typing into it can drop or reorder characters for real users too, not just in tests. The fix is an **uncontrolled input**: `defaultValue` + `onChangeText` writing into your form state, with no `value` prop. The non-native strategies below are escape hatches for when you cannot fix the input right now — reach for the uncontrolled input first.
+
+**`clear` strategies** (`strategy`, default `"native"`):
+
+- **`"native"`** (default) — a normal Selenium `element.clear()`. Use this everywhere.
+- **`"js"`** — sets the value to `""` through a DOM prototype setter plus `input`/`change` events. The only strategy that reliably drives React Native Web *controlled*-input state, kept as an escape hatch.
+- **`"backspace-keys"`** — deliberately slow, opt-in per-character clear: caret-safe on both sides (one BACK_SPACE per character before the caret, one DELETE per remaining character after it — the focusing click can land the caret anywhere, e.g. mid-line in a multiline textarea), re-reading the residual each pass and recovering from dropped keystrokes / a focus click that never landed. **Never make this the default — it is intentionally very slow.**
+- **`"delete-keys"`** — the forward-delete-first variant of `backspace-keys`.
+
+**`fill` strategies** (`strategy`, default `"native"`):
+
+- **`"native"`** (default) — one fast whole-string `element.sendKeys(value)` with real keyboard events (not a per-character loop; the per-character loop was itself a controlled-input workaround).
+- **`"js"`** — sets the value directly through a DOM prototype setter plus `input`/`change` events (the RNW controlled-input escape hatch; also reachable as the `replaceValueWithJs` interact method).
+- **`"per-character"`** — deliberately slow, opt-in char-by-char typing.
+
+`keyDelay` (ms, default `0` — no artificial delay) pauses between individual key presses for the key-based clear strategies and the `per-character` fill. Like those strategies, it is a controlled-input band-aid knob, not a fix.
 
 ```js
-await systemTest.clearAndSendKeys("[data-testid='ticketCountInput']", "20")
+// Default: native clear + one whole-string sendKeys, verified. Use this.
+await systemTest.clearAndFill("[data-testid='ticketCountInput']", "20")
 await systemTest.replaceTestIDInputValue("ticketCountInput", "20")
 
-// Verified, chord-free replacement for environments where select-all silently no-ops:
-await systemTest.replaceInputValue("[data-testid='ticketCountInput']", "20")
+// Just clear, or just fill (fill does not clear first):
+await systemTest.clear("[data-testid='ticketCountInput']")
+await systemTest.fill("[data-testid='ticketCountInput']", "20")
+
+// Escape hatch for a controlled RNW input you cannot make uncontrolled yet:
+await systemTest.clearAndFill("[data-testid='ticketCountInput']", "20", {clearStrategy: "js", fillStrategy: "js"})
+
+// Deliberately slow per-character clear + fill, with a pause between keystrokes:
+await systemTest.clearAndFill("[data-testid='ticketCountInput']", "20", {clearStrategy: "backspace-keys", fillStrategy: "per-character", keyDelay: 25})
 ```
+
+`clearAndSendKeys(target, value, opts)` remains as a thin **convenience alias** for `clearAndFill` with fast native defaults, so existing call sites keep working; prefer `clear`/`fill`/`clearAndFill` in new code.
 
 ### Verified clicks
 
@@ -542,7 +570,7 @@ await systemTest.clickAndWaitForEffect(
 
 ### Retry warnings
 
-When a verified helper hits a retry (for example `replaceInputValue` finding leftover text after clearing, or `clickAndWaitForEffect` re-clicking because the effect has not appeared), it reports a warning so the retry does not happen silently. Configure the `onWarning` callback (a `Browser`/`SystemTest` constructor option) to handle or silence these warnings; without a callback they fall back to `console.warn`.
+When a verified helper hits a retry (for example `fill` finding the wrong value after entering it, or `clickAndWaitForEffect` re-clicking because the effect has not appeared), it reports a warning so the retry does not happen silently. Configure the `onWarning` callback (a `Browser`/`SystemTest` constructor option) to handle or silence these warnings; without a callback they fall back to `console.warn`.
 
 ```js
 const systemTest = SystemTest.current({

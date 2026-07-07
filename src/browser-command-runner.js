@@ -278,14 +278,6 @@ export default class BrowserCommandRunner {
         throw new Error("interact requires methodName")
       }
 
-      if ("withFallback" in commandArgs && commandArgs.withFallback !== undefined) {
-        if (typeof commandArgs.withFallback === "boolean") {
-          interactArgs.withFallback = commandArgs.withFallback
-        } else {
-          interactArgs.withFallback = commandArgs.withFallback === "true"
-        }
-      }
-
       const result = await this.browser.interact(interactArgs, methodName, ...methodArgs)
 
       return {result}

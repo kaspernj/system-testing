@@ -82,7 +82,7 @@ export function defaultClientWebSocketConnectTimeout({driver} = {}) {
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 /**
- * @typedef {FindArgs & {withFallback?: boolean}} InteractArgs
+ * @typedef {FindArgs} InteractArgs
  */
 /**
  * @typedef {object} WaitForNoSelectorArgs
