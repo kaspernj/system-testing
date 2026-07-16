@@ -521,13 +521,32 @@ export default class Browser {
    * @returns {Promise<void>}
    */
   async fill(elementOrIdentifier, value, {strategy = "native", keyDelay = 0} = {}) {
-    const rawBeforeValue = await this.interact(elementOrIdentifier, "getProperty", "value")
-    const beforeValue = typeof rawBeforeValue == "string" ? rawBeforeValue : ""
+    await this.fillWithRetry(elementOrIdentifier, value, {strategy, keyDelay})
+  }
+
+  /**
+   * Enters a text value with bounded verification retries. When `clearStrategy` is set, every retry starts
+   * with a fresh clear so a partial prior entry cannot be appended to.
+   * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
+   * @param {string} value
+   * @param {{strategy: FillStrategy, keyDelay: number, clearStrategy?: ClearStrategy}} args
+   * @returns {Promise<void>}
+   */
+  async fillWithRetry(elementOrIdentifier, value, {strategy, keyDelay, clearStrategy}) {
+    let beforeValue = ""
+
+    if (!clearStrategy) {
+      const rawBeforeValue = await this.interact(elementOrIdentifier, "getProperty", "value")
+      beforeValue = typeof rawBeforeValue == "string" ? rawBeforeValue : ""
+    }
+
     // `js` replaces the whole value; the keyboard strategies append at the caret of the (unclear) field.
-    const expectedValue = strategy === "js" ? value : `${beforeValue}${value}`
+    const expectedValue = strategy === "js" || clearStrategy ? value : `${beforeValue}${value}`
     let actualValue
 
     for (let attempt = 1; attempt <= 3; attempt++) {
+      if (clearStrategy) await this.clear(elementOrIdentifier, {strategy: clearStrategy, keyDelay})
+
       if (strategy === "js") {
         await this.interact(elementOrIdentifier, "replaceValueWithJs", value)
       } else if (strategy === "per-character") {
@@ -561,15 +580,15 @@ export default class Browser {
   /**
    * Clears a text entry and fills it with `value` — `clear()` then `fill()`. Both default to their fast
    * native strategies (`element.clear()` then one whole-string `element.sendKeys`), overridable per side
-   * via `clearStrategy`/`fillStrategy`. This is the common replace-the-value flow.
+   * via `clearStrategy`/`fillStrategy`. Each fill retry starts with a fresh clear, so partially entered text
+   * is replaced instead of being appended to. This is the common replace-the-value flow.
    * @param {import("selenium-webdriver").WebElement|string|{selector: string} & import("./system-test.js").InteractArgs} elementOrIdentifier
    * @param {string} value
    * @param {ClearAndFillArgs} [args]
    * @returns {Promise<void>}
    */
   async clearAndFill(elementOrIdentifier, value, {clearStrategy = "native", fillStrategy = "native", keyDelay = 0} = {}) {
-    await this.clear(elementOrIdentifier, {strategy: clearStrategy, keyDelay})
-    await this.fill(elementOrIdentifier, value, {strategy: fillStrategy, keyDelay})
+    await this.fillWithRetry(elementOrIdentifier, value, {strategy: fillStrategy, keyDelay, clearStrategy})
   }
 
   /**
