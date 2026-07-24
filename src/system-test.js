@@ -114,6 +114,8 @@ export default class SystemTest extends Browser {
   /** @type {Promise<void> | undefined} */
   _startPromise = undefined
   /** @type {Promise<void> | undefined} */
+  _queuedStartPromise = undefined
+  /** @type {Promise<void> | undefined} */
   _stopPromise = undefined
   /** @type {Promise<void> | undefined} */
   _reinitializePromise = undefined
@@ -785,7 +787,22 @@ export default class SystemTest extends Browser {
    */
   start() {
     if (this._reinitializePromise) return this._reinitializePromise
-    if (this._stopPromise) return this._stopPromise.then(() => this.start())
+    if (this._queuedStartPromise) return this._queuedStartPromise
+    if (this._stopPromise) {
+      const queuedStartPromise = this._stopPromise.then(
+        () => {
+          if (this._queuedStartPromise === queuedStartPromise) this._queuedStartPromise = undefined
+          return this.start()
+        },
+        (error) => {
+          if (this._queuedStartPromise === queuedStartPromise) this._queuedStartPromise = undefined
+          throw error
+        }
+      )
+
+      this._queuedStartPromise = queuedStartPromise
+      return queuedStartPromise
+    }
     if (this._started) return Promise.resolve()
     if (this._startPromise) return this._startPromise
 

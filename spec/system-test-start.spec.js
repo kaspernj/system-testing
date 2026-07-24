@@ -162,6 +162,30 @@ describe("SystemTest.start", () => {
     expect(systemTest.isStarted()).toBeTrue()
   })
 
+  it("shares one startup queued behind a pending stop", async () => {
+    const driverStop = createDeferred()
+    const {driverAdapter, systemTest} = createSystemTest(jasmine.createSpy("start").and.resolveTo(undefined))
+
+    driverAdapter.stop.and.returnValue(driverStop.promise)
+    await systemTest.start()
+
+    const stopPromise = systemTest.stop()
+    const firstQueuedStart = systemTest.start()
+    const secondQueuedStart = systemTest.start()
+
+    try {
+      expect(secondQueuedStart).toBe(firstQueuedStart)
+      expect(driverAdapter.start).toHaveBeenCalledTimes(1)
+    } finally {
+      driverStop.resolve()
+    }
+
+    await Promise.all([stopPromise, firstQueuedStart, secondQueuedStart])
+
+    expect(driverAdapter.start).toHaveBeenCalledTimes(2)
+    expect(systemTest.isStarted()).toBeTrue()
+  })
+
   it("reinitializes only after pending startup is stopped", async () => {
     const firstDriverStart = createDeferred()
     const replacementDriverStart = createDeferred()
