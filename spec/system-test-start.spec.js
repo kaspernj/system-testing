@@ -170,10 +170,18 @@ describe("SystemTest.start", () => {
 
   it("shares one startup queued behind a pending stop", async () => {
     const driverStop = createDeferred()
-    const {driverAdapter, systemTest} = createSystemTest(jasmine.createSpy("start").and.resolveTo(undefined))
+    const events = []
+    const {driverAdapter, systemTest} = createSystemTest(jasmine.createSpy("start").and.callFake(async () => {
+      events.push(`driver-start-${driverAdapter.start.calls.count()}`)
+    }))
 
+    systemTest.startScoundrel.and.callFake(function() {
+      events.push("scoundrel-start")
+      this.scoundrelWss = /** @type {any} */ ({})
+    })
     driverAdapter.stop.and.returnValue(driverStop.promise)
     await systemTest.start()
+    events.length = 0
 
     const stopPromise = systemTest.stop()
     const firstQueuedStart = systemTest.start()
@@ -190,6 +198,7 @@ describe("SystemTest.start", () => {
 
     expect(driverAdapter.start).toHaveBeenCalledTimes(2)
     expect(systemTest.startScoundrel).toHaveBeenCalledTimes(2)
+    expect(events).toEqual(["scoundrel-start", "driver-start-2"])
     expect(systemTest.isStarted()).toBeTrue()
   })
 
