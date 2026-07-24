@@ -111,6 +111,12 @@ export default class SystemTest extends Browser {
   communicator = undefined
 
   _started = false
+  /** @type {Promise<void> | undefined} */
+  _startPromise = undefined
+  /** @type {Promise<void> | undefined} */
+  _stopPromise = undefined
+  /** @type {Promise<void> | undefined} */
+  _reinitializePromise = undefined
   _clientWsPort = 1985
   _clientWsConnectTimeout = CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS
   _initialRootVisitTimeout = DEFAULT_INITIAL_ROOT_VISIT_TIMEOUT_MS
@@ -777,7 +783,32 @@ export default class SystemTest extends Browser {
    * Starts the system test
    * @returns {Promise<void>}
    */
-  async start() {
+  start() {
+    if (this._reinitializePromise) return this._reinitializePromise
+    if (this._stopPromise) return this._stopPromise.then(() => this.start())
+    if (this._started) return Promise.resolve()
+    if (this._startPromise) return this._startPromise
+
+    const startPromise = this.startInternal()
+
+    this._startPromise = startPromise
+    void startPromise.then(
+      () => {
+        if (this._startPromise === startPromise) this._startPromise = undefined
+      },
+      () => {
+        if (this._startPromise === startPromise) this._startPromise = undefined
+      }
+    )
+
+    return startPromise
+  }
+
+  /**
+   * Performs an unguarded system test startup.
+   * @returns {Promise<void>}
+   */
+  async startInternal() {
     this.debugLog("Start called")
     // Native Appium app sessions launch an installed app instead of a web page, so they follow the
     // native lifecycle (no dist HTTP server, no driver navigation, WebSocket started before the app)
@@ -1185,7 +1216,44 @@ export default class SystemTest extends Browser {
    * Stops the system test
    * @returns {Promise<void>}
    */
-  async stop() {
+  stop() {
+    if (this._reinitializePromise) return this._reinitializePromise.then(() => this.stop())
+    if (this._stopPromise) return this._stopPromise
+
+    const startPromise = this._startPromise
+    const stopPromise = (async () => {
+      this._started = false
+
+      if (startPromise) {
+        try {
+          await startPromise
+        } catch {
+          // Startup failure does not remove resources that were already created.
+        }
+      }
+
+      await this.stopInternal()
+      this._started = false
+    })()
+
+    this._stopPromise = stopPromise
+    void stopPromise.then(
+      () => {
+        if (this._stopPromise === stopPromise) this._stopPromise = undefined
+      },
+      () => {
+        if (this._stopPromise === stopPromise) this._stopPromise = undefined
+      }
+    )
+
+    return stopPromise
+  }
+
+  /**
+   * Performs an unguarded system test teardown.
+   * @returns {Promise<void>}
+   */
+  async stopInternal() {
     await this.stopScoundrel()
     if (this.ws) {
       this.ws.close()
@@ -1205,29 +1273,59 @@ export default class SystemTest extends Browser {
    * Fully tears down and restarts the system test instance.
    * @returns {Promise<void>}
    */
-  async reinitialize() {
-    await this.stop()
+  reinitialize() {
+    if (this._reinitializePromise) return this._reinitializePromise
 
-    this._started = false
-    this._baseSelector = undefined
-    this.currentUrl = undefined
-    this.driver = undefined
-    this.driverAdapter = this.createDriver(this._driverConfig)
-    this.ws = null
-    this.clientWss = undefined
-    this.scoundrelWss = undefined
-    this.server = undefined
-    this.serverWebSocket = undefined
-    this._ignoredScoundrelClientCount = 0
-    this.systemTestHttpServer = undefined
-    this._httpServerError = undefined
-    this.waitForClientWebSocketPromiseReject = undefined
-    this.waitForClientWebSocketPromiseResolve = undefined
-    this.communicator = new SystemTestCommunicator({onCommand: this.onCommandReceived})
-    this.setCommunicator(this.communicator)
+    const startPromise = this._startPromise
+    const stopPromise = this._stopPromise
+    const reinitializePromise = (async () => {
+      if (stopPromise) {
+        await stopPromise
+      } else {
+        if (startPromise) {
+          try {
+            await startPromise
+          } catch {
+            // Startup failure does not remove resources that were already created.
+          }
+        }
 
-    this.startScoundrel()
-    await this.start()
+        await this.stopInternal()
+      }
+
+      this._started = false
+      this._baseSelector = undefined
+      this.currentUrl = undefined
+      this.driver = undefined
+      this.driverAdapter = this.createDriver(this._driverConfig)
+      this.ws = null
+      this.clientWss = undefined
+      this.scoundrelWss = undefined
+      this.server = undefined
+      this.serverWebSocket = undefined
+      this._ignoredScoundrelClientCount = 0
+      this.systemTestHttpServer = undefined
+      this._httpServerError = undefined
+      this.waitForClientWebSocketPromiseReject = undefined
+      this.waitForClientWebSocketPromiseResolve = undefined
+      this.communicator = new SystemTestCommunicator({onCommand: this.onCommandReceived})
+      this.setCommunicator(this.communicator)
+
+      this.startScoundrel()
+      await this.startInternal()
+    })()
+
+    this._reinitializePromise = reinitializePromise
+    void reinitializePromise.then(
+      () => {
+        if (this._reinitializePromise === reinitializePromise) this._reinitializePromise = undefined
+      },
+      () => {
+        if (this._reinitializePromise === reinitializePromise) this._reinitializePromise = undefined
+      }
+    )
+
+    return reinitializePromise
   }
 
   /**
