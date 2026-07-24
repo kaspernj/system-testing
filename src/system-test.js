@@ -470,6 +470,9 @@ export default class SystemTest extends Browser {
       await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while waiting for Scoundrel to stop"}, async () => await /** @type {NonNullable<typeof this.server>} */ (this.server).close())
     }
     await this.closeWebSocketServer(this.scoundrelWss, "Scoundrel WebSocket server")
+    this.scoundrelWss = undefined
+    this.serverWebSocket = undefined
+    this.server = undefined
   }
 
   /**
@@ -827,6 +830,7 @@ export default class SystemTest extends Browser {
    */
   async startInternal() {
     this.debugLog("Start called")
+    if (!this.scoundrelWss) this.startScoundrel()
     // Native Appium app sessions launch an installed app instead of a web page, so they follow the
     // native lifecycle (no dist HTTP server, no driver navigation, WebSocket started before the app)
     // even when SYSTEM_TEST_HOST is "dist".

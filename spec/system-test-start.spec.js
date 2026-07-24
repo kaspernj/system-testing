@@ -48,8 +48,14 @@ function createSystemTest(start) {
 
 describe("SystemTest.start", () => {
   beforeEach(() => {
-    spyOn(SystemTest.prototype, "startScoundrel").and.callFake(() => {})
-    spyOn(SystemTest.prototype, "stopScoundrel").and.resolveTo(undefined)
+    spyOn(SystemTest.prototype, "startScoundrel").and.callFake(function() {
+      this.scoundrelWss = /** @type {any} */ ({})
+    })
+    spyOn(SystemTest.prototype, "stopScoundrel").and.callFake(async function() {
+      this.scoundrelWss = undefined
+      this.serverWebSocket = undefined
+      this.server = undefined
+    })
   })
 
   it("shares one pending driver startup between overlapping callers", async () => {
@@ -183,6 +189,7 @@ describe("SystemTest.start", () => {
     await Promise.all([stopPromise, firstQueuedStart, secondQueuedStart])
 
     expect(driverAdapter.start).toHaveBeenCalledTimes(2)
+    expect(systemTest.startScoundrel).toHaveBeenCalledTimes(2)
     expect(systemTest.isStarted()).toBeTrue()
   })
 
