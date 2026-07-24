@@ -830,7 +830,10 @@ export default class SystemTest extends Browser {
    */
   async startInternal() {
     this.debugLog("Start called")
-    if (!this.scoundrelWss) this.startScoundrel()
+    if (!this.scoundrelWss) {
+      this._ignoredScoundrelClientCount = 0
+      this.startScoundrel()
+    }
     // Native Appium app sessions launch an installed app instead of a web page, so they follow the
     // native lifecycle (no dist HTTP server, no driver navigation, WebSocket started before the app)
     // even when SYSTEM_TEST_HOST is "dist".

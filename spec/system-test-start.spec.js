@@ -174,6 +174,7 @@ describe("SystemTest.start", () => {
 
     driverAdapter.stop.and.returnValue(driverStop.promise)
     await systemTest.start()
+    systemTest._ignoredScoundrelClientCount = 1
 
     const stopPromise = systemTest.stop()
     const firstQueuedStart = systemTest.start()
@@ -190,6 +191,7 @@ describe("SystemTest.start", () => {
 
     expect(driverAdapter.start).toHaveBeenCalledTimes(2)
     expect(systemTest.startScoundrel).toHaveBeenCalledTimes(2)
+    expect(systemTest._ignoredScoundrelClientCount).toEqual(0)
     expect(systemTest.isStarted()).toBeTrue()
   })
 
