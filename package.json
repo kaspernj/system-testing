@@ -94,7 +94,7 @@
     "@types/qs": "^6.14.0",
     "@types/react": "^19.2.7",
     "@types/selenium-webdriver": "^4.35.4",
-    "appium": "3.5.2",
+    "appium": "3.6.0",
     "appium-chromium-driver": "^3.0.2",
     "appium-uiautomator2-driver": "^8.0.0",
     "eslint": "^10.1.0",
