@@ -1,8 +1,5 @@
 // @ts-check
 
-import fs from "node:fs/promises"
-import os from "node:os"
-import path from "node:path"
 import timeout from "awaitery/build/timeout.js"
 import {Builder} from "selenium-webdriver"
 import chrome from "selenium-webdriver/chrome.js"
@@ -19,7 +16,7 @@ function newDriver(options = {}) {
   }
   const driver = new SeleniumDriver({
     browser: /** @type {any} */ (browser),
-    options
+    options: {chromeRuntimeResolver: async () => undefined, ...options}
   })
 
   return {driver, browser}
@@ -48,19 +45,22 @@ async function withPatchedBuilder(methods, callback) {
 }
 
 describe("SeleniumDriver", () => {
-  it("uses Chromedriver from PATH before falling back to Selenium Manager", async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "system-testing-chromedriver-"))
-    const chromedriverPath = path.join(tempDir, process.platform === "win32" ? "chromedriver.exe" : "chromedriver")
-    const originalPath = process.env.PATH
-    const {driver} = newDriver()
+  it("exposes a lazily resolved exact Chrome runtime to Selenium startup", async () => {
+    const resolver = jasmine.createSpy("resolver").and.resolveTo({
+      chromeBinaryPath: "/cache/chrome-headless-shell",
+      chromedriverPath: "/cache/chromedriver",
+      version: "131.0.6778.85"
+    })
+    const {driver} = newDriver({chromeRuntimeCachePath: "/custom/cache", chromeRuntimeResolver: resolver})
+    let chromeBinary
     let configuredService
-
-    await fs.writeFile(chromedriverPath, "")
-    await fs.chmod(chromedriverPath, 0o755)
-    process.env.PATH = `${tempDir}${path.delimiter}${originalPath ?? ""}`
 
     try {
       await withPatchedBuilder({
+        setChromeOptions(chromeOptions) {
+          chromeBinary = chromeOptions.get("goog:chromeOptions")?.binary
+          return this
+        },
         setChromeService(service) {
           configuredService = service
           return this
@@ -74,15 +74,15 @@ describe("SeleniumDriver", () => {
         await driver.start()
       })
     } finally {
-      if (originalPath === undefined) {
-        delete process.env.PATH
-      } else {
-        process.env.PATH = originalPath
-      }
-      await fs.rm(tempDir, {recursive: true, force: true})
       driver._removeExitHandlers()
     }
 
+    expect(resolver).toHaveBeenCalledWith({
+      cachePath: "/custom/cache",
+      chromeBinaryPath: undefined,
+      chromedriverPath: undefined
+    })
+    expect(chromeBinary).toEqual("/cache/chrome-headless-shell")
     expect(configuredService instanceof chrome.ServiceBuilder).toBeTrue()
   })
 
@@ -108,6 +108,45 @@ describe("SeleniumDriver", () => {
     }
 
     expect(chromeBinary).toEqual("/opt/chrome-for-testing/chrome-linux64/chrome")
+  })
+
+  it("preserves a binary configured through chromeOptions as an explicit runtime override", async () => {
+    const chromeOptions = new chrome.Options().setChromeBinaryPath("/options/chrome")
+    const resolver = jasmine.createSpy("resolver").and.resolveTo({
+      chromeBinaryPath: "/options/chrome",
+      chromedriverPath: "/cache/chromedriver",
+      version: "131.0.6778.85"
+    })
+    const {driver} = newDriver({chromeOptions, chromeRuntimeResolver: resolver})
+    let configuredBinary
+
+    try {
+      await withPatchedBuilder({
+        setChromeOptions(options) {
+          configuredBinary = options.get("goog:chromeOptions")?.binary
+          return this
+        },
+        async build() { return {quit: async () => {}} }
+      }, async () => { await driver.start() })
+    } finally {
+      driver._removeExitHandlers()
+    }
+
+    expect(resolver).toHaveBeenCalledWith({cachePath: undefined, chromeBinaryPath: "/options/chrome", chromedriverPath: undefined})
+    expect(configuredBinary).toEqual("/options/chrome")
+  })
+
+  it("rejects conflicting explicit chromeOptions and chromeBinaryPath binaries", async () => {
+    const {driver} = newDriver({
+      chromeBinaryPath: "/direct/chrome",
+      chromeOptions: new chrome.Options().setChromeBinaryPath("/options/chrome")
+    })
+
+    try {
+      await expectAsync(driver.start()).toBeRejectedWithError(/conflicting Chrome binary/i)
+    } finally {
+      driver._removeExitHandlers()
+    }
   })
 
   it("requests the eager page load strategy so navigation does not block on the full load event", async () => {

@@ -142,6 +142,8 @@ active step) for future HTML trace reports.
 
 SystemTest uses Selenium by default. To use Appium instead, pass a driver config when creating the instance.
 
+On Linux, the Selenium driver lazily resolves and caches an exact-version Chrome Headless Shell and ChromeDriver pair when the browser session starts. The default cache is `~/.cache/system-testing/chrome`; set `SYSTEM_TEST_CHROME_RUNTIME_CACHE_PATH` or pass `driver.options.chromeRuntimeCachePath` to use another location. `SYSTEM_TEST_CHROME_BINARY` and `SYSTEM_TEST_CHROMEDRIVER_PATH` take precedence and are validated as an exact pair. Other platforms continue to use Selenium Manager.
+
 `appium` is an optional peer dependency, so browser-only installs stay lightweight. Install it (plus the Appium drivers you need) when you opt into the Appium driver:
 
 ```sh
