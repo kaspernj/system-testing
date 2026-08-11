@@ -63,6 +63,7 @@
     "awaitery": "^1.0.12",
     "diggerize": "^1.0.9",
     "eventemitter3": "^5.0.1",
+    "extract-zip": "^2.0.1",
     "htmlfy": "^1.0.0",
     "mime": "^4.0.7",
     "moment": "^2.30.1",

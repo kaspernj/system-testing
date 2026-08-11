@@ -3,6 +3,7 @@
 import {spawn, spawnSync} from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
+import {currentUserOwnership, useSudoForEmulator} from "./android-emulator-permissions.js"
 
 const sdkRoot = ensureSdkRoot()
 console.log(`[android] Using SDK root: ${sdkRoot}`)
@@ -29,7 +30,6 @@ const packages = [
   ...(ndkVersion ? [`ndk;${ndkVersion}`] : []),
   ...extraPackages
 ]
-const useSudoForEmulator = true
 const useSudoForAdb = false
 const stage = process.env.ANDROID_EMULATOR_STAGE ?? "full"
 
@@ -67,16 +67,16 @@ function ensurePackages() {
 
 /** @returns {void} */
 function ensureWritableSdkRoot() {
-  run("chmod", ["-R", "777", sdkRoot], {sudo: true})
+  ensureOwnedByCurrentUser(sdkRoot)
   const sdkHome = process.env.ANDROID_SDK_HOME ?? path.join(sdkRoot, ".android")
-  run("chmod", ["-R", "777", sdkHome], {sudo: true})
+  ensureOwnedByCurrentUser(sdkHome)
 }
 
 /** @returns {void} */
 function ensureAvd() {
   console.log(`[android] Ensuring AVD ${avdName}`)
   run("mkdir", ["-p", avdHome], {sudo: useSudoForEmulator})
-  run("chmod", ["-R", "777", avdHome], {sudo: useSudoForEmulator})
+  ensureOwnedByCurrentUser(avdHome)
   const listResult = run(avdmanagerPath, ["list", "avd"], {
     env: sdkEnv(),
     captureOutput: true,
@@ -352,16 +352,28 @@ function getPreferredSdkRoot() {
  */
 function ensureSdkRootDir(root) {
   if (fs.existsSync(root)) {
-    run("chmod", ["-R", "777", root], {sudo: true})
+    ensureOwnedByCurrentUser(root)
     const sdkHome = process.env.ANDROID_SDK_HOME ?? path.join(root, ".android")
-    run("chmod", ["-R", "777", sdkHome], {sudo: true})
+    ensureOwnedByCurrentUser(sdkHome)
     return
   }
 
   run("mkdir", ["-p", root], {sudo: true})
   const sdkHome = process.env.ANDROID_SDK_HOME ?? path.join(root, ".android")
   run("mkdir", ["-p", sdkHome], {sudo: true})
-  run("chmod", ["-R", "777", root], {sudo: true})
+  ensureOwnedByCurrentUser(root)
+}
+
+/**
+ * @param {string} target
+ * @returns {void}
+ */
+function ensureOwnedByCurrentUser(target) {
+  const ownership = currentUserOwnership()
+
+  if (!fs.existsSync(target) || !ownership) return
+
+  run("chown", ["-R", ownership, target], {sudo: true})
 }
 
 /** @returns {string | undefined} */
