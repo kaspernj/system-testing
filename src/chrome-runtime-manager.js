@@ -17,6 +17,7 @@ import extractZip from "extract-zip"
 /**
  * @typedef {object} ChromeRuntimeDependencies
  * @property {(filePath: string, mode?: number) => Promise<void>} [access] Filesystem access check.
+ * @property {string} [arch] Node architecture name.
  * @property {(url: string, destinationPath: string) => Promise<void>} [download] Archive downloader.
  * @property {Record<string, string | undefined>} [env] Environment variables.
  * @property {(executablePath: string) => Promise<string>} [executableVersion] Executable version reader.
@@ -151,6 +152,7 @@ async function defaultExtractArchive(archivePath, destinationPath) {
 function dependenciesWithDefaults(overrides) {
   return {
     access: fsPromises.access,
+    arch: process.arch,
     download: defaultDownload,
     env: process.env,
     executableVersion: defaultExecutableVersion,
@@ -246,7 +248,7 @@ async function validateRuntime(runtime, dependencies) {
 export async function resolveChromeRuntime(options = {}) {
   const dependencies = dependenciesWithDefaults(options.dependencies ?? {})
 
-  if (dependencies.platform !== "linux") return undefined
+  if (dependencies.platform !== "linux" || dependencies.arch !== "x64") return undefined
 
   const explicitChromeBinaryPath = options.chromeBinaryPath ?? dependencies.env.SYSTEM_TEST_CHROME_BINARY
   const explicitChromedriverPath = options.chromedriverPath ?? dependencies.env.SYSTEM_TEST_CHROMEDRIVER_PATH
@@ -257,13 +259,16 @@ export async function resolveChromeRuntime(options = {}) {
 
   const cachePath = options.cachePath ?? dependencies.env.SYSTEM_TEST_CHROME_RUNTIME_CACHE_PATH ?? path.join(os.homedir(), ".cache", "system-testing", "chrome")
 
-  if (!explicitChromeBinaryPath && !explicitChromedriverPath) {
-    try {
-      const {version, directory} = JSON.parse(await dependencies.readFile(containedCachePath(cachePath, path.join(cachePath, "resolved.json")), "utf8"))
-      return await validateRuntime(cachedRuntimeInDirectory(cachePath, validatedVersion(version), directory ?? version), dependencies)
-    } catch (error) {
-      if (error && typeof error === "object" && "code" in error && error.code === "EACCES") throw error
-    }
+  try {
+    const {version, directory} = JSON.parse(await dependencies.readFile(containedCachePath(cachePath, path.join(cachePath, "resolved.json")), "utf8"))
+    const manifestRuntime = cachedRuntimeInDirectory(cachePath, validatedVersion(version), directory ?? version)
+    return await validateRuntime({
+      chromeBinaryPath: explicitChromeBinaryPath ?? manifestRuntime.chromeBinaryPath,
+      chromedriverPath: explicitChromedriverPath ?? manifestRuntime.chromedriverPath,
+      version: manifestRuntime.version
+    }, dependencies)
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "EACCES") throw error
   }
 
   try {

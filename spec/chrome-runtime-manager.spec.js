@@ -81,6 +81,49 @@ describe("resolveChromeRuntime", () => {
     expect(runtime).toEqual({chromeBinaryPath, chromedriverPath, version: VERSION})
   })
 
+  for (const override of ["chromeBinaryPath", "chromedriverPath"]) {
+    it(`reuses the cached counterpart for a sequential ${override} override without using the network`, async () => {
+      const cachePath = await fs.mkdtemp(path.join(os.tmpdir(), "system-testing-chrome-runtime-"))
+      const explicitPath = `/overrides/${override}`
+      const extractArchive = async (archivePath, destinationPath) => {
+        const directory = archivePath.includes("headless-shell") ? "chrome-headless-shell-linux64" : "chromedriver-linux64"
+        const executable = archivePath.includes("headless-shell") ? "chrome-headless-shell" : "chromedriver"
+        await fs.mkdir(path.join(destinationPath, directory), {recursive: true})
+        await fs.writeFile(path.join(destinationPath, directory, executable), "runtime")
+        await fs.chmod(path.join(destinationPath, directory, executable), 0o755)
+      }
+      const options = {
+        cachePath,
+        [override]: explicitPath,
+        dependencies: {
+          access: async (filePath, mode) => filePath === explicitPath ? undefined : await fs.access(filePath, mode),
+          download: async (url, destinationPath) => { await fs.writeFile(destinationPath, url) },
+          env: {},
+          executableVersion: async () => VERSION,
+          extractArchive,
+          fetchJson: async () => ({versions: [downloads().channels.Stable]}),
+          platform: "linux"
+        }
+      }
+
+      try {
+        const first = await resolveChromeRuntime(options)
+        const second = await resolveChromeRuntime({
+          ...options,
+          dependencies: {
+            ...options.dependencies,
+            fetchJson: async () => { throw new Error("network should not be used") }
+          }
+        })
+
+        expect(second).toEqual(first)
+        expect(second[override]).toEqual(explicitPath)
+      } finally {
+        await fs.rm(cachePath, {recursive: true, force: true})
+      }
+    })
+  }
+
   it("publishes separately from a mismatched cached runtime after downloading both artifacts from one exact release", async () => {
     const downloadedUrls = []
     const removedPaths = []
@@ -284,6 +327,10 @@ describe("resolveChromeRuntime", () => {
   })
 
   it("leaves unsupported platforms to Selenium Manager", async () => {
-    expect(await resolveChromeRuntime({dependencies: {env: {}, platform: "darwin"}})).toBeUndefined()
+    expect(await resolveChromeRuntime({dependencies: {arch: "x64", env: {}, platform: "darwin"}})).toBeUndefined()
+  })
+
+  it("leaves unsupported Linux architectures to Selenium Manager", async () => {
+    expect(await resolveChromeRuntime({dependencies: {arch: "arm64", env: {}, platform: "linux"}})).toBeUndefined()
   })
 })
