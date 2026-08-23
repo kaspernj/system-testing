@@ -99,7 +99,7 @@
     "appium-chromium-driver": "^3.0.2",
     "appium-uiautomator2-driver": "^8.0.0",
     "eslint": "^10.1.0",
-    "eslint-plugin-jsdoc": "^63.0.2",
+    "eslint-plugin-jsdoc": "^64.2.1",
     "expo-router": "^55.0.5",
     "globals": "^17.0.0",
     "jasmine": "^6.0.0",
