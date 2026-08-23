@@ -102,7 +102,7 @@
     "eslint-plugin-jsdoc": "^63.0.2",
     "expo-router": "^55.0.5",
     "globals": "^17.0.0",
-    "jasmine": "^6.0.0",
+    "jasmine": "^7.0.0",
     "release-patch": "^1.0.0",
     "typescript": "^6.0.2"
   }
