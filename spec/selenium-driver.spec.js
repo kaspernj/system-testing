@@ -170,6 +170,20 @@ describe("SeleniumDriver", () => {
     expect(pageLoadStrategy).toEqual("eager")
   })
 
+  it("dispatches visits through location assignment without waiting for Chrome renderer lifecycle", async () => {
+    const {driver} = newDriver()
+    const executeScript = jasmine.createSpy("executeScript").and.resolveTo(undefined)
+    const get = jasmine.createSpy("get")
+
+    driver.setBaseUrl("http://127.0.0.1:1984")
+    driver.setWebDriver(/** @type {any} */ ({executeScript, get}))
+
+    await driver.driverVisit("/blank?systemTest=true")
+
+    expect(executeScript).toHaveBeenCalledOnceWith("window.location.assign(arguments[0])", "http://127.0.0.1:1984/blank?systemTest=true")
+    expect(get).not.toHaveBeenCalled()
+  })
+
   it("uses an explicit Chromedriver service when a path is configured", async () => {
     const {driver, browser} = newDriver({chromedriverPath: process.execPath})
     const fakeWebDriver = {
