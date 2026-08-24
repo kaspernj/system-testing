@@ -29,7 +29,7 @@ describe("dismissExpoRouterToPath", () => {
     const dismissPromise = dismissExpoRouterToPath({
       navigationContainerRef: {current: navigation},
       path: "/blank?systemTest=true",
-      router
+      routerRef: {current: router}
     })
 
     expect(calls).toEqual(["dismissAll"])
@@ -52,7 +52,7 @@ describe("dismissExpoRouterToPath", () => {
     await dismissExpoRouterToPath({
       navigationContainerRef: {current: {canGoBack: () => false}},
       path: "/blank?systemTest=true",
-      router
+      routerRef: {current: router}
     })
 
     expect(router.dismissAll).not.toHaveBeenCalled()
@@ -74,7 +74,7 @@ describe("dismissExpoRouterToPath", () => {
           canGoBack: () => true
         }},
         path: "/blank?systemTest=true",
-        router
+        routerRef: {current: router}
       })
     ).toBeRejectedWith(error)
     expect(unsubscribe).toHaveBeenCalledTimes(1)
@@ -91,8 +91,43 @@ describe("dismissExpoRouterToPath", () => {
       dismissExpoRouterToPath({
         navigationContainerRef: {current: {canGoBack: () => false}},
         path: "/blank?systemTest=true",
-        router
+        routerRef: {current: router}
       })
     ).toBeRejectedWith(error)
+  })
+
+  it("dismisses to the requested path with the current router after the stack reset", async () => {
+    /** @type {(() => void) | undefined} */
+    let emitStateChange
+    const oldRouter = {
+      dismissAll: jasmine.createSpy("oldDismissAll"),
+      dismissTo: jasmine.createSpy("oldDismissTo")
+    }
+    const currentRouter = {
+      dismissAll: jasmine.createSpy("currentDismissAll"),
+      dismissTo: jasmine.createSpy("currentDismissTo")
+    }
+    const routerRef = {current: oldRouter}
+
+    const dismissPromise = dismissExpoRouterToPath({
+      navigationContainerRef: {current: {
+        addListener: (_eventName, callback) => {
+          emitStateChange = callback
+          return () => {}
+        },
+        canGoBack: () => true
+      }},
+      path: "/blank?systemTest=true",
+      routerRef
+    })
+
+    expect(oldRouter.dismissAll).toHaveBeenCalledTimes(1)
+    routerRef.current = currentRouter
+    if (!emitStateChange) throw new Error("State-change callback was not registered")
+    emitStateChange()
+    await dismissPromise
+
+    expect(oldRouter.dismissTo).not.toHaveBeenCalled()
+    expect(currentRouter.dismissTo).toHaveBeenCalledOnceWith("/blank?systemTest=true")
   })
 })

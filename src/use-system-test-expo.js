@@ -1,4 +1,5 @@
 import {useNavigationContainerRef, useRouter} from "expo-router"
+import {useRef} from "react"
 import {dismissExpoRouterToPath} from "./expo-router-dismiss-to.js"
 import useSystemTest from "./use-system-test.js"
 
@@ -16,7 +17,10 @@ import useSystemTest from "./use-system-test.js"
 export default function useSystemTestExpo({browserHelper, enabled, host, onFirstInitialize, onInitialize, onTeardown, ...restArgs} = {browserHelper: undefined, enabled: undefined, host: undefined, onFirstInitialize: undefined, onInitialize: undefined, onTeardown: undefined}) {
   const navigationContainerRef = useNavigationContainerRef()
   const router = useRouter()
+  const routerRef = useRef(router)
   const restArgsKeys = Object.keys(restArgs)
+
+  routerRef.current = router
 
   if (restArgsKeys.length > 0) {
     throw new Error(`Unknown arguments given to useSystemTestExpo: ${restArgsKeys.join(", ")}`)
@@ -27,13 +31,13 @@ export default function useSystemTestExpo({browserHelper, enabled, host, onFirst
     enabled,
     host,
     onDismissTo: ({path}) => {
-      dismissExpoRouterToPath({navigationContainerRef, path, router})
+      return dismissExpoRouterToPath({navigationContainerRef, path, routerRef})
     },
     onFirstInitialize,
     onInitialize,
     onTeardown,
     onNavigate: ({path}) => {
-      router.navigate(path)
+      routerRef.current.navigate(path)
     }
   })
 }
