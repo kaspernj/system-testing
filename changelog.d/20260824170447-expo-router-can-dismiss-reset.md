@@ -1,0 +1,1 @@
+- Fix Expo Router run resets hanging when nested navigation can go back but the root stack has nothing for `dismissAll()` to dismiss.

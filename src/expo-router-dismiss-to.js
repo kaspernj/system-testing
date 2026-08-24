@@ -1,6 +1,6 @@
 /** @typedef {{addListener: (eventName: "state", callback: () => void) => () => void, canGoBack: () => boolean}} ExpoNavigationState */
 /** @typedef {{current: ExpoNavigationState | null | undefined}} ExpoNavigationContainerRef */
-/** @typedef {{dismissAll: () => void, dismissTo: (path: string) => void, navigate: (path: string) => void}} ExpoRouter */
+/** @typedef {{canDismiss: () => boolean, dismissAll: () => void, dismissTo: (path: string) => void, navigate: (path: string) => void}} ExpoRouter */
 /** @typedef {{current: ExpoRouter}} ExpoRouterRef */
 
 /**
@@ -36,12 +36,13 @@ export async function dismissExpoRouterToPath({navigationContainerRef, path, rou
   // Pressables that share the same testID as the visible one and Selenium
   // clicks fail to fire onPress.
   const navigation = navigationContainerRef.current
+  const router = routerRef.current
 
-  if (navigation && navigation.canGoBack()) {
+  if (navigation && router.canDismiss()) {
     const stateChange = waitForNavigationStateChange(navigation)
 
     try {
-      routerRef.current.dismissAll()
+      router.dismissAll()
       await stateChange.promise
     } catch (error) {
       stateChange.unsubscribe()
