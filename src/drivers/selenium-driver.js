@@ -25,6 +25,19 @@ const DEFAULT_DRIVER_START_TIMEOUT_MS = 60000
  */
 export default class SeleniumDriver extends WebDriverDriver {
   /**
+   * Dispatches navigation without waiting for Chrome's renderer lifecycle. SystemTest owns
+   * readiness through explicit route, DOM, and WebSocket assertions after each visit.
+   * @param {string} path
+   * @returns {Promise<void>}
+   */
+  async driverVisit(path) {
+    const isAbsoluteUrl = /^[a-z]+:\/\//i.test(path)
+    const url = isAbsoluteUrl ? path : `${this.getBaseUrl()}${path}`
+
+    await this.getWebDriver().executeScript("window.location.assign(arguments[0])", url)
+  }
+
+  /**
    * @returns {Promise<void>}
    */
   async start() {

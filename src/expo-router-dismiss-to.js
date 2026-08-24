@@ -1,6 +1,7 @@
 /** @typedef {{addListener: (eventName: "state", callback: () => void) => () => void, canGoBack: () => boolean}} ExpoNavigationState */
 /** @typedef {{current: ExpoNavigationState | null | undefined}} ExpoNavigationContainerRef */
-/** @typedef {{dismissAll: () => void, dismissTo: (path: string) => void}} ExpoRouter */
+/** @typedef {{dismissAll: () => void, dismissTo: (path: string) => void, navigate: (path: string) => void}} ExpoRouter */
+/** @typedef {{current: ExpoRouter}} ExpoRouterRef */
 
 /**
  * Builds a one-shot listener for the next committed React Navigation state.
@@ -25,10 +26,10 @@ function waitForNavigationStateChange(navigation) {
  * @param {object} args
  * @param {ExpoNavigationContainerRef} args.navigationContainerRef
  * @param {string} args.path
- * @param {ExpoRouter} args.router
+ * @param {ExpoRouterRef} args.routerRef
  * @returns {Promise<void>}
  */
-export async function dismissExpoRouterToPath({navigationContainerRef, path, router}) {
+export async function dismissExpoRouterToPath({navigationContainerRef, path, routerRef}) {
   // Pop every other screen off the Stack so previously-visited routes
   // unmount instead of accumulating in DOM with display:none. Without this,
   // react-native-web's global PressResponder gets confused by stale
@@ -40,7 +41,7 @@ export async function dismissExpoRouterToPath({navigationContainerRef, path, rou
     const stateChange = waitForNavigationStateChange(navigation)
 
     try {
-      router.dismissAll()
+      routerRef.current.dismissAll()
       await stateChange.promise
     } catch (error) {
       stateChange.unsubscribe()
@@ -48,5 +49,5 @@ export async function dismissExpoRouterToPath({navigationContainerRef, path, rou
     }
   }
 
-  router.dismissTo(path)
+  routerRef.current.dismissTo(path)
 }

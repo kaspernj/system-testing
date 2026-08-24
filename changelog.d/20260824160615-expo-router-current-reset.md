@@ -1,0 +1,1 @@
+- Fix Expo Router run resets to await stack clearing and dismiss to the root path through the current router generation.
