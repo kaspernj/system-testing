@@ -25,19 +25,6 @@ const DEFAULT_DRIVER_START_TIMEOUT_MS = 60000
  */
 export default class SeleniumDriver extends WebDriverDriver {
   /**
-   * Dispatches navigation without waiting for Chrome's renderer lifecycle. SystemTest owns
-   * readiness through explicit route, DOM, and WebSocket assertions after each visit.
-   * @param {string} path
-   * @returns {Promise<void>}
-   */
-  async driverVisit(path) {
-    const isAbsoluteUrl = /^[a-z]+:\/\//i.test(path)
-    const url = isAbsoluteUrl ? path : `${this.getBaseUrl()}${path}`
-
-    await this.getWebDriver().executeScript("window.location.assign(arguments[0])", url)
-  }
-
-  /**
    * @returns {Promise<void>}
    */
   async start() {
@@ -91,12 +78,15 @@ export default class SeleniumDriver extends WebDriverDriver {
     const loggingPrefs = this.options.loggingPrefs ?? {browser: "ALL"}
     capabilities.set("goog:loggingPrefs", loggingPrefs)
 
-    // Return navigation at DOMContentLoaded instead of waiting for the full "load" event.
-    // The system-test app keeps WebSocket/Scoundrel connections open after first paint, which
-    // can hold the load event and hang driverVisit; readiness is asserted explicitly afterwards
-    // via systemTestingComponent and the client WebSocket.
+    // Dispatch navigation through the WebDriver navigate command without waiting for any
+    // page load lifecycle. Executing `window.location.assign(...)` via executeScript requires
+    // a responsive renderer and deadlocks when the initial renderer is wedged ("Timed out
+    // receiving message from renderer"), and even "eager" still blocks the navigate command
+    // on DOMContentLoaded. The system-test app keeps WebSocket/Scoundrel connections open
+    // after first paint, which can hold load events; readiness is asserted explicitly
+    // afterwards via systemTestingComponent and the client WebSocket.
     if (!capabilities.get("pageLoadStrategy")) {
-      capabilities.set("pageLoadStrategy", "eager")
+      capabilities.set("pageLoadStrategy", "none")
     }
 
     if (this.options.capabilities) {

@@ -149,7 +149,7 @@ describe("SeleniumDriver", () => {
     }
   })
 
-  it("requests the eager page load strategy so navigation does not block on the full load event", async () => {
+  it("requests the none page load strategy so navigation dispatch never waits on the page load lifecycle", async () => {
     const {driver} = newDriver({chromedriverPath: process.execPath})
     let pageLoadStrategy
 
@@ -167,21 +167,21 @@ describe("SeleniumDriver", () => {
       driver._removeExitHandlers()
     }
 
-    expect(pageLoadStrategy).toEqual("eager")
+    expect(pageLoadStrategy).toEqual("none")
   })
 
-  it("dispatches visits through location assignment without waiting for Chrome renderer lifecycle", async () => {
+  it("dispatches visits through the WebDriver navigate command without renderer-script execution", async () => {
     const {driver} = newDriver()
     const executeScript = jasmine.createSpy("executeScript").and.resolveTo(undefined)
-    const get = jasmine.createSpy("get")
+    const get = jasmine.createSpy("get").and.resolveTo(undefined)
 
     driver.setBaseUrl("http://127.0.0.1:1984")
     driver.setWebDriver(/** @type {any} */ ({executeScript, get}))
 
     await driver.driverVisit("/blank?systemTest=true")
 
-    expect(executeScript).toHaveBeenCalledOnceWith("window.location.assign(arguments[0])", "http://127.0.0.1:1984/blank?systemTest=true")
-    expect(get).not.toHaveBeenCalled()
+    expect(get).toHaveBeenCalledOnceWith("http://127.0.0.1:1984/blank?systemTest=true")
+    expect(executeScript).not.toHaveBeenCalled()
   })
 
   it("uses an explicit Chromedriver service when a path is configured", async () => {

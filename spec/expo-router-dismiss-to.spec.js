@@ -10,6 +10,7 @@ describe("dismissExpoRouterToPath", () => {
     let emitStateChange
     const unsubscribe = jasmine.createSpy("unsubscribe")
     const router = {
+      canDismiss: () => true,
       dismissAll: jasmine.createSpy("dismissAll").and.callFake(() => {
         calls.push("dismissAll")
       }),
@@ -43,8 +44,9 @@ describe("dismissExpoRouterToPath", () => {
     expect(unsubscribe).toHaveBeenCalledTimes(1)
   })
 
-  it("does not clear the stack when the current Expo route cannot go back", async () => {
+  it("does not clear the stack when the current Expo route cannot dismiss", async () => {
     const router = {
+      canDismiss: () => false,
       dismissAll: jasmine.createSpy("dismissAll"),
       dismissTo: jasmine.createSpy("dismissTo")
     }
@@ -59,10 +61,28 @@ describe("dismissExpoRouterToPath", () => {
     expect(router.dismissTo).toHaveBeenCalledOnceWith("/blank?systemTest=true")
   })
 
+  it("does not wait for a stack reset when nested navigation can go back but the Expo stack cannot dismiss", async () => {
+    const router = {
+      canDismiss: () => false,
+      dismissAll: jasmine.createSpy("dismissAll").and.throwError("dismissAll should not be called"),
+      dismissTo: jasmine.createSpy("dismissTo")
+    }
+
+    await dismissExpoRouterToPath({
+      navigationContainerRef: {current: {canGoBack: () => true}},
+      path: "/blank?systemTest=true",
+      routerRef: {current: router}
+    })
+
+    expect(router.dismissAll).not.toHaveBeenCalled()
+    expect(router.dismissTo).toHaveBeenCalledOnceWith("/blank?systemTest=true")
+  })
+
   it("throws when clearing stale stack screens fails", async () => {
     const error = new Error("dismissAll failed")
     const unsubscribe = jasmine.createSpy("unsubscribe")
     const router = {
+      canDismiss: () => true,
       dismissAll: jasmine.createSpy("dismissAll").and.throwError(error),
       dismissTo: jasmine.createSpy("dismissTo")
     }
@@ -83,6 +103,7 @@ describe("dismissExpoRouterToPath", () => {
   it("throws when dismissing to the requested path fails", async () => {
     const error = new Error("dismissTo failed")
     const router = {
+      canDismiss: () => false,
       dismissAll: jasmine.createSpy("dismissAll"),
       dismissTo: jasmine.createSpy("dismissTo").and.throwError(error)
     }
@@ -100,10 +121,12 @@ describe("dismissExpoRouterToPath", () => {
     /** @type {(() => void) | undefined} */
     let emitStateChange
     const oldRouter = {
+      canDismiss: () => true,
       dismissAll: jasmine.createSpy("oldDismissAll"),
       dismissTo: jasmine.createSpy("oldDismissTo")
     }
     const currentRouter = {
+      canDismiss: () => true,
       dismissAll: jasmine.createSpy("currentDismissAll"),
       dismissTo: jasmine.createSpy("currentDismissTo")
     }

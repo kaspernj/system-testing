@@ -367,11 +367,35 @@ export default class WebDriverDriver {
 
     await this.getWebDriver().manage().setTimeouts({implicit: implicitTimeout})
 
+    /** @type {T | undefined} */
+    let callbackResult
+    let callbackError
+    let callbackFailed = false
+
     try {
-      return await callback()
-    } finally {
-      await this.getWebDriver().manage().setTimeouts({implicit: originalImplicitTimeout})
+      callbackResult = await callback()
+    } catch (error) {
+      callbackFailed = true
+      callbackError = error
     }
+
+    // Chromedriver serializes session commands, so once a renderer command has been
+    // abandoned by a lookup deadline the restore would queue behind it forever. Bound
+    // the bookkeeping and tolerate only that expected restore timeout so the callback's
+    // own outcome — success or failure — stays decisive.
+    try {
+      await timeout({timeout: 1000, errorMessage: "timeout while restoring the implicit wait timeout"}, async () => await this.getWebDriver().manage().setTimeouts({implicit: originalImplicitTimeout}))
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== "timeout while restoring the implicit wait timeout") {
+        if (callbackFailed) throw callbackError
+
+        throw error
+      }
+    }
+
+    if (callbackFailed) throw callbackError
+
+    return /** @type {T} */ (callbackResult)
   }
 
   /**
@@ -479,15 +503,15 @@ export default class WebDriverDriver {
    * @returns {Promise<import("selenium-webdriver").WebElement[]>}
    */
   async all(selector, args = {}) {
-    const {scrollContainerTestIDs, scrollTo = false, visible = true, timeout, useBaseSelector = true, ...restArgs} = args
+    const {scrollContainerTestIDs, scrollTo = false, visible = true, timeout: lookupTimeout, useBaseSelector = true, ...restArgs} = args
     void scrollContainerTestIDs
     const restArgsKeys = Object.keys(restArgs)
     let actualTimeout
 
-    if (timeout === undefined) {
+    if (lookupTimeout === undefined) {
       actualTimeout = this._driverTimeouts
     } else {
-      actualTimeout = timeout
+      actualTimeout = lookupTimeout
     }
 
     if (restArgsKeys.length > 0) throw new Error(`Unknown arguments: ${restArgsKeys.join(", ")}`)
@@ -526,11 +550,23 @@ export default class WebDriverDriver {
           if (timeLeft == 0) {
             elements = await getElements()
           } else {
-            await this.getWebDriver().wait(async () => {
-              elements = await getElements()
+            // WebDriver.wait only evaluates its timeout when the condition promise settles,
+            // so a findElements call to an unresponsive renderer would hang the lookup
+            // forever. Race it against the same deadline so the lookup always settles.
+            try {
+              await timeout({timeout: timeLeft, errorMessage: `Timed out getting elements with selector: ${actualSelector}`}, async () => await this.getWebDriver().wait(async () => {
+                elements = await getElements()
 
-              return elements.length > 0
-            }, timeLeft)
+                return elements.length > 0
+              }, timeLeft))
+            } catch (error) {
+              // The race only fires once the deadline has passed; surface it as the same
+              // Selenium timeout the WebDriver.wait path produces so timeout-based handling
+              // (for example exists()) keeps working.
+              if (getTimeLeft() > 0) throw error
+
+              throw new SeleniumError.TimeoutError(`Wait timed out after ${timeLeft}ms`)
+            }
           }
 
           break
