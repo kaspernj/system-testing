@@ -1,5 +1,6 @@
 // @ts-check
 
+import timeout from "awaitery/build/timeout.js"
 import WebDriverDriver from "../src/drivers/webdriver-driver.js"
 
 /** @returns {{driver: WebDriverDriver, quitCalls: () => number}} */
@@ -85,6 +86,41 @@ describe("WebDriverDriver lifecycle", () => {
 
     expect(result).toBe("visited")
     expect(setTimeoutsSpy).not.toHaveBeenCalled()
+  })
+
+  it("fails the lookup at its deadline when the renderer never answers findElements", async () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver.setWebDriver(/** @type {any} */ ({
+      // An unresponsive renderer never settles the command. The wait stub mirrors
+      // selenium-webdriver's WebDriver.wait, which only evaluates its timeout when the
+      // condition promise settles — so a never-settling condition hangs it forever.
+      findElements: () => new Promise(() => {}),
+      manage: () => ({setTimeouts: async () => {}}),
+      wait: (condition) => new Promise((resolve, reject) => {
+        Promise.resolve()
+          .then(() => condition())
+          .then((value) => (value ? resolve(value) : reject(new Error("not found"))), reject)
+      })
+    }))
+
+    let outcome
+
+    await timeout({timeout: 5000, errorMessage: "all() did not fail at its own deadline"}, async () => {
+      outcome = await driver.all("[data-testid='unresponsive']", {timeout: 100, useBaseSelector: false}).then(
+        () => "resolved",
+        (error) => error
+      )
+    })
+
+    expect(outcome instanceof Error).toBeTrue()
+    expect(String(/** @type {any} */ (outcome)?.message)).toContain("Couldn't get elements")
   })
 
   it("installs SIGINT/SIGTERM/beforeExit listeners when installExitHandlers() is called", () => {
@@ -179,6 +215,89 @@ describe("WebDriverDriver lifecycle", () => {
       ["setTimeouts", 10000]
     ])
     expect(driver._driverTimeouts).toBe(10000)
+  })
+
+  it("does not hang when the implicit-timeout restore is never answered", async () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    let setTimeoutsCalls = 0
+
+    // Chromedriver serializes session commands, so a restore issued behind an abandoned
+    // renderer command is never answered; the bounded bookkeeping must let the callback's
+    // own outcome through instead of hanging or masking it.
+    driver.setWebDriver(/** @type {any} */ ({
+      manage: () => ({
+        setTimeouts: () => {
+          setTimeoutsCalls += 1
+
+          if (setTimeoutsCalls === 1) return Promise.resolve()
+
+          return new Promise(() => {})
+        }
+      })
+    }))
+
+    const result = await driver.withTemporaryImplicitTimeout(0, async () => "done")
+
+    expect(result).toBe("done")
+    expect(setTimeoutsCalls).toBe(2)
+  })
+
+  it("keeps the callback error decisive when the implicit-timeout restore is never answered", async () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    let setTimeoutsCalls = 0
+
+    driver.setWebDriver(/** @type {any} */ ({
+      manage: () => ({
+        setTimeouts: () => {
+          setTimeoutsCalls += 1
+
+          if (setTimeoutsCalls === 1) return Promise.resolve()
+
+          return new Promise(() => {})
+        }
+      })
+    }))
+
+    await expectAsync(driver.withTemporaryImplicitTimeout(0, async () => {
+      throw new Error("lookup failed")
+    })).toBeRejectedWithError("lookup failed")
+  })
+
+  it("propagates unrelated implicit-timeout restore failures", async () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    let setTimeoutsCalls = 0
+
+    driver.setWebDriver(/** @type {any} */ ({
+      manage: () => ({
+        setTimeouts: () => {
+          setTimeoutsCalls += 1
+
+          if (setTimeoutsCalls === 1) return Promise.resolve()
+
+          return Promise.reject(new Error("session deleted"))
+        }
+      })
+    }))
+
+    await expectAsync(driver.withTemporaryImplicitTimeout(0, async () => "done")).toBeRejectedWithError("session deleted")
   })
 
   it("bounds the page load timeout when applying driver timeouts", async () => {
