@@ -1,6 +1,6 @@
 /** @typedef {{addListener: (eventName: "state", callback: () => void) => () => void, canGoBack: () => boolean}} ExpoNavigationState */
 /** @typedef {{current: ExpoNavigationState | null | undefined}} ExpoNavigationContainerRef */
-/** @typedef {{dismissAll: () => void, dismissTo: (path: string) => void}} ExpoRouter */
+/** @typedef {{dismissAll: () => void, dismissTo: (path: string) => void, navigate: (path: string) => void}} ExpoRouter */
 /** @typedef {{current: ExpoRouter}} ExpoRouterRef */
 
 /**
