@@ -22,6 +22,12 @@ describe("package entrypoints", () => {
     expect(expoSource).toContain("use-system-test-expo")
   })
 
+  it("returns the Expo Router reset promise to the browser command bridge", async () => {
+    const expoHookSource = await fs.readFile(new URL("../src/use-system-test-expo.js", import.meta.url), "utf8")
+
+    expect(expoHookSource).toContain("return dismissExpoRouterToPath({navigationContainerRef, path, routerRef})")
+  })
+
   it("exposes the root entrypoint with types through the exports map", async () => {
     const packageJson = JSON.parse(await fs.readFile(new URL("../package.json", import.meta.url), "utf8"))
 
