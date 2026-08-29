@@ -181,10 +181,11 @@ describe("Browser", () => {
         return undefined
       }
 
-      // The first whole-string sendKeys is silently dropped, forcing a fill retry.
+      // The first whole-string sendKeys lands only a prefix, forcing a replacement retry.
       if (methodName === "sendKeys") {
         sendKeysCalls += 1
-        if (sendKeysCalls >= 2) value += String(args[0])
+        if (sendKeysCalls === 1) value += "fi"
+        else value += String(args[0])
       }
 
       return undefined
