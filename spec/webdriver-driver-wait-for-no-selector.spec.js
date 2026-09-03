@@ -32,6 +32,39 @@ describe("WebDriverDriver waitForNoSelector", () => {
     ])
   })
 
+  it("performs one asynchronous lookup when the timeout is zero", async () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const findElementsSpy = jasmine.createSpy("findElements").and.callFake(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      return []
+    })
+    const setTimeoutsSpy = jasmine.createSpy("setTimeouts").and.callFake(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    })
+    const waitSpy = jasmine.createSpy("wait")
+
+    driver.setWebDriver(/** @type {any} */ ({
+      findElements: findElementsSpy,
+      manage: () => ({setTimeouts: setTimeoutsSpy}),
+      wait: waitSpy
+    }))
+
+    await driver.waitForNoSelector("#missing", {timeout: 0, useBaseSelector: false})
+
+    expect(findElementsSpy).toHaveBeenCalledTimes(1)
+    expect(setTimeoutsSpy.calls.allArgs()).toEqual([
+      [{implicit: 0}],
+      [{implicit: 5000}]
+    ])
+    expect(waitSpy).not.toHaveBeenCalled()
+  })
+
   it("enforces the timeout when WebDriver does not settle", async () => {
     const driver = new WebDriverDriver({
       browser: /** @type {any} */ ({
