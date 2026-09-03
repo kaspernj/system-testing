@@ -98,6 +98,7 @@ function shouldIgnoreBrowserLogEntry(entry, message) {
  */
 /**
  * @typedef {object} WaitForNoSelectorArgs
+ * @property {number} [timeout] Override timeout for waiting for the selector to disappear.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 
@@ -1057,6 +1058,14 @@ export default class WebDriverDriver {
    * @returns {Promise<any>}
    */
   async interact(elementOrIdentifier, methodName, ...args) {
+    const selectorIdentifier = typeof elementOrIdentifier === "string" || (
+      typeof elementOrIdentifier === "object" && elementOrIdentifier !== null && "selector" in elementOrIdentifier
+    )
+
+    if (methodName === "click" && args.length > 0 && (selectorIdentifier || isWebDriverElement(elementOrIdentifier))) {
+      throw new Error("interact(..., \"click\", ...) does not accept click or finder arguments. Use click(elementOrSelector, args) or put options in the interact selector object.")
+    }
+
     let tries = 0
 
     while (true) {
@@ -1200,7 +1209,7 @@ export default class WebDriverDriver {
    * @returns {Promise<void>}
    */
   async waitForNoSelector(selector, args = {}) {
-    const {useBaseSelector, ...restArgs} = args
+    const {timeout: waitTimeout = this.getTimeouts(), useBaseSelector, ...restArgs} = args
 
     if (Object.keys(restArgs).length > 0) {
       throw new Error(`Unexpected args: ${Object.keys(restArgs).join(", ")}`)
@@ -1208,41 +1217,50 @@ export default class WebDriverDriver {
 
     const actualSelector = useBaseSelector ? this.getSelector(selector) : selector
 
-    await this.driverSetTimeouts(0)
+    const selectorIsGone = async () => {
+      const elements = await this.getWebDriver().findElements(By.css(actualSelector))
 
-    try {
-      await this._withRethrownErrors(async () => {
-        await this.getWebDriver().wait(
-          async () => {
-            const elements = await this.getWebDriver().findElements(By.css(actualSelector))
+      // Not found at all
+      if (elements.length === 0) {
+        return true
+      }
 
-            // Not found at all
-            if (elements.length === 0) {
-              return true
-            }
+      // Found but not visible
+      try {
+        const isDisplayed = await elements[0].isDisplayed()
 
-            // Found but not visible
-            try {
-              const isDisplayed = await elements[0].isDisplayed()
+        return !isDisplayed
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          (error.constructor.name === "StaleElementReferenceError" || error.message.includes("stale element reference"))
+        ) {
+          return false
+        }
 
-              return !isDisplayed
-            } catch (error) {
-              if (
-                error instanceof Error &&
-                (error.constructor.name === "StaleElementReferenceError" || error.message.includes("stale element reference"))
-              ) {
-                return false
-              }
-
-              throw error
-            }
-          },
-          this.getTimeouts()
-        )
-      })
-    } finally {
-      await this.restoreTimeouts()
+        throw error
+      }
     }
+
+    await this.withTemporaryImplicitTimeout(0, async () => {
+      await this._withRethrownErrors(async () => {
+        if (waitTimeout === 0) {
+          if (!await selectorIsGone()) throw new SeleniumError.TimeoutError(`Wait timed out after ${waitTimeout}ms`)
+        } else {
+          const errorMessage = `timeout while waiting for selector to disappear: ${actualSelector}`
+
+          try {
+            await timeout({timeout: waitTimeout, errorMessage}, async () => await this.getWebDriver().wait(selectorIsGone, waitTimeout))
+          } catch (error) {
+            if (error instanceof Error && !(error instanceof WebDriverError) && error.message === errorMessage) {
+              throw new SeleniumError.TimeoutError(errorMessage)
+            }
+
+            throw error
+          }
+        }
+      })
+    })
   }
 
   /**

@@ -507,6 +507,18 @@ await systemTest.click("[data-testid='signInButton']", {useBaseSelector: false, 
 await systemTest.interact({selector: "[data-testid='scanFooterMenuButton']", useBaseSelector: false}, "click")
 ```
 
+For clicks, prefer `click(selector, options)`. `interact(selector, "click", options)` is rejected because the third argument is reserved for element-method arguments and cannot carry finder or click options.
+
+### Notification assertions
+
+`expectNotificationMessage(message, {timeout, dismiss})` polls visible `[data-testid='notification-message']` elements without applying the global finder wait to every poll. `timeout` is one total budget for finding the message and, when `dismiss` is enabled, waiting for that specific notification to disappear. It defaults to 5000 ms. `dismiss` defaults to `true`.
+
+```js
+await systemTest.expectNotificationMessage("You were signed in.", {timeout: 1000})
+```
+
+`notificationMessages()` returns the messages currently rendered without waiting for one to appear. `dismissNotificationMessages()` likewise takes an immediate snapshot, dismisses those notifications, and waits for them to disappear.
+
 ### Clearing and filling inputs
 
 Three orthogonal methods handle input values. Each defaults to a **fast** strategy; the slow keyboard and JS strategies are explicit opt-in overrides.
