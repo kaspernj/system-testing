@@ -319,6 +319,26 @@ describe("WebDriverDriver lifecycle", () => {
     await expectAsync(driver.withTemporaryImplicitTimeout(0, async () => "done")).toBeRejectedWithError("session deleted")
   })
 
+  it("rejects further commands after the WebDriver session is marked unusable", () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver.setWebDriver(/** @type {any} */ ({}))
+    driver.markSessionUnusable(new Error("timed-out click may still execute"))
+
+    expect(() => driver.getWebDriver()).toThrowError(/WebDriver session is unusable: timed-out click may still execute/)
+
+    const replacementWebDriver = /** @type {any} */ ({})
+
+    driver.setWebDriver(replacementWebDriver)
+    expect(driver.getWebDriver()).toBe(replacementWebDriver)
+  })
+
   it("bounds the page load timeout when applying driver timeouts", async () => {
     const calls = []
     const driver = new WebDriverDriver({

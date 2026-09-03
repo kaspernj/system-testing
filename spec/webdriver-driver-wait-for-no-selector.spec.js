@@ -112,6 +112,7 @@ describe("WebDriverDriver waitForNoSelector", () => {
       [{implicit: 0}],
       [{implicit: 5000}]
     ])
+    expect(() => driver.getWebDriver()).not.toThrow()
   })
 
   it("enforces the timeout when restoring the implicit wait does not settle", async () => {
@@ -166,6 +167,46 @@ describe("WebDriverDriver waitForNoSelector", () => {
     expect(waitSpy).not.toHaveBeenCalled()
   })
 
+  it("restores the implicit wait after a late disable when no newer timeout update exists", async () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    /** @type {(() => void) | undefined} */
+    let finishDisablingImplicitWait
+    const setTimeoutsSpy = jasmine.createSpy("setTimeouts").and.callFake(async ({implicit}) => {
+      if (implicit === 0) {
+        await new Promise((resolve) => {
+          finishDisablingImplicitWait = resolve
+        })
+      }
+    })
+    const waitSpy = jasmine.createSpy("wait")
+
+    driver.setWebDriver(/** @type {any} */ ({
+      manage: () => ({setTimeouts: setTimeoutsSpy}),
+      wait: waitSpy
+    }))
+
+    await expectAsync(
+      driver.waitForNoSelector("#still-present", {timeout: 30, useBaseSelector: false})
+    ).toBeRejectedWithError(/timeout while waiting for selector to disappear: #still-present/)
+
+    expect(() => driver.getWebDriver()).toThrowError(/WebDriver session is unusable/)
+    if (!finishDisablingImplicitWait) throw new Error("Expected the implicit wait update to have started")
+    finishDisablingImplicitWait()
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    expect(setTimeoutsSpy.calls.allArgs()).toEqual([
+      [{implicit: 0}],
+      [{implicit: 5000}]
+    ])
+    expect(waitSpy).not.toHaveBeenCalled()
+  })
+
   it("does not restore stale timeout state after a timed-out wait returns", async () => {
     const driver = new WebDriverDriver({
       browser: /** @type {any} */ ({
@@ -184,23 +225,27 @@ describe("WebDriverDriver waitForNoSelector", () => {
       }
     })
 
-    driver.setWebDriver(/** @type {any} */ ({
+    const originalWebDriver = /** @type {any} */ ({
       manage: () => ({setTimeouts: setTimeoutsSpy}),
       wait: async () => await new Promise(() => {})
-    }))
+    })
+
+    driver.setWebDriver(originalWebDriver)
 
     await expectAsync(
       driver.waitForNoSelector("#still-present", {timeout: 30, useBaseSelector: false})
     ).toBeRejectedWithError(/timeout while waiting for selector to disappear: #still-present/)
 
-    await driver.driverSetTimeouts(123)
+    const replacementWebDriver = /** @type {any} */ ({})
+
+    driver.setWebDriver(replacementWebDriver)
     if (!finishDisablingImplicitWait) throw new Error("Expected the implicit wait update to have started")
     finishDisablingImplicitWait()
     await new Promise((resolve) => setTimeout(resolve, 30))
 
     expect(setTimeoutsSpy.calls.allArgs()).toEqual([
-      [{implicit: 0}],
-      [{implicit: 123, pageLoad: 60000}]
+      [{implicit: 0}]
     ])
+    expect(driver.getWebDriver()).toBe(replacementWebDriver)
   })
 })

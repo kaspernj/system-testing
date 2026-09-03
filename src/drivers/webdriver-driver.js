@@ -106,6 +106,7 @@ function shouldIgnoreBrowserLogEntry(entry, message) {
  */
 
 class ElementNotFoundError extends Error { }
+class ElementDisappearanceDeadlineError extends SeleniumError.TimeoutError { }
 class ElementLookupDeadlineError extends SeleniumError.TimeoutError { }
 
 // Named like Selenium's own error so the shared retry/rethrow handling in `click`/`interact`
@@ -186,6 +187,9 @@ export default class WebDriverDriver {
     this.baseUrl = undefined
     this.webDriver = undefined
     this._driverTimeouts = 5000
+    this._implicitTimeoutChangeId = 0
+    /** @type {Error | undefined} */
+    this._sessionUnusableError = undefined
     this._timeouts = 5000
     /**
      * Process-exit handlers installed while a WebDriver session is alive.
@@ -221,6 +225,9 @@ export default class WebDriverDriver {
    */
   getWebDriver() {
     if (!this.webDriver) throw new Error("Driver hasn't been initialized yet")
+    if (this._sessionUnusableError) {
+      throw errorWithCause(`WebDriver session is unusable: ${this._sessionUnusableError.message}`, this._sessionUnusableError)
+    }
     this.browser.throwIfHttpServerError()
 
     return this.webDriver
@@ -231,8 +238,19 @@ export default class WebDriverDriver {
    * @returns {void}
    */
   setWebDriver(webDriver) {
+    this._implicitTimeoutChangeId += 1
+    this._sessionUnusableError = undefined
     this.webDriver = webDriver
     this.browser.driver = webDriver
+  }
+
+  /**
+   * Prevents further commands from using a session with a non-cancellable mutation still pending.
+   * @param {Error} error
+   * @returns {void}
+   */
+  markSessionUnusable(error) {
+    if (!this._sessionUnusableError) this._sessionUnusableError = error
   }
 
   /**
@@ -313,6 +331,7 @@ export default class WebDriverDriver {
    * @returns {Promise<void>}
    */
   async driverSetTimeouts(newTimeout) {
+    this._implicitTimeoutChangeId += 1
     this._driverTimeouts = newTimeout
 
     /** @type {{implicit: number, pageLoad?: number}} */
@@ -363,15 +382,18 @@ export default class WebDriverDriver {
    * @template T
    * @param {number} implicitTimeout
    * @param {() => Promise<T>} callback
-   * @param {AbortSignal} [restoreSignal]
    * @returns {Promise<T>}
    */
-  async withTemporaryImplicitTimeout(implicitTimeout, callback, restoreSignal) {
+  async withTemporaryImplicitTimeout(implicitTimeout, callback) {
     const originalImplicitTimeout = this._driverTimeouts
 
     if (originalImplicitTimeout === implicitTimeout) return await callback()
 
-    await this.getWebDriver().manage().setTimeouts({implicit: implicitTimeout})
+    const webDriver = this.getWebDriver()
+    this._implicitTimeoutChangeId += 1
+    const timeoutChangeId = this._implicitTimeoutChangeId
+
+    await webDriver.manage().setTimeouts({implicit: implicitTimeout})
 
     /** @type {T | undefined} */
     let callbackResult
@@ -385,13 +407,13 @@ export default class WebDriverDriver {
       callbackError = error
     }
 
-    if (!restoreSignal?.aborted) {
+    if (this._implicitTimeoutChangeId === timeoutChangeId) {
       // Chromedriver serializes session commands, so once a renderer command has been
       // abandoned by a lookup deadline the restore would queue behind it forever. Bound
       // the bookkeeping and tolerate only that expected restore timeout so the callback's
       // own outcome — success or failure — stays decisive.
       try {
-        await timeout({timeout: 1000, errorMessage: "timeout while restoring the implicit wait timeout"}, async () => await this.getWebDriver().manage().setTimeouts({implicit: originalImplicitTimeout}))
+        await timeout({timeout: 1000, errorMessage: "timeout while restoring the implicit wait timeout"}, async () => await webDriver.manage().setTimeouts({implicit: originalImplicitTimeout}))
       } catch (error) {
         if (!(error instanceof Error) || error.message !== "timeout while restoring the implicit wait timeout") {
           if (callbackFailed) throw callbackError
@@ -1266,12 +1288,20 @@ export default class WebDriverDriver {
           const pollingTimeout = Math.max(getTimeLeft() - IMPLICIT_TIMEOUT_RESTORE_START_BUFFER_MS, 0)
 
           if (pollingTimeout === 0) {
-            if (!await selectorIsGone()) throw new SeleniumError.TimeoutError(errorMessage)
+            if (!await selectorIsGone()) throw new ElementDisappearanceDeadlineError(errorMessage)
           } else {
-            await timeout({timeout: pollingTimeout, errorMessage}, async () => await this.getWebDriver().wait(selectorIsGone, pollingTimeout))
+            try {
+              await timeout({timeout: pollingTimeout, errorMessage}, async () => await this.getWebDriver().wait(selectorIsGone, pollingTimeout))
+            } catch (error) {
+              if (error instanceof Error && !(error instanceof WebDriverError) && error.message === errorMessage) {
+                throw new ElementDisappearanceDeadlineError(errorMessage)
+              }
+
+              throw error
+            }
           }
         }
-      }, implicitTimeoutRestoreAbortController.signal)
+      })
     }
 
     if (waitTimeout === 0) {
@@ -1285,7 +1315,10 @@ export default class WebDriverDriver {
           await timeout({timeout: getTimeLeft(), errorMessage}, waitForSelectorToDisappear)
         } catch (error) {
           if (error instanceof Error && !(error instanceof WebDriverError) && error.message === errorMessage) {
-            throw new SeleniumError.TimeoutError(errorMessage)
+            const deadlineError = new SeleniumError.TimeoutError(errorMessage)
+
+            this.markSessionUnusable(deadlineError)
+            throw deadlineError
           }
 
           throw error

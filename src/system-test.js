@@ -798,9 +798,17 @@ export default class SystemTest extends Browser {
 
       if (dismissTimeout === 0) throw new Error(dismissErrorMessage)
 
-      await timeout({timeout: dismissTimeout, errorMessage: dismissErrorMessage}, async () => {
-        await this.interact(/** @type {import("selenium-webdriver").WebElement} */ (foundNotificationMessageElement), "click")
-      })
+      try {
+        await timeout({timeout: dismissTimeout, errorMessage: dismissErrorMessage}, async () => {
+          await this.interact(/** @type {import("selenium-webdriver").WebElement} */ (foundNotificationMessageElement), "click")
+        })
+      } catch (error) {
+        if (error instanceof Error && error.message === dismissErrorMessage) {
+          this.getDriverAdapter().markSessionUnusable(error)
+        }
+
+        throw error
+      }
 
       if (!foundNotificationMessageCount) {
         throw new Error("Expected notification message to have a data-count")

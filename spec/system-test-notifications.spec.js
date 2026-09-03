@@ -107,6 +107,7 @@ describe("SystemTest notifications", () => {
 
   it("includes the dismissal click in the total timeout", async () => {
     const systemTest = createSystemTest()
+    const markSessionUnusableSpy = jasmine.createSpy("markSessionUnusable")
     const notification = {
       getAttribute: async () => "4",
       getText: async () => "Expected notification"
@@ -114,6 +115,7 @@ describe("SystemTest notifications", () => {
 
     systemTest.all = /** @type {any} */ (async () => [notification])
     systemTest.getDriver = /** @type {any} */ (() => ({executeScript: async () => "Expected notification"}))
+    systemTest.getDriverAdapter = /** @type {any} */ (() => ({markSessionUnusable: markSessionUnusableSpy}))
     systemTest.interact = /** @type {any} */ (async () => await new Promise(() => {}))
 
     const result = await Promise.race([
@@ -123,6 +125,7 @@ describe("SystemTest notifications", () => {
 
     expect(result).toEqual(jasmine.any(Error))
     expect(/** @type {Error} */ (result).message).toContain("timeout while dismissing notification: Expected notification")
+    expect(markSessionUnusableSpy).toHaveBeenCalledOnceWith(result)
   })
 
   it("enforces the total timeout when notification detection does not settle", async () => {
