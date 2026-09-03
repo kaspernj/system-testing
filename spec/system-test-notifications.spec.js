@@ -152,24 +152,27 @@ describe("SystemTest notifications", () => {
     expect(markSessionUnusableSpy).toHaveBeenCalledOnceWith(result)
   })
 
-  it("enforces the total timeout when disappearance polling does not settle", async () => {
+  it("waits for disappearance cleanup after the total timeout expires", async () => {
     const systemTest = createSystemTest()
     const notification = {
       getAttribute: async () => "5",
       getText: async () => "Expected notification"
     }
+    let cleanupFinished = false
 
     systemTest.all = /** @type {any} */ (async () => [notification])
     systemTest.getDriver = /** @type {any} */ (() => ({executeScript: async () => "Expected notification"}))
     systemTest.interact = /** @type {any} */ (async () => {})
-    systemTest.waitForNoSelector = /** @type {any} */ (async () => await new Promise(() => {}))
+    systemTest.waitForNoSelector = /** @type {any} */ (async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      cleanupFinished = true
+      throw new Error("selector timeout after cleanup")
+    })
 
-    const result = await Promise.race([
-      systemTest.expectNotificationMessage("Expected notification", {timeout: 30}).catch((error) => error),
-      new Promise((resolve) => setTimeout(() => resolve("still pending"), 200))
-    ])
+    const result = await systemTest.expectNotificationMessage("Expected notification", {timeout: 30}).catch((error) => error)
 
     expect(result).toEqual(jasmine.any(Error))
-    expect(/** @type {Error} */ (result).message).toContain("timeout while waiting for notification to disappear: Expected notification")
+    expect(/** @type {Error} */ (result).message).toBe("selector timeout after cleanup")
+    expect(cleanupFinished).toBeTrue()
   })
 })

@@ -2,6 +2,7 @@
 
 ## Unreleased
 - Bound notification assertions with one configurable timeout across detection and dismissal.
+- Wait for bounded WebDriver cleanup before returning from notification disappearance assertions.
 - Make notification snapshots and bulk dismissal use immediate lookups and the current `data-testid` selector.
 - Allow per-call timeouts for `waitForNoSelector` and enforce them when WebDriver stalls.
 - Reject click options passed as `interact` method arguments instead of silently ignoring them.

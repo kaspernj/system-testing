@@ -822,14 +822,11 @@ export default class SystemTest extends Browser {
       }
 
       const notificationMessageCount = foundNotificationMessageCount
-      const disappearanceErrorMessage = `timeout while waiting for notification to disappear: ${expectedNotificationMessage}`
       const disappearanceTimeout = getTimeLeft()
 
-      if (disappearanceTimeout === 0) throw new Error(disappearanceErrorMessage)
+      if (disappearanceTimeout === 0) throw new Error(`timeout while waiting for notification to disappear: ${expectedNotificationMessage}`)
 
-      await timeout({timeout: disappearanceTimeout, errorMessage: disappearanceErrorMessage}, async () => {
-        await this.waitForNoSelector(`${NOTIFICATION_MESSAGE_SELECTOR}[data-count='${notificationMessageCount}']`, {timeout: disappearanceTimeout, useBaseSelector: false})
-      })
+      await this.waitForNoSelector(`${NOTIFICATION_MESSAGE_SELECTOR}[data-count='${notificationMessageCount}']`, {timeout: disappearanceTimeout, useBaseSelector: false})
     }
   }
 
