@@ -141,9 +141,19 @@ describe("System test", () => {
         return true
       `)
 
+      expect(await runningSystemTest.notificationMessages()).toEqual(["First notification", "Second notification"])
       await runningSystemTest.expectNotificationMessage("First notification")
       await runningSystemTest.find("[data-testid='notification-message'][data-count='2']", {useBaseSelector: false})
       await runningSystemTest.expectNoElement("[data-testid='notification-message'][data-count='1']", {useBaseSelector: false})
+      await runningSystemTest.dismissNotificationMessages()
+      await runningSystemTest.expectNoElement("[data-testid='notification-message'][data-count='2']", {useBaseSelector: false})
+
+      const startTime = Date.now()
+
+      await expectAsync(
+        runningSystemTest.expectNotificationMessage("Missing notification", {timeout: 100})
+      ).toBeRejectedWithError(/Notification message Missing notification wasn't included/)
+      expect(Date.now() - startTime).toBeLessThan(750)
 
       await scoundrelClient.eval(`
         const container = document.getElementById("system-test-notifications")

@@ -4,6 +4,24 @@ import {error as SeleniumError} from "selenium-webdriver"
 import WebDriverDriver from "../src/drivers/webdriver-driver.js"
 
 describe("WebDriverDriver interact", () => {
+  it("rejects click options passed as method arguments instead of silently ignoring them", async () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const findElementSpy = jasmine.createSpy("_findElement")
+
+    driver._findElement = /** @type {any} */ (findElementSpy)
+
+    await expectAsync(
+      driver.interact("[data-testid='saveButton']", "click", {timeout: 0})
+    ).toBeRejectedWithError(/Use click\(elementOrSelector, args\) or put options in the interact selector object/)
+    expect(findElementSpy).not.toHaveBeenCalled()
+  })
+
   it("sets the element value through executeScript for the replaceValueWithJs escape hatch", async () => {
     const executeScriptCalls = []
     const element = {
@@ -81,6 +99,29 @@ describe("WebDriverDriver interact", () => {
     await driver.interact({selector: "textarea[data-testid='project-environment-agent-input']"}, "sendKeys", "pwd")
 
     expect(executeScriptSpy).not.toHaveBeenCalled()
+  })
+
+  it("rejects retained element commands after the WebDriver session becomes unusable", async () => {
+    const element = {
+      click: jasmine.createSpy("click").and.resolveTo(undefined),
+      getId: async () => "webdriver-element-id",
+      sendKeys: jasmine.createSpy("sendKeys").and.resolveTo(undefined)
+    }
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver.setWebDriver(/** @type {any} */ ({}))
+    driver.markSessionUnusable(new Error("timed-out command may still execute"))
+
+    await expectAsync(driver.click(/** @type {any} */ (element))).toBeRejectedWithError(/WebDriver session is unusable: timed-out command may still execute/)
+    await expectAsync(driver.interact(/** @type {any} */ (element), "sendKeys", "value")).toBeRejectedWithError(/WebDriver session is unusable: timed-out command may still execute/)
+    expect(element.click).not.toHaveBeenCalled()
+    expect(element.sendKeys).not.toHaveBeenCalled()
   })
 
   it("preserves regular find args when looking up a replaceValueWithJs target", async () => {

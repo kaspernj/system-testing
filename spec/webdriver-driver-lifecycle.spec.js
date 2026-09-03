@@ -123,6 +123,25 @@ describe("WebDriverDriver lifecycle", () => {
     expect(String(/** @type {any} */ (outcome)?.message)).toContain("Couldn't get elements")
   })
 
+  it("classifies the hard lookup deadline as a timeout when the wall clock has not advanced", async () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    spyOn(Date, "now").and.returnValue(1000)
+    driver.setWebDriver(/** @type {any} */ ({
+      findElements: async () => await new Promise(() => {}),
+      manage: () => ({setTimeouts: async () => {}}),
+      wait: async (condition) => await condition()
+    }))
+
+    expect(await driver.exists("#does-not-exist", {timeout: 30, useBaseSelector: false})).toBeFalse()
+  })
+
   it("installs SIGINT/SIGTERM/beforeExit listeners when installExitHandlers() is called", () => {
     const before = {
       sigint: process.listenerCount("SIGINT"),
@@ -246,6 +265,7 @@ describe("WebDriverDriver lifecycle", () => {
 
     expect(result).toBe("done")
     expect(setTimeoutsCalls).toBe(2)
+    expect(() => driver.getWebDriver()).toThrowError(/WebDriver session is unusable: timeout while restoring the implicit wait timeout/)
   })
 
   it("keeps the callback error decisive when the implicit-timeout restore is never answered", async () => {
@@ -275,6 +295,47 @@ describe("WebDriverDriver lifecycle", () => {
     })).toBeRejectedWithError("lookup failed")
   })
 
+  it("does not quarantine a replacement session when an old implicit-timeout restore stalls", async () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    let setTimeoutsCalls = 0
+    /** @type {(() => void) | undefined} */
+    let signalRestoreStarted
+    const restoreStartedPromise = new Promise((resolve) => {
+      signalRestoreStarted = resolve
+    })
+
+    driver.setWebDriver(/** @type {any} */ ({
+      manage: () => ({
+        setTimeouts: () => {
+          setTimeoutsCalls += 1
+
+          if (setTimeoutsCalls === 1) return Promise.resolve()
+          if (!signalRestoreStarted) throw new Error("Expected restore-start signal")
+
+          signalRestoreStarted()
+          return new Promise(() => {})
+        }
+      })
+    }))
+
+    const resultPromise = driver.withTemporaryImplicitTimeout(0, async () => "done")
+
+    await restoreStartedPromise
+
+    const replacementWebDriver = /** @type {any} */ ({})
+
+    driver.setWebDriver(replacementWebDriver)
+
+    expect(await resultPromise).toBe("done")
+    expect(driver.getWebDriver()).toBe(replacementWebDriver)
+  })
+
   it("propagates unrelated implicit-timeout restore failures", async () => {
     const driver = new WebDriverDriver({
       browser: /** @type {any} */ ({
@@ -298,6 +359,26 @@ describe("WebDriverDriver lifecycle", () => {
     }))
 
     await expectAsync(driver.withTemporaryImplicitTimeout(0, async () => "done")).toBeRejectedWithError("session deleted")
+  })
+
+  it("rejects further commands after the WebDriver session is marked unusable", () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver.setWebDriver(/** @type {any} */ ({}))
+    driver.markSessionUnusable(new Error("timed-out click may still execute"))
+
+    expect(() => driver.getWebDriver()).toThrowError(/WebDriver session is unusable: timed-out click may still execute/)
+
+    const replacementWebDriver = /** @type {any} */ ({})
+
+    driver.setWebDriver(replacementWebDriver)
+    expect(driver.getWebDriver()).toBe(replacementWebDriver)
   })
 
   it("bounds the page load timeout when applying driver timeouts", async () => {

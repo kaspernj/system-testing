@@ -21,6 +21,8 @@ const INITIAL_ROOT_VISIT_RETRY_DELAY_MS = 100
 // initialRootVisitTimeout budget and leave no room for a retry.
 const INITIAL_ROOT_VISIT_ATTEMPT_PAGE_LOAD_TIMEOUT_MS = 20000
 const NATIVE_CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 120000
+const NOTIFICATION_MESSAGE_SELECTOR = "[data-testid='notification-message']"
+const NOTIFICATION_MESSAGE_TIMEOUT_MS = 5000
 
 /**
  * Whether a system test runs against a native app rather than a web/dist browser.
@@ -86,11 +88,13 @@ export function defaultClientWebSocketConnectTimeout({driver} = {}) {
  */
 /**
  * @typedef {object} WaitForNoSelectorArgs
+ * @property {number} [timeout] Override timeout for waiting for the selector to disappear.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 /**
  * @typedef {object} NotificationMessageArgs
  * @property {boolean} [dismiss] Whether to dismiss the notification after it appears.
+ * @property {number} [timeout] Total timeout for finding and dismissing the notification.
  */
 
 /**
@@ -707,7 +711,7 @@ export default class SystemTest extends Browser {
    * @returns {Promise<string[]>}
    */
   async notificationMessages() {
-    const notificationMessageElements = await this.all("[data-class='notification-message']", {useBaseSelector: false})
+    const notificationMessageElements = await this.all(NOTIFICATION_MESSAGE_SELECTOR, {timeout: 0, useBaseSelector: false})
     const notificationMessageTexts = []
 
     for (const notificationMessageElement of notificationMessageElements) {
@@ -726,19 +730,24 @@ export default class SystemTest extends Browser {
    * @returns {Promise<void>}
    */
   async expectNotificationMessage(expectedNotificationMessage, args = {}) {
-    const {dismiss = true, ...restArgs} = args
+    const {dismiss = true, timeout: waitTimeout = NOTIFICATION_MESSAGE_TIMEOUT_MS, ...restArgs} = args
 
     if (Object.keys(restArgs).length > 0) {
       throw new Error(`Unexpected args: ${Object.keys(restArgs).join(", ")}`)
     }
 
+    if (waitTimeout <= 0) throw new Error("Notification message timeout must be greater than 0")
+
     /** @type {string[]} */
     const allDetectedNotificationMessages = []
+    const startTime = Date.now()
+    const getTimeLeft = () => Math.max(waitTimeout - (Date.now() - startTime), 0)
+    /** @type {import("selenium-webdriver").WebElement | undefined} */
     let foundNotificationMessageElement
+    /** @type {string | null | undefined} */
     let foundNotificationMessageCount
-
-    await waitFor(async () => {
-      const notificationMessageElements = await this.all("[data-testid='notification-message']", {useBaseSelector: false})
+    const findExpectedNotification = async () => {
+      const notificationMessageElements = await this.all(NOTIFICATION_MESSAGE_SELECTOR, {timeout: 0, useBaseSelector: false})
 
       for (const notificationMessageElement of notificationMessageElements) {
         const notificationMessage = (await this.getDriver().executeScript("return arguments[0].textContent;", notificationMessageElement))?.trim() || await notificationMessageElement.getText()
@@ -755,27 +764,80 @@ export default class SystemTest extends Browser {
       }
 
       throw new Error(`Notification message ${expectedNotificationMessage} wasn't included in: ${allDetectedNotificationMessages.join(", ")}`)
-    })
+    }
+
+    const detectionErrorMessage = `timeout while finding notification: ${expectedNotificationMessage}`
+    const detectionTimeout = getTimeLeft()
+    /** @type {unknown} */
+    let lastDetectionError
+    let detectionPollPending = false
+
+    if (detectionTimeout === 0) throw new Error(detectionErrorMessage)
+
+    try {
+      await timeout({timeout: detectionTimeout, errorMessage: detectionErrorMessage}, async () => {
+        await waitFor({timeout: detectionTimeout}, async () => {
+          detectionPollPending = true
+          lastDetectionError = undefined
+
+          try {
+            await findExpectedNotification()
+          } catch (error) {
+            lastDetectionError = error
+            throw error
+          } finally {
+            detectionPollPending = false
+          }
+        })
+      })
+    } catch (error) {
+      if (error instanceof Error && error.message === detectionErrorMessage) {
+        if (detectionPollPending) this.getDriverAdapter().markSessionUnusable(error)
+        if (lastDetectionError) throw lastDetectionError
+      }
+
+      throw error
+    }
 
     if (foundNotificationMessageElement && dismiss) {
-      await this.interact(foundNotificationMessageElement, "click") // Dismiss the notification message
+      const dismissErrorMessage = `timeout while dismissing notification: ${expectedNotificationMessage}`
+      const dismissTimeout = getTimeLeft()
+
+      if (dismissTimeout === 0) throw new Error(dismissErrorMessage)
+
+      try {
+        await timeout({timeout: dismissTimeout, errorMessage: dismissErrorMessage}, async () => {
+          await this.interact(/** @type {import("selenium-webdriver").WebElement} */ (foundNotificationMessageElement), "click")
+        })
+      } catch (error) {
+        if (error instanceof Error && error.message === dismissErrorMessage) {
+          this.getDriverAdapter().markSessionUnusable(error)
+        }
+
+        throw error
+      }
+
       if (!foundNotificationMessageCount) {
         throw new Error("Expected notification message to have a data-count")
       }
 
-      await this.waitForNoSelector(`[data-testid='notification-message'][data-count='${foundNotificationMessageCount}']`, {useBaseSelector: false})
+      const disappearanceTimeout = getTimeLeft()
+
+      if (disappearanceTimeout === 0) throw new Error(`timeout while waiting for notification to disappear: ${expectedNotificationMessage}`)
+
+      await this.waitForNoSelector(`${NOTIFICATION_MESSAGE_SELECTOR}[data-count='${foundNotificationMessageCount}']`, {timeout: disappearanceTimeout, useBaseSelector: false})
     }
   }
 
   /** @returns {Promise<void>} */
   async dismissNotificationMessages() {
-    const notificationMessageElements = await this.all("[data-class='notification-message']", {useBaseSelector: false})
+    const notificationMessageElements = await this.all(NOTIFICATION_MESSAGE_SELECTOR, {timeout: 0, useBaseSelector: false})
 
     for (const notificationMessageElement of notificationMessageElements) {
       await this.interact(notificationMessageElement, "click")
     }
 
-    await this.waitForNoSelector("[data-class='notification-message']", {useBaseSelector: false})
+    await this.waitForNoSelector(NOTIFICATION_MESSAGE_SELECTOR, {useBaseSelector: false})
   }
 
   /**

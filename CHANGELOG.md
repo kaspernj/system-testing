@@ -1,6 +1,14 @@
 # Changelog
 
 ## Unreleased
+- Bound notification assertions with one configurable timeout across detection and dismissal.
+- Wait for bounded WebDriver cleanup before returning from notification disappearance assertions.
+- Make notification snapshots and bulk dismissal use immediate lookups and the current `data-testid` selector.
+- Allow per-call timeouts for `waitForNoSelector` and enforce them when WebDriver stalls.
+- Reject click options passed as `interact` method arguments instead of silently ignoring them.
+- Keep `exists()` returning false when its hard lookup deadline fires before the wall-clock deadline comparison advances.
+- Reject non-positive notification assertion timeouts before starting a WebDriver lookup.
+- Restore late implicit-timeout changes only while they still own driver state, and invalidate sessions with abandoned WebDriver commands.
 - Add native Android text lookup and scroll-container-aware test ID scrolling for Appium.
 - Reinitialize `SystemTest.run(...)` browser state after failed callbacks or teardown by default.
 - Let scroll helpers find rendered targets before they are visible in the viewport.
