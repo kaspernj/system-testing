@@ -1246,24 +1246,26 @@ export default class WebDriverDriver {
       }
     }
 
-    await this.withTemporaryImplicitTimeout(0, async () => {
-      await this._withRethrownErrors(async () => {
-        if (waitTimeout === 0) {
-          if (!await selectorIsGone()) throw new SeleniumError.TimeoutError(`Wait timed out after ${waitTimeout}ms`)
-        } else {
-          const errorMessage = `timeout while waiting for selector to disappear: ${actualSelector}`
+    const errorMessage = `timeout while waiting for selector to disappear: ${actualSelector}`
 
-          try {
-            await timeout({timeout: waitTimeout, errorMessage}, async () => await this.getWebDriver().wait(selectorIsGone, waitTimeout))
-          } catch (error) {
-            if (error instanceof Error && !(error instanceof WebDriverError) && error.message === errorMessage) {
-              throw new SeleniumError.TimeoutError(errorMessage)
+    await this._withRethrownErrors(async () => {
+      try {
+        await timeout({timeout: waitTimeout, errorMessage}, async () => {
+          await this.withTemporaryImplicitTimeout(0, async () => {
+            if (waitTimeout === 0) {
+              if (!await selectorIsGone()) throw new SeleniumError.TimeoutError(`Wait timed out after ${waitTimeout}ms`)
+            } else {
+              await timeout({timeout: waitTimeout, errorMessage}, async () => await this.getWebDriver().wait(selectorIsGone, waitTimeout))
             }
-
-            throw error
-          }
+          })
+        })
+      } catch (error) {
+        if (error instanceof Error && !(error instanceof WebDriverError) && error.message === errorMessage) {
+          throw new SeleniumError.TimeoutError(errorMessage)
         }
-      })
+
+        throw error
+      }
     })
   }
 
