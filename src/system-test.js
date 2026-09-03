@@ -821,12 +821,11 @@ export default class SystemTest extends Browser {
         throw new Error("Expected notification message to have a data-count")
       }
 
-      const notificationMessageCount = foundNotificationMessageCount
       const disappearanceTimeout = getTimeLeft()
 
       if (disappearanceTimeout === 0) throw new Error(`timeout while waiting for notification to disappear: ${expectedNotificationMessage}`)
 
-      await this.waitForNoSelector(`${NOTIFICATION_MESSAGE_SELECTOR}[data-count='${notificationMessageCount}']`, {timeout: disappearanceTimeout, useBaseSelector: false})
+      await this.waitForNoSelector(`${NOTIFICATION_MESSAGE_SELECTOR}[data-count='${foundNotificationMessageCount}']`, {timeout: disappearanceTimeout, useBaseSelector: false})
     }
   }
 
