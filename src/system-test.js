@@ -742,6 +742,7 @@ export default class SystemTest extends Browser {
     const getTimeLeft = () => Math.max(waitTimeout - (Date.now() - startTime), 0)
     /** @type {import("selenium-webdriver").WebElement | undefined} */
     let foundNotificationMessageElement
+    /** @type {string | null | undefined} */
     let foundNotificationMessageCount
     const findExpectedNotification = async () => {
       const notificationMessageElements = await this.all(NOTIFICATION_MESSAGE_SELECTOR, {timeout: 0, useBaseSelector: false})
@@ -807,7 +808,15 @@ export default class SystemTest extends Browser {
         throw new Error("Expected notification message to have a data-count")
       }
 
-      await this.waitForNoSelector(`${NOTIFICATION_MESSAGE_SELECTOR}[data-count='${foundNotificationMessageCount}']`, {timeout: getTimeLeft(), useBaseSelector: false})
+      const notificationMessageCount = foundNotificationMessageCount
+      const disappearanceErrorMessage = `timeout while waiting for notification to disappear: ${expectedNotificationMessage}`
+      const disappearanceTimeout = getTimeLeft()
+
+      if (disappearanceTimeout === 0) throw new Error(disappearanceErrorMessage)
+
+      await timeout({timeout: disappearanceTimeout, errorMessage: disappearanceErrorMessage}, async () => {
+        await this.waitForNoSelector(`${NOTIFICATION_MESSAGE_SELECTOR}[data-count='${notificationMessageCount}']`, {timeout: disappearanceTimeout, useBaseSelector: false})
+      })
     }
   }
 
