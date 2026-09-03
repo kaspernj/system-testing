@@ -8,6 +8,9 @@ import {testIdSelector} from "../test-id-selector.js"
 // default 300s (longer than the system-test startup budget, which would otherwise
 // surface as an opaque suite timeout).
 const DEFAULT_PAGE_LOAD_TIMEOUT_MS = 60000
+// End polling before the public deadline so the serialized restore command is queued
+// before a caller can issue its next WebDriver command.
+const IMPLICIT_TIMEOUT_RESTORE_START_BUFFER_MS = 10
 
 /**
  * @param {string} message
@@ -1222,6 +1225,8 @@ export default class WebDriverDriver {
       throw new Error(`Unexpected args: ${Object.keys(restArgs).join(", ")}`)
     }
 
+    const startTime = Date.now()
+    const getTimeLeft = () => Math.max(waitTimeout - (Date.now() - startTime), 0)
     const actualSelector = useBaseSelector ? this.getSelector(selector) : selector
 
     const selectorIsGone = async () => {
@@ -1253,10 +1258,18 @@ export default class WebDriverDriver {
     const implicitTimeoutRestoreAbortController = new AbortController()
     const waitForSelectorToDisappear = async () => {
       await this.withTemporaryImplicitTimeout(0, async () => {
+        if (implicitTimeoutRestoreAbortController.signal.aborted) return
+
         if (waitTimeout === 0) {
           if (!await selectorIsGone()) throw new SeleniumError.TimeoutError(`Wait timed out after ${waitTimeout}ms`)
         } else {
-          await timeout({timeout: waitTimeout, errorMessage}, async () => await this.getWebDriver().wait(selectorIsGone, waitTimeout))
+          const pollingTimeout = Math.max(getTimeLeft() - IMPLICIT_TIMEOUT_RESTORE_START_BUFFER_MS, 0)
+
+          if (pollingTimeout === 0) {
+            if (!await selectorIsGone()) throw new SeleniumError.TimeoutError(errorMessage)
+          } else {
+            await timeout({timeout: pollingTimeout, errorMessage}, async () => await this.getWebDriver().wait(selectorIsGone, pollingTimeout))
+          }
         }
       }, implicitTimeoutRestoreAbortController.signal)
     }
@@ -1269,7 +1282,7 @@ export default class WebDriverDriver {
     try {
       await this._withRethrownErrors(async () => {
         try {
-          await timeout({timeout: waitTimeout, errorMessage}, waitForSelectorToDisappear)
+          await timeout({timeout: getTimeLeft(), errorMessage}, waitForSelectorToDisappear)
         } catch (error) {
           if (error instanceof Error && !(error instanceof WebDriverError) && error.message === errorMessage) {
             throw new SeleniumError.TimeoutError(errorMessage)

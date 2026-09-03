@@ -3,7 +3,7 @@
 import WebDriverDriver from "../src/drivers/webdriver-driver.js"
 
 describe("WebDriverDriver waitForNoSelector", () => {
-  it("uses a per-call timeout", async () => {
+  it("uses a per-call timeout as the total lifecycle budget", async () => {
     const driver = new WebDriverDriver({
       browser: /** @type {any} */ ({
         driver: undefined,
@@ -12,7 +12,8 @@ describe("WebDriverDriver waitForNoSelector", () => {
       })
     })
     const waitSpy = jasmine.createSpy("wait").and.callFake(async (condition, timeout) => {
-      expect(timeout).toBe(123)
+      expect(timeout).toBeGreaterThan(0)
+      expect(timeout).toBeLessThan(123)
       expect(await condition()).toBeTrue()
     })
     const setTimeoutsSpy = jasmine.createSpy("setTimeouts").and.resolveTo(undefined)
@@ -88,6 +89,31 @@ describe("WebDriverDriver waitForNoSelector", () => {
     expect(/** @type {Error} */ (result).message).toContain("timeout while waiting for selector to disappear: #still-present")
   })
 
+  it("restores the implicit wait when ordinary polling reaches its deadline", async () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const setTimeoutsSpy = jasmine.createSpy("setTimeouts").and.resolveTo(undefined)
+
+    driver.setWebDriver(/** @type {any} */ ({
+      manage: () => ({setTimeouts: setTimeoutsSpy}),
+      wait: async () => await new Promise(() => {})
+    }))
+
+    await expectAsync(
+      driver.waitForNoSelector("#still-present", {timeout: 30, useBaseSelector: false})
+    ).toBeRejectedWithError(/timeout while waiting for selector to disappear: #still-present/)
+
+    expect(setTimeoutsSpy.calls.allArgs()).toEqual([
+      [{implicit: 0}],
+      [{implicit: 5000}]
+    ])
+  })
+
   it("enforces the timeout when restoring the implicit wait does not settle", async () => {
     const driver = new WebDriverDriver({
       browser: /** @type {any} */ ({
@@ -148,7 +174,15 @@ describe("WebDriverDriver waitForNoSelector", () => {
         throwIfHttpServerError: () => {}
       })
     })
-    const setTimeoutsSpy = jasmine.createSpy("setTimeouts").and.resolveTo(undefined)
+    /** @type {(() => void) | undefined} */
+    let finishDisablingImplicitWait
+    const setTimeoutsSpy = jasmine.createSpy("setTimeouts").and.callFake(async ({implicit}) => {
+      if (implicit === 0) {
+        await new Promise((resolve) => {
+          finishDisablingImplicitWait = resolve
+        })
+      }
+    })
 
     driver.setWebDriver(/** @type {any} */ ({
       manage: () => ({setTimeouts: setTimeoutsSpy}),
@@ -160,6 +194,8 @@ describe("WebDriverDriver waitForNoSelector", () => {
     ).toBeRejectedWithError(/timeout while waiting for selector to disappear: #still-present/)
 
     await driver.driverSetTimeouts(123)
+    if (!finishDisablingImplicitWait) throw new Error("Expected the implicit wait update to have started")
+    finishDisablingImplicitWait()
     await new Promise((resolve) => setTimeout(resolve, 30))
 
     expect(setTimeoutsSpy.calls.allArgs()).toEqual([
