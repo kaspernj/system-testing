@@ -116,7 +116,69 @@ describe("WebDriverDriver waitForNoSelector", () => {
     expect(() => driver.getWebDriver()).not.toThrow()
   })
 
-  it("enforces the timeout when restoring the implicit wait does not settle", async () => {
+  it("waits for a slow implicit-wait restore before returning the selector timeout", async () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    let restoreFinished = false
+
+    const setTimeoutsSpy = jasmine.createSpy("setTimeouts").and.callFake(async ({implicit}) => {
+      if (implicit === 5000) {
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        restoreFinished = true
+      }
+    })
+
+    driver.setWebDriver(/** @type {any} */ ({
+      manage: () => ({setTimeouts: setTimeoutsSpy}),
+      wait: async () => await new Promise(() => {})
+    }))
+
+    const result = await Promise.race([
+      driver.waitForNoSelector("#still-present", {timeout: 30, useBaseSelector: false}).catch((error) => error),
+      new Promise((resolve) => setTimeout(() => resolve("still pending"), 200))
+    ])
+
+    expect(result).toEqual(jasmine.any(Error))
+    expect(/** @type {Error} */ (result).message).toContain("timeout while waiting for selector to disappear: #still-present")
+    expect(restoreFinished).toBeTrue()
+    expect(() => driver.getWebDriver()).not.toThrow()
+  })
+
+  it("succeeds when the selector disappears before a slow implicit-wait restore", async () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    let restoreFinished = false
+
+    driver.setWebDriver(/** @type {any} */ ({
+      findElements: async () => [],
+      manage: () => ({
+        setTimeouts: async ({implicit}) => {
+          if (implicit === 5000) {
+            await new Promise((resolve) => setTimeout(resolve, 50))
+            restoreFinished = true
+          }
+        }
+      }),
+      wait: async (condition) => await condition()
+    }))
+
+    await expectAsync(driver.waitForNoSelector("#missing", {timeout: 30, useBaseSelector: false})).toBeResolved()
+
+    expect(restoreFinished).toBeTrue()
+    expect(() => driver.getWebDriver()).not.toThrow()
+  })
+
+  it("quarantines the session when restoring the implicit wait does not settle", async () => {
     const driver = new WebDriverDriver({
       browser: /** @type {any} */ ({
         driver: undefined,
@@ -131,17 +193,22 @@ describe("WebDriverDriver waitForNoSelector", () => {
 
     driver.setWebDriver(/** @type {any} */ ({
       manage: () => ({setTimeouts: setTimeoutsSpy}),
-      wait: async () => await new Promise((resolve) => setTimeout(resolve, 10))
+      wait: async () => await new Promise(() => {})
     }))
 
-    const result = await Promise.race([
-      driver.waitForNoSelector("#still-present", {timeout: 30, useBaseSelector: false}).catch((error) => error),
+    const waitPromise = driver.waitForNoSelector("#still-present", {timeout: 30, useBaseSelector: false}).catch((error) => error)
+    const earlyResult = await Promise.race([
+      waitPromise,
       new Promise((resolve) => setTimeout(() => resolve("still pending"), 200))
     ])
 
+    expect(earlyResult).toBe("still pending")
+
+    const result = await waitPromise
+
     expect(result).toEqual(jasmine.any(Error))
     expect(/** @type {Error} */ (result).message).toContain("timeout while waiting for selector to disappear: #still-present")
-    expect(() => driver.getWebDriver()).not.toThrow()
+    expect(() => driver.getWebDriver()).toThrowError(/WebDriver session is unusable: timeout while restoring the implicit wait timeout/)
   })
 
   it("enforces the timeout when disabling the implicit wait does not settle", async () => {

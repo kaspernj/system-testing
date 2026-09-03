@@ -8,6 +8,7 @@ import {testIdSelector} from "../test-id-selector.js"
 // default 300s (longer than the system-test startup budget, which would otherwise
 // surface as an opaque suite timeout).
 const DEFAULT_PAGE_LOAD_TIMEOUT_MS = 60000
+const IMPLICIT_TIMEOUT_RESTORE_ERROR_MESSAGE = "timeout while restoring the implicit wait timeout"
 // End polling before the public deadline so the serialized restore command is queued
 // before a caller can issue its next WebDriver command.
 const IMPLICIT_TIMEOUT_RESTORE_START_BUFFER_MS = 10
@@ -413,12 +414,14 @@ export default class WebDriverDriver {
 
       // Chromedriver serializes session commands, so once a renderer command has been
       // abandoned by a lookup deadline the restore would queue behind it forever. Bound
-      // the bookkeeping and tolerate only that expected restore timeout so the callback's
-      // own outcome — success or failure — stays decisive.
+      // the bookkeeping and quarantine the owning session if that bound expires, while
+      // preserving the callback's own outcome — success or failure — as decisive.
       try {
-        await timeout({timeout: 1000, errorMessage: "timeout while restoring the implicit wait timeout"}, async () => await webDriver.manage().setTimeouts({implicit: originalImplicitTimeout}))
+        await timeout({timeout: 1000, errorMessage: IMPLICIT_TIMEOUT_RESTORE_ERROR_MESSAGE}, async () => await webDriver.manage().setTimeouts({implicit: originalImplicitTimeout}))
       } catch (error) {
-        if (!(error instanceof Error) || error.message !== "timeout while restoring the implicit wait timeout") {
+        if (error instanceof Error && error.message === IMPLICIT_TIMEOUT_RESTORE_ERROR_MESSAGE) {
+          if (this._implicitTimeoutChangeId === timeoutChangeId && this.webDriver === webDriver) this.markSessionUnusable(error)
+        } else {
           if (callbackFailed) throw callbackError
 
           throw error
@@ -1317,14 +1320,26 @@ export default class WebDriverDriver {
     }
 
     try {
+      const waitForSelectorToDisappearPromise = waitForSelectorToDisappear()
+
       await this._withRethrownErrors(async () => {
         try {
-          await timeout({timeout: getTimeLeft(), errorMessage}, waitForSelectorToDisappear)
+          await timeout({timeout: getTimeLeft(), errorMessage}, async () => await waitForSelectorToDisappearPromise)
         } catch (error) {
           if (error instanceof Error && !(error instanceof WebDriverError) && error.message === errorMessage) {
             const deadlineError = new SeleniumError.TimeoutError(errorMessage)
 
-            if (!implicitTimeoutRestoreStarted) this.markSessionUnusable(deadlineError)
+            if (implicitTimeoutRestoreStarted) {
+              try {
+                await waitForSelectorToDisappearPromise
+
+                return
+              } catch (cleanupError) {
+                if (!(cleanupError instanceof ElementDisappearanceDeadlineError)) throw cleanupError
+              }
+            } else {
+              this.markSessionUnusable(deadlineError)
+            }
 
             throw deadlineError
           }
