@@ -382,9 +382,10 @@ export default class WebDriverDriver {
    * @template T
    * @param {number} implicitTimeout
    * @param {() => Promise<T>} callback
+   * @param {() => void} [onRestoreStart]
    * @returns {Promise<T>}
    */
-  async withTemporaryImplicitTimeout(implicitTimeout, callback) {
+  async withTemporaryImplicitTimeout(implicitTimeout, callback, onRestoreStart) {
     const originalImplicitTimeout = this._driverTimeouts
 
     if (originalImplicitTimeout === implicitTimeout) return await callback()
@@ -408,6 +409,8 @@ export default class WebDriverDriver {
     }
 
     if (this._implicitTimeoutChangeId === timeoutChangeId) {
+      if (onRestoreStart) onRestoreStart()
+
       // Chromedriver serializes session commands, so once a renderer command has been
       // abandoned by a lookup deadline the restore would queue behind it forever. Bound
       // the bookkeeping and tolerate only that expected restore timeout so the callback's
@@ -1278,6 +1281,10 @@ export default class WebDriverDriver {
 
     const errorMessage = `timeout while waiting for selector to disappear: ${actualSelector}`
     const implicitTimeoutRestoreAbortController = new AbortController()
+    let implicitTimeoutRestoreStarted = false
+    const onImplicitTimeoutRestoreStart = () => {
+      implicitTimeoutRestoreStarted = true
+    }
     const waitForSelectorToDisappear = async () => {
       await this.withTemporaryImplicitTimeout(0, async () => {
         if (implicitTimeoutRestoreAbortController.signal.aborted) return
@@ -1301,7 +1308,7 @@ export default class WebDriverDriver {
             }
           }
         }
-      })
+      }, onImplicitTimeoutRestoreStart)
     }
 
     if (waitTimeout === 0) {
@@ -1317,7 +1324,8 @@ export default class WebDriverDriver {
           if (error instanceof Error && !(error instanceof WebDriverError) && error.message === errorMessage) {
             const deadlineError = new SeleniumError.TimeoutError(errorMessage)
 
-            this.markSessionUnusable(deadlineError)
+            if (!implicitTimeoutRestoreStarted) this.markSessionUnusable(deadlineError)
+
             throw deadlineError
           }
 

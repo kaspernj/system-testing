@@ -130,6 +130,7 @@ describe("SystemTest notifications", () => {
 
   it("enforces the total timeout when notification detection does not settle", async () => {
     const systemTest = createSystemTest()
+    const markSessionUnusableSpy = jasmine.createSpy("markSessionUnusable")
     let lookupCount = 0
 
     systemTest.all = /** @type {any} */ (async () => {
@@ -139,6 +140,7 @@ describe("SystemTest notifications", () => {
 
       return await new Promise(() => {})
     })
+    systemTest.getDriverAdapter = /** @type {any} */ (() => ({markSessionUnusable: markSessionUnusableSpy}))
 
     const result = await Promise.race([
       systemTest.expectNotificationMessage("Expected notification", {dismiss: false, timeout: 80}).catch((error) => error),
@@ -147,6 +149,7 @@ describe("SystemTest notifications", () => {
 
     expect(result).toEqual(jasmine.any(Error))
     expect(/** @type {Error} */ (result).message).toContain("timeout while finding notification: Expected notification")
+    expect(markSessionUnusableSpy).toHaveBeenCalledOnceWith(result)
   })
 
   it("enforces the total timeout when disappearance polling does not settle", async () => {

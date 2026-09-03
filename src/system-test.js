@@ -770,12 +770,14 @@ export default class SystemTest extends Browser {
     const detectionTimeout = getTimeLeft()
     /** @type {unknown} */
     let lastDetectionError
+    let detectionPollPending = false
 
     if (detectionTimeout === 0) throw new Error(detectionErrorMessage)
 
     try {
       await timeout({timeout: detectionTimeout, errorMessage: detectionErrorMessage}, async () => {
         await waitFor({timeout: detectionTimeout}, async () => {
+          detectionPollPending = true
           lastDetectionError = undefined
 
           try {
@@ -783,11 +785,16 @@ export default class SystemTest extends Browser {
           } catch (error) {
             lastDetectionError = error
             throw error
+          } finally {
+            detectionPollPending = false
           }
         })
       })
     } catch (error) {
-      if (error instanceof Error && error.message === detectionErrorMessage && lastDetectionError) throw lastDetectionError
+      if (error instanceof Error && error.message === detectionErrorMessage) {
+        if (detectionPollPending) this.getDriverAdapter().markSessionUnusable(error)
+        if (lastDetectionError) throw lastDetectionError
+      }
 
       throw error
     }

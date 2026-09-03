@@ -87,6 +87,7 @@ describe("WebDriverDriver waitForNoSelector", () => {
 
     expect(result).toEqual(jasmine.any(Error))
     expect(/** @type {Error} */ (result).message).toContain("timeout while waiting for selector to disappear: #still-present")
+    expect(() => driver.getWebDriver()).not.toThrow()
   })
 
   it("restores the implicit wait when ordinary polling reaches its deadline", async () => {
@@ -140,6 +141,7 @@ describe("WebDriverDriver waitForNoSelector", () => {
 
     expect(result).toEqual(jasmine.any(Error))
     expect(/** @type {Error} */ (result).message).toContain("timeout while waiting for selector to disappear: #still-present")
+    expect(() => driver.getWebDriver()).not.toThrow()
   })
 
   it("enforces the timeout when disabling the implicit wait does not settle", async () => {
