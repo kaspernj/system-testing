@@ -66,6 +66,18 @@ describe("SystemTest notifications", () => {
     expect(allSpy).toHaveBeenCalledWith("[data-testid='notification-message']", {timeout: 0, useBaseSelector: false})
   })
 
+  it("rejects a zero timeout before starting a notification lookup", async () => {
+    const systemTest = createSystemTest()
+    const allSpy = jasmine.createSpy("all").and.returnValue(new Promise(() => {}))
+
+    systemTest.all = /** @type {any} */ (allSpy)
+
+    await expectAsync(
+      systemTest.expectNotificationMessage("Expected notification", {timeout: 0})
+    ).toBeRejectedWithError("Notification message timeout must be greater than 0")
+    expect(allSpy).not.toHaveBeenCalled()
+  })
+
   it("uses the remaining assertion timeout while waiting for a dismissed notification to disappear", async () => {
     const systemTest = createSystemTest()
     const notification = {

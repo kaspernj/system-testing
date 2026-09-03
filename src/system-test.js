@@ -736,6 +736,8 @@ export default class SystemTest extends Browser {
       throw new Error(`Unexpected args: ${Object.keys(restArgs).join(", ")}`)
     }
 
+    if (waitTimeout <= 0) throw new Error("Notification message timeout must be greater than 0")
+
     /** @type {string[]} */
     const allDetectedNotificationMessages = []
     const startTime = Date.now()
@@ -764,34 +766,30 @@ export default class SystemTest extends Browser {
       throw new Error(`Notification message ${expectedNotificationMessage} wasn't included in: ${allDetectedNotificationMessages.join(", ")}`)
     }
 
-    if (waitTimeout === 0) {
-      await findExpectedNotification()
-    } else {
-      const detectionErrorMessage = `timeout while finding notification: ${expectedNotificationMessage}`
-      const detectionTimeout = getTimeLeft()
-      /** @type {unknown} */
-      let lastDetectionError
+    const detectionErrorMessage = `timeout while finding notification: ${expectedNotificationMessage}`
+    const detectionTimeout = getTimeLeft()
+    /** @type {unknown} */
+    let lastDetectionError
 
-      if (detectionTimeout === 0) throw new Error(detectionErrorMessage)
+    if (detectionTimeout === 0) throw new Error(detectionErrorMessage)
 
-      try {
-        await timeout({timeout: detectionTimeout, errorMessage: detectionErrorMessage}, async () => {
-          await waitFor({timeout: detectionTimeout}, async () => {
-            lastDetectionError = undefined
+    try {
+      await timeout({timeout: detectionTimeout, errorMessage: detectionErrorMessage}, async () => {
+        await waitFor({timeout: detectionTimeout}, async () => {
+          lastDetectionError = undefined
 
-            try {
-              await findExpectedNotification()
-            } catch (error) {
-              lastDetectionError = error
-              throw error
-            }
-          })
+          try {
+            await findExpectedNotification()
+          } catch (error) {
+            lastDetectionError = error
+            throw error
+          }
         })
-      } catch (error) {
-        if (error instanceof Error && error.message === detectionErrorMessage && lastDetectionError) throw lastDetectionError
+      })
+    } catch (error) {
+      if (error instanceof Error && error.message === detectionErrorMessage && lastDetectionError) throw lastDetectionError
 
-        throw error
-      }
+      throw error
     }
 
     if (foundNotificationMessageElement && dismiss) {
