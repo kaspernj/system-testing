@@ -766,7 +766,31 @@ export default class SystemTest extends Browser {
     if (waitTimeout === 0) {
       await findExpectedNotification()
     } else {
-      await waitFor({timeout: waitTimeout}, findExpectedNotification)
+      const detectionErrorMessage = `timeout while finding notification: ${expectedNotificationMessage}`
+      const detectionTimeout = getTimeLeft()
+      /** @type {unknown} */
+      let lastDetectionError
+
+      if (detectionTimeout === 0) throw new Error(detectionErrorMessage)
+
+      try {
+        await timeout({timeout: detectionTimeout, errorMessage: detectionErrorMessage}, async () => {
+          await waitFor({timeout: detectionTimeout}, async () => {
+            lastDetectionError = undefined
+
+            try {
+              await findExpectedNotification()
+            } catch (error) {
+              lastDetectionError = error
+              throw error
+            }
+          })
+        })
+      } catch (error) {
+        if (error instanceof Error && error.message === detectionErrorMessage && lastDetectionError) throw lastDetectionError
+
+        throw error
+      }
     }
 
     if (foundNotificationMessageElement && dismiss) {

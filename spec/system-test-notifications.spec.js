@@ -112,4 +112,25 @@ describe("SystemTest notifications", () => {
     expect(result).toEqual(jasmine.any(Error))
     expect(/** @type {Error} */ (result).message).toContain("timeout while dismissing notification: Expected notification")
   })
+
+  it("enforces the total timeout when notification detection does not settle", async () => {
+    const systemTest = createSystemTest()
+    let lookupCount = 0
+
+    systemTest.all = /** @type {any} */ (async () => {
+      lookupCount += 1
+
+      if (lookupCount === 1) return []
+
+      return await new Promise(() => {})
+    })
+
+    const result = await Promise.race([
+      systemTest.expectNotificationMessage("Expected notification", {dismiss: false, timeout: 80}).catch((error) => error),
+      new Promise((resolve) => setTimeout(() => resolve("still pending"), 300))
+    ])
+
+    expect(result).toEqual(jasmine.any(Error))
+    expect(/** @type {Error} */ (result).message).toContain("timeout while finding notification: Expected notification")
+  })
 })
