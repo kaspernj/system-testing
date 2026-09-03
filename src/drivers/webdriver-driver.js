@@ -772,6 +772,7 @@ export default class WebDriverDriver {
 
       element = await this.find(selector, restArgs)
     } else {
+      this.getWebDriver()
       element = /** @type {import("selenium-webdriver").WebElement} */ (elementOrIdentifier)
     }
 

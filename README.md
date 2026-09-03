@@ -513,7 +513,7 @@ For clicks, prefer `click(selector, options)`. `interact(selector, "click", opti
 
 `expectNotificationMessage(message, {timeout, dismiss})` polls visible `[data-testid='notification-message']` elements without applying the global finder wait to every poll. `timeout` is one positive total budget for finding the message and, when `dismiss` is enabled, waiting for that specific notification to disappear. Bounded WebDriver cleanup may finish after that budget before the assertion returns. The timeout defaults to 5000 ms and rejects non-positive values. `dismiss` defaults to `true`.
 
-If a non-cancellable WebDriver dismissal command exceeds that budget, the current session is marked unusable so later commands cannot race the pending click. The default `SystemTest.run(...)` failure lifecycle reinitializes that session.
+If a non-cancellable WebDriver dismissal command exceeds that budget, the current session is marked unusable so later commands, including operations on retained element handles, cannot race the pending click. The default `SystemTest.run(...)` failure lifecycle reinitializes that session.
 
 ```js
 await systemTest.expectNotificationMessage("You were signed in.", {timeout: 1000})

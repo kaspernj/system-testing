@@ -101,6 +101,29 @@ describe("WebDriverDriver interact", () => {
     expect(executeScriptSpy).not.toHaveBeenCalled()
   })
 
+  it("rejects retained element commands after the WebDriver session becomes unusable", async () => {
+    const element = {
+      click: jasmine.createSpy("click").and.resolveTo(undefined),
+      getId: async () => "webdriver-element-id",
+      sendKeys: jasmine.createSpy("sendKeys").and.resolveTo(undefined)
+    }
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver.setWebDriver(/** @type {any} */ ({}))
+    driver.markSessionUnusable(new Error("timed-out command may still execute"))
+
+    await expectAsync(driver.click(/** @type {any} */ (element))).toBeRejectedWithError(/WebDriver session is unusable: timed-out command may still execute/)
+    await expectAsync(driver.interact(/** @type {any} */ (element), "sendKeys", "value")).toBeRejectedWithError(/WebDriver session is unusable: timed-out command may still execute/)
+    expect(element.click).not.toHaveBeenCalled()
+    expect(element.sendKeys).not.toHaveBeenCalled()
+  })
+
   it("preserves regular find args when looking up a replaceValueWithJs target", async () => {
     const executeScriptCalls = []
     const element = {
