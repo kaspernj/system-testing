@@ -139,4 +139,32 @@ describe("WebDriverDriver waitForNoSelector", () => {
     expect(/** @type {Error} */ (result).message).toContain("timeout while waiting for selector to disappear: #still-present")
     expect(waitSpy).not.toHaveBeenCalled()
   })
+
+  it("does not restore stale timeout state after a timed-out wait returns", async () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const setTimeoutsSpy = jasmine.createSpy("setTimeouts").and.resolveTo(undefined)
+
+    driver.setWebDriver(/** @type {any} */ ({
+      manage: () => ({setTimeouts: setTimeoutsSpy}),
+      wait: async () => await new Promise(() => {})
+    }))
+
+    await expectAsync(
+      driver.waitForNoSelector("#still-present", {timeout: 30, useBaseSelector: false})
+    ).toBeRejectedWithError(/timeout while waiting for selector to disappear: #still-present/)
+
+    await driver.driverSetTimeouts(123)
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    expect(setTimeoutsSpy.calls.allArgs()).toEqual([
+      [{implicit: 0}],
+      [{implicit: 123, pageLoad: 60000}]
+    ])
+  })
 })

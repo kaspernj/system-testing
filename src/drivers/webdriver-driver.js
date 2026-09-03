@@ -360,9 +360,10 @@ export default class WebDriverDriver {
    * @template T
    * @param {number} implicitTimeout
    * @param {() => Promise<T>} callback
+   * @param {AbortSignal} [restoreSignal]
    * @returns {Promise<T>}
    */
-  async withTemporaryImplicitTimeout(implicitTimeout, callback) {
+  async withTemporaryImplicitTimeout(implicitTimeout, callback, restoreSignal) {
     const originalImplicitTimeout = this._driverTimeouts
 
     if (originalImplicitTimeout === implicitTimeout) return await callback()
@@ -381,17 +382,19 @@ export default class WebDriverDriver {
       callbackError = error
     }
 
-    // Chromedriver serializes session commands, so once a renderer command has been
-    // abandoned by a lookup deadline the restore would queue behind it forever. Bound
-    // the bookkeeping and tolerate only that expected restore timeout so the callback's
-    // own outcome — success or failure — stays decisive.
-    try {
-      await timeout({timeout: 1000, errorMessage: "timeout while restoring the implicit wait timeout"}, async () => await this.getWebDriver().manage().setTimeouts({implicit: originalImplicitTimeout}))
-    } catch (error) {
-      if (!(error instanceof Error) || error.message !== "timeout while restoring the implicit wait timeout") {
-        if (callbackFailed) throw callbackError
+    if (!restoreSignal?.aborted) {
+      // Chromedriver serializes session commands, so once a renderer command has been
+      // abandoned by a lookup deadline the restore would queue behind it forever. Bound
+      // the bookkeeping and tolerate only that expected restore timeout so the callback's
+      // own outcome — success or failure — stays decisive.
+      try {
+        await timeout({timeout: 1000, errorMessage: "timeout while restoring the implicit wait timeout"}, async () => await this.getWebDriver().manage().setTimeouts({implicit: originalImplicitTimeout}))
+      } catch (error) {
+        if (!(error instanceof Error) || error.message !== "timeout while restoring the implicit wait timeout") {
+          if (callbackFailed) throw callbackError
 
-        throw error
+          throw error
+        }
       }
     }
 
@@ -1247,6 +1250,7 @@ export default class WebDriverDriver {
     }
 
     const errorMessage = `timeout while waiting for selector to disappear: ${actualSelector}`
+    const implicitTimeoutRestoreAbortController = new AbortController()
     const waitForSelectorToDisappear = async () => {
       await this.withTemporaryImplicitTimeout(0, async () => {
         if (waitTimeout === 0) {
@@ -1254,7 +1258,7 @@ export default class WebDriverDriver {
         } else {
           await timeout({timeout: waitTimeout, errorMessage}, async () => await this.getWebDriver().wait(selectorIsGone, waitTimeout))
         }
-      })
+      }, implicitTimeoutRestoreAbortController.signal)
     }
 
     if (waitTimeout === 0) {
@@ -1262,17 +1266,21 @@ export default class WebDriverDriver {
       return
     }
 
-    await this._withRethrownErrors(async () => {
-      try {
-        await timeout({timeout: waitTimeout, errorMessage}, waitForSelectorToDisappear)
-      } catch (error) {
-        if (error instanceof Error && !(error instanceof WebDriverError) && error.message === errorMessage) {
-          throw new SeleniumError.TimeoutError(errorMessage)
-        }
+    try {
+      await this._withRethrownErrors(async () => {
+        try {
+          await timeout({timeout: waitTimeout, errorMessage}, waitForSelectorToDisappear)
+        } catch (error) {
+          if (error instanceof Error && !(error instanceof WebDriverError) && error.message === errorMessage) {
+            throw new SeleniumError.TimeoutError(errorMessage)
+          }
 
-        throw error
-      }
-    })
+          throw error
+        }
+      })
+    } finally {
+      implicitTimeoutRestoreAbortController.abort()
+    }
   }
 
   /**
