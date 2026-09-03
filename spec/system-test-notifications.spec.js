@@ -92,4 +92,24 @@ describe("SystemTest notifications", () => {
     expect(waitArgs.timeout).toBeGreaterThan(0)
     expect(waitArgs.timeout).toBeLessThan(100)
   })
+
+  it("includes the dismissal click in the total timeout", async () => {
+    const systemTest = createSystemTest()
+    const notification = {
+      getAttribute: async () => "4",
+      getText: async () => "Expected notification"
+    }
+
+    systemTest.all = /** @type {any} */ (async () => [notification])
+    systemTest.getDriver = /** @type {any} */ (() => ({executeScript: async () => "Expected notification"}))
+    systemTest.interact = /** @type {any} */ (async () => await new Promise(() => {}))
+
+    const result = await Promise.race([
+      systemTest.expectNotificationMessage("Expected notification", {timeout: 30}).catch((error) => error),
+      new Promise((resolve) => setTimeout(() => resolve("still pending"), 200))
+    ])
+
+    expect(result).toEqual(jasmine.any(Error))
+    expect(/** @type {Error} */ (result).message).toContain("timeout while dismissing notification: Expected notification")
+  })
 })

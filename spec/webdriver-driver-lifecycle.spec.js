@@ -123,6 +123,25 @@ describe("WebDriverDriver lifecycle", () => {
     expect(String(/** @type {any} */ (outcome)?.message)).toContain("Couldn't get elements")
   })
 
+  it("classifies the hard lookup deadline as a timeout when the wall clock has not advanced", async () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    spyOn(Date, "now").and.returnValue(1000)
+    driver.setWebDriver(/** @type {any} */ ({
+      findElements: async () => await new Promise(() => {}),
+      manage: () => ({setTimeouts: async () => {}}),
+      wait: async (condition) => await condition()
+    }))
+
+    expect(await driver.exists("#does-not-exist", {timeout: 30, useBaseSelector: false})).toBeFalse()
+  })
+
   it("installs SIGINT/SIGTERM/beforeExit listeners when installExitHandlers() is called", () => {
     const before = {
       sigint: process.listenerCount("SIGINT"),

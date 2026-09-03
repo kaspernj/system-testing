@@ -740,6 +740,7 @@ export default class SystemTest extends Browser {
     const allDetectedNotificationMessages = []
     const startTime = Date.now()
     const getTimeLeft = () => Math.max(waitTimeout - (Date.now() - startTime), 0)
+    /** @type {import("selenium-webdriver").WebElement | undefined} */
     let foundNotificationMessageElement
     let foundNotificationMessageCount
     const findExpectedNotification = async () => {
@@ -769,7 +770,15 @@ export default class SystemTest extends Browser {
     }
 
     if (foundNotificationMessageElement && dismiss) {
-      await this.interact(foundNotificationMessageElement, "click") // Dismiss the notification message
+      const dismissErrorMessage = `timeout while dismissing notification: ${expectedNotificationMessage}`
+      const dismissTimeout = getTimeLeft()
+
+      if (dismissTimeout === 0) throw new Error(dismissErrorMessage)
+
+      await timeout({timeout: dismissTimeout, errorMessage: dismissErrorMessage}, async () => {
+        await this.interact(/** @type {import("selenium-webdriver").WebElement} */ (foundNotificationMessageElement), "click")
+      })
+
       if (!foundNotificationMessageCount) {
         throw new Error("Expected notification message to have a data-count")
       }

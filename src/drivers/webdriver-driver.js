@@ -103,6 +103,7 @@ function shouldIgnoreBrowserLogEntry(entry, message) {
  */
 
 class ElementNotFoundError extends Error { }
+class ElementLookupDeadlineError extends SeleniumError.TimeoutError { }
 
 // Named like Selenium's own error so the shared retry/rethrow handling in `click`/`interact`
 // treats pointer-action obstruction failures exactly like `element.click()` interception errors.
@@ -554,19 +555,18 @@ export default class WebDriverDriver {
             // WebDriver.wait only evaluates its timeout when the condition promise settles,
             // so a findElements call to an unresponsive renderer would hang the lookup
             // forever. Race it against the same deadline so the lookup always settles.
+            const errorMessage = `Timed out getting elements with selector: ${actualSelector}`
+
             try {
-              await timeout({timeout: timeLeft, errorMessage: `Timed out getting elements with selector: ${actualSelector}`}, async () => await this.getWebDriver().wait(async () => {
+              await timeout({timeout: timeLeft, errorMessage}, async () => await this.getWebDriver().wait(async () => {
                 elements = await getElements()
 
                 return elements.length > 0
               }, timeLeft))
             } catch (error) {
-              // The race only fires once the deadline has passed; surface it as the same
-              // Selenium timeout the WebDriver.wait path produces so timeout-based handling
-              // (for example exists()) keeps working.
-              if (getTimeLeft() > 0) throw error
+              if (!(error instanceof Error) || error instanceof WebDriverError || error.message !== errorMessage) throw error
 
-              throw new SeleniumError.TimeoutError(`Wait timed out after ${timeLeft}ms`)
+              throw new ElementLookupDeadlineError(`Wait timed out after ${timeLeft}ms`)
             }
           }
 
@@ -578,6 +578,10 @@ export default class WebDriverDriver {
             isStaleElementError = true
           } else if (error instanceof WebDriverError && error.message.toLowerCase().includes("stale element reference")) {
             isStaleElementError = true
+          }
+
+          if (error instanceof ElementLookupDeadlineError) {
+            throw errorWithCause(`Couldn't get elements with selector: ${actualSelector}: ${error.message}`, error)
           }
 
           if (
