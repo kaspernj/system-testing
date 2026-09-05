@@ -98,6 +98,11 @@ function shouldIgnoreBrowserLogEntry(entry, message) {
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 /**
+ * @typedef {object} FirstVisibleTestIDArgs
+ * @property {number} [timeout] Override timeout for lookup.
+ * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
+ */
+/**
  * @typedef {FindArgs} InteractArgs
  */
 /**
@@ -704,6 +709,29 @@ export default class WebDriverDriver {
    */
   async findByTestID(testID, args) {
     return await this.find(testIdSelector(testID), args)
+  }
+
+  /**
+   * Finds the first visible element by test ID, allowing duplicate visible matches.
+   * @param {string} testID
+   * @param {FirstVisibleTestIDArgs} [args]
+   * @returns {Promise<import("selenium-webdriver").WebElement>}
+   */
+  async findFirstVisibleByTestID(testID, args = {}) {
+    const restArgsKeys = Object.keys(args).filter((key) => key !== "timeout" && key !== "useBaseSelector")
+
+    if (restArgsKeys.length > 0) throw new Error(`Unknown arguments: ${restArgsKeys.join(", ")}`)
+
+    const startTime = Date.now()
+    const selector = testIdSelector(testID)
+    const elements = await this.all(selector, {...args, visible: true})
+
+    if (!elements[0]) {
+      const elapsedSeconds = (Date.now() - startTime) / 1000
+      throw new ElementNotFoundError(`Element couldn't be found after ${elapsedSeconds.toFixed(2)}s by CSS: ${this.getSelector(selector)}`)
+    }
+
+    return elements[0]
   }
 
   /**

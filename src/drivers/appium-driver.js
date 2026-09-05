@@ -279,6 +279,11 @@ export function isAppiumNativeAppDriverConfig(driverConfig) {
  * @property {string[]} [scrollContainerTestIDs] Native test IDs that should be tried as scroll containers before falling back to viewport gestures.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
+/**
+ * @typedef {object} FirstVisibleTestIDArgs
+ * @property {number} [timeout] Override timeout for lookup.
+ * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
+ */
 
 /**
  * Appium driver backed by the Appium server package.
@@ -469,6 +474,48 @@ export default class AppiumDriver extends WebDriverDriver {
     }
 
     return await this.findByAccessibilityId(testID, args)
+  }
+
+  /**
+   * Finds the first visible element by test ID, allowing duplicate visible matches.
+   * @param {string} testID
+   * @param {FirstVisibleTestIDArgs} [args]
+   * @returns {Promise<import("selenium-webdriver").WebElement>}
+   */
+  async findFirstVisibleByTestID(testID, args = {}) {
+    const restArgsKeys = Object.keys(args).filter((key) => key !== "timeout" && key !== "useBaseSelector")
+
+    if (restArgsKeys.length > 0) throw new Error(`Unknown arguments: ${restArgsKeys.join(", ")}`)
+
+    const startTime = Date.now()
+    const testIdStrategy = this.options.testIdStrategy ?? "accessibilityId"
+    let elements
+
+    if (testIdStrategy === "css") {
+      const selector = testIdSelector(testID, this.options.testIdAttribute ?? "data-testid")
+      elements = await this.all(selector, {...args, visible: true})
+    } else if (testIdStrategy === "id") {
+      elements = await this.allById(testID, {...args, visible: true})
+    } else {
+      elements = await this.allByAccessibilityId(testID, {...args, visible: true})
+    }
+
+    if (!elements[0]) {
+      const elapsedSeconds = (Date.now() - startTime) / 1000
+      let description
+
+      if (testIdStrategy === "css") {
+        description = `CSS: ${this.getSelector(testIdSelector(testID, this.options.testIdAttribute ?? "data-testid"))}`
+      } else if (testIdStrategy === "id") {
+        description = `id: ${testID}`
+      } else {
+        description = `accessibility id: ${testID}`
+      }
+
+      throw new Error(`Element couldn't be found after ${elapsedSeconds.toFixed(2)}s by ${description}`)
+    }
+
+    return elements[0]
   }
 
   /**

@@ -742,6 +742,38 @@ describe("WebDriverDriver interact", () => {
     expect(findSpy).toHaveBeenCalledWith("[data-testid=\"name\\\"Input\"]", {visible: false})
   })
 
+  it("returns the first visible test ID match with escaped CSS and narrow options", async () => {
+    const firstElement = {}
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    const allSpy = jasmine.createSpy("all").and.resolveTo([firstElement, {}])
+
+    driver.all = /** @type {any} */ (allSpy)
+
+    expect(await driver.findFirstVisibleByTestID("name\\\"Input", {timeout: 123, useBaseSelector: false})).toBe(firstElement)
+    expect(allSpy).toHaveBeenCalledOnceWith("[data-testid=\"name\\\\\\\"Input\"]", {timeout: 123, useBaseSelector: false, visible: true})
+  })
+
+  it("rejects when no visible test ID match is found", async () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+
+    driver.all = /** @type {any} */ (async () => [])
+
+    await expectAsync(driver.findFirstVisibleByTestID("missing", {timeout: 0}))
+      .toBeRejectedWithError(/Element couldn't be found after .* by CSS: \[data-testid="missing"\]/)
+  })
+
   it("escapes quotes in test IDs when scrolling a test ID into view", async () => {
     const element = {getId: async () => "webdriver-element-id"}
     const performSpy = jasmine.createSpy("perform").and.resolveTo(undefined)

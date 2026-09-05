@@ -501,6 +501,12 @@ These options are supported by `find`, `findByTestID`, and `all`. `click` also a
 await systemTest.click("[data-testid='signInButton']", {useBaseSelector: false, visible: true})
 ```
 
+`findByTestID` remains strict and rejects when more than one visible element has the same test ID. For UI transitions that intentionally retain duplicate test IDs, `findFirstVisibleByTestID(testID, {timeout, useBaseSelector})` waits for visible matches and returns the first one in driver order. Visibility is always required; other finder and interaction options are rejected.
+
+```js
+const activeScreen = await systemTest.findFirstVisibleByTestID("accountScreen", {timeout: 15000})
+```
+
 `interact` supports a selector object so you can pass finder options inline:
 
 ```js

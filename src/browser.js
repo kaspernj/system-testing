@@ -397,6 +397,16 @@ export default class Browser {
   }
 
   /**
+   * Finds the first visible element by test ID, allowing duplicate visible matches.
+   * @param {string} testID
+   * @param {import("./system-test.js").FirstVisibleTestIDArgs} [args]
+   * @returns {Promise<import("selenium-webdriver").WebElement>}
+   */
+  async findFirstVisibleByTestID(testID, args = {}) {
+    return await this.getDriverAdapter().findFirstVisibleByTestID(testID, args)
+  }
+
+  /**
    * Finds native Android visible text or an accessibility label.
    * @param {string} expectedText Text to locate.
    * @param {import("./system-test.js").FindArgs} [args] Optional lookup settings.

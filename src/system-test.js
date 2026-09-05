@@ -84,6 +84,11 @@ export function defaultClientWebSocketConnectTimeout({driver} = {}) {
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 /**
+ * @typedef {object} FirstVisibleTestIDArgs
+ * @property {number} [timeout] Override timeout for lookup.
+ * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
+ */
+/**
  * @typedef {FindArgs} InteractArgs
  */
 /**
@@ -621,6 +626,20 @@ export default class SystemTest extends Browser {
   async findByTestID(testID, args) {
     this.throwRegisteredBrowserError()
     const result = await this.getDriverAdapter().findByTestID(testID, args)
+    this.throwRegisteredBrowserError()
+
+    return result
+  }
+
+  /**
+   * Finds the first visible element by test ID, allowing duplicate visible matches.
+   * @param {string} testID
+   * @param {FirstVisibleTestIDArgs} [args]
+   * @returns {Promise<import("selenium-webdriver").WebElement>}
+   */
+  async findFirstVisibleByTestID(testID, args = {}) {
+    this.throwRegisteredBrowserError()
+    const result = await this.getDriverAdapter().findFirstVisibleByTestID(testID, args)
     this.throwRegisteredBrowserError()
 
     return result

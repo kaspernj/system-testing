@@ -725,6 +725,38 @@ describe("AppiumDriver", () => {
     expect(findSpy).toHaveBeenCalledWith("[data-test=\"name\\\"Input\"]", undefined)
   })
 
+  for (const {description, options, allMethod, expectedIdentifier} of [
+    {
+      description: "CSS with a custom attribute",
+      options: {testIdStrategy: "css", testIdAttribute: "data-test"},
+      allMethod: "all",
+      expectedIdentifier: "[data-test=\"name\\\\\\\"Input\"]"
+    },
+    {
+      description: "the default accessibility ID strategy",
+      options: {},
+      allMethod: "allByAccessibilityId",
+      expectedIdentifier: "name\\\"Input"
+    },
+    {
+      description: "the native ID strategy",
+      options: {testIdStrategy: "id"},
+      allMethod: "allById",
+      expectedIdentifier: "name\\\"Input"
+    }
+  ]) {
+    it(`returns the first visible test ID match through ${description}`, async () => {
+      const firstElement = {}
+      const driver = new AppiumDriver({browser: {}, options})
+      const allSpy = jasmine.createSpy(allMethod).and.resolveTo([firstElement, {}])
+
+      driver[allMethod] = /** @type {any} */ (allSpy)
+
+      expect(await driver.findFirstVisibleByTestID("name\\\"Input", {timeout: 123, useBaseSelector: false})).toBe(firstElement)
+      expect(allSpy).toHaveBeenCalledOnceWith(expectedIdentifier, {timeout: 123, useBaseSelector: false, visible: true})
+    })
+  }
+
   it("does not send a pageLoad timeout to native app sessions", async () => {
     const calls = []
     const driver = new AppiumDriver({browser: {throwIfHttpServerError: () => {}}, options: {capabilities: {platformName: "Android"}}})
