@@ -832,7 +832,8 @@ export default class SystemTest extends Browser {
   /**
    * Expects a notification message to appear, then dismisses all current notification messages.
    * @param {string} expectedNotificationMessage
-   * @param {Pick<NotificationMessageArgs, "timeout">} [args]
+   * @param {object} [args]
+   * @param {number} [args.timeout] Timeout for finding the expected notification before dismissing the current notification stack.
    * @returns {Promise<void>}
    */
   async expectAndDismissNotificationMessage(expectedNotificationMessage, args = {}) {
