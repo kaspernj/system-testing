@@ -43,6 +43,38 @@ describe("SystemTest notifications", () => {
     expect(waitForNoSelectorSpy).toHaveBeenCalledOnceWith("[data-testid='notification-message']", {useBaseSelector: false})
   })
 
+  it("expects a notification before dismissing the current notification stack", async () => {
+    const systemTest = createSystemTest()
+    const calls = []
+    const expectNotificationMessageSpy = jasmine.createSpy("expectNotificationMessage").and.callFake(async () => {
+      calls.push("expect")
+    })
+    const dismissNotificationMessagesSpy = jasmine.createSpy("dismissNotificationMessages").and.callFake(async () => {
+      calls.push("dismiss")
+    })
+
+    systemTest.expectNotificationMessage = /** @type {any} */ (expectNotificationMessageSpy)
+    systemTest.dismissNotificationMessages = /** @type {any} */ (dismissNotificationMessagesSpy)
+
+    await systemTest.expectAndDismissNotificationMessage("Expected notification", {timeout: 123})
+
+    expect(expectNotificationMessageSpy).toHaveBeenCalledOnceWith("Expected notification", {timeout: 123, dismiss: false})
+    expect(dismissNotificationMessagesSpy).toHaveBeenCalledTimes(1)
+    expect(calls).toEqual(["expect", "dismiss"])
+  })
+
+  it("does not dismiss notifications when the expected notification is missing", async () => {
+    const systemTest = createSystemTest()
+    const expectationError = new Error("Missing notification")
+    const dismissNotificationMessagesSpy = jasmine.createSpy("dismissNotificationMessages").and.resolveTo(undefined)
+
+    systemTest.expectNotificationMessage = /** @type {any} */ (jasmine.createSpy("expectNotificationMessage").and.rejectWith(expectationError))
+    systemTest.dismissNotificationMessages = /** @type {any} */ (dismissNotificationMessagesSpy)
+
+    await expectAsync(systemTest.expectAndDismissNotificationMessage("Expected notification")).toBeRejectedWith(expectationError)
+    expect(dismissNotificationMessagesSpy).not.toHaveBeenCalled()
+  })
+
   it("honors a bounded timeout while waiting for a missing notification", async () => {
     const systemTest = createSystemTest()
     const allSpy = jasmine.createSpy("all").and.resolveTo([])

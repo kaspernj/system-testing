@@ -829,6 +829,22 @@ export default class SystemTest extends Browser {
     }
   }
 
+  /**
+   * Expects a notification message to appear, then dismisses all current notification messages.
+   * @param {string} expectedNotificationMessage
+   * @param {object} [args]
+   * @param {number} [args.timeout] Timeout for finding the expected notification before dismissing the current notification stack.
+   * @returns {Promise<void>}
+   */
+  async expectAndDismissNotificationMessage(expectedNotificationMessage, args = {}) {
+    const unexpectedArgs = Object.keys(args).filter((arg) => arg !== "timeout")
+
+    if (unexpectedArgs.length > 0) throw new Error(`Unexpected args: ${unexpectedArgs.join(", ")}`)
+
+    await this.expectNotificationMessage(expectedNotificationMessage, {...args, dismiss: false})
+    await this.dismissNotificationMessages()
+  }
+
   /** @returns {Promise<void>} */
   async dismissNotificationMessages() {
     const notificationMessageElements = await this.all(NOTIFICATION_MESSAGE_SELECTOR, {timeout: 0, useBaseSelector: false})
