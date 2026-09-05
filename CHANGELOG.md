@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Add `findFirstVisibleByTestID` as an explicit escape hatch for transitions that retain duplicate visible test IDs.
 - Bound notification assertions with one configurable timeout across detection and dismissal.
 - Wait for bounded WebDriver cleanup before returning from notification disappearance assertions.
 - Make notification snapshots and bulk dismissal use immediate lookups and the current `data-testid` selector.

@@ -12,6 +12,12 @@ import {WebSocketServer} from "ws"
 import Browser from "./browser.js"
 import {isAppiumNativeAppDriverConfig} from "./drivers/appium-driver.js"
 
+/**
+ * @typedef {object} FirstVisibleTestIDArgs
+ * @property {number} [timeout] Override timeout for lookup.
+ * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
+ */
+
 const CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 30000
 const CLIENT_WEBSOCKET_SERVER_LISTEN_TIMEOUT_MS = 15000
 const DEFAULT_INITIAL_ROOT_VISIT_TIMEOUT_MS = 60000
@@ -621,6 +627,20 @@ export default class SystemTest extends Browser {
   async findByTestID(testID, args) {
     this.throwRegisteredBrowserError()
     const result = await this.getDriverAdapter().findByTestID(testID, args)
+    this.throwRegisteredBrowserError()
+
+    return result
+  }
+
+  /**
+   * Finds the first visible element by test ID, allowing duplicate visible matches.
+   * @param {string} testID
+   * @param {FirstVisibleTestIDArgs} [args]
+   * @returns {Promise<import("selenium-webdriver").WebElement>}
+   */
+  async findFirstVisibleByTestID(testID, args = {}) {
+    this.throwRegisteredBrowserError()
+    const result = await this.getDriverAdapter().findFirstVisibleByTestID(testID, args)
     this.throwRegisteredBrowserError()
 
     return result

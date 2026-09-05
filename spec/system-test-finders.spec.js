@@ -98,6 +98,56 @@ describeIfWeb("SystemTest finders", () => {
     })
   })
 
+  it("returns the first visible duplicate after skipping a hidden ancestor and waiting for reveal", async () => {
+    await SystemTest.run(async (runningSystemTest) => {
+      const driver = runningSystemTest.getDriver()
+
+      try {
+        await driver.executeScript(`
+          const base = document.querySelector(arguments[0])
+          const container = document.createElement("div")
+          const hiddenAncestor = document.createElement("div")
+          hiddenAncestor.style.display = "none"
+
+          for (const order of ["hidden", "first", "second"]) {
+            const element = document.createElement("div")
+            element.setAttribute("data-testid", "firstVisibleDuplicate")
+            element.setAttribute("data-order", order)
+            element.textContent = order
+
+            if (order === "hidden") {
+              hiddenAncestor.appendChild(element)
+            } else {
+              element.style.display = "none"
+              container.appendChild(element)
+            }
+          }
+
+          container.id = "system-test-first-visible-duplicate"
+          container.prepend(hiddenAncestor)
+          base.appendChild(container)
+
+          setTimeout(() => {
+            for (const element of container.querySelectorAll(":scope > [data-testid='firstVisibleDuplicate']")) {
+              element.style.display = "block"
+            }
+          }, 200)
+        `, runningSystemTest.getBaseSelector())
+
+        const element = await runningSystemTest.findFirstVisibleByTestID("firstVisibleDuplicate", {timeout: 2000})
+
+        expect(await element.getAttribute("data-order")).toEqual("first")
+        await expectAsync(runningSystemTest.findByTestID("firstVisibleDuplicate", {timeout: 0}))
+          .toBeRejectedWithError(/More than 1 elements \(2\) was found by CSS/)
+      } finally {
+        await driver.executeScript(`
+          const container = document.getElementById("system-test-first-visible-duplicate")
+          if (container) container.remove()
+        `)
+      }
+    })
+  })
+
   it("retries all when findElements raises a stale element reference error", async () => {
     await SystemTest.run(async (runningSystemTest) => {
       const driver = runningSystemTest.getDriver()

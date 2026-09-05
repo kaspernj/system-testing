@@ -152,6 +152,17 @@ describe("Browser", () => {
     ])
   })
 
+  it("finds the first visible test ID through the driver adapter", async () => {
+    const browser = new Browser()
+    const element = {}
+    const findFirstVisibleByTestIDSpy = jasmine.createSpy("findFirstVisibleByTestID").and.resolveTo(element)
+
+    browser.driverAdapter = /** @type {any} */ ({findFirstVisibleByTestID: findFirstVisibleByTestIDSpy})
+
+    expect(await browser.findFirstVisibleByTestID("target", {timeout: 123, useBaseSelector: false})).toBe(element)
+    expect(findFirstVisibleByTestIDSpy).toHaveBeenCalledOnceWith("target", {timeout: 123, useBaseSelector: false})
+  })
+
   it("rejects CSS color substring matches by test id", async () => {
     const browser = new Browser()
 
