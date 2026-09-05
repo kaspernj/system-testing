@@ -4,6 +4,12 @@ import {wait, waitFor} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
 import {testIdSelector} from "../test-id-selector.js"
 
+/**
+ * @typedef {object} FirstVisibleTestIDArgs
+ * @property {number} [timeout] Override timeout for lookup.
+ * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
+ */
+
 // Bounds page navigation so a stalled load fails fast instead of waiting Selenium's
 // default 300s (longer than the system-test startup budget, which would otherwise
 // surface as an opaque suite timeout).
@@ -95,11 +101,6 @@ function shouldIgnoreBrowserLogEntry(entry, message) {
  * @property {number} [humanSteps] Number of intermediate pointer moves before the final click target.
  * @property {boolean} [scrollTo] Whether to scroll found elements into view before returning them.
  * @property {string[]} [scrollContainerTestIDs] Native test IDs that should be tried as scroll containers before falling back to viewport gestures.
- * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
- */
-/**
- * @typedef {object} FirstVisibleTestIDArgs
- * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 /**

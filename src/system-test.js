@@ -12,6 +12,12 @@ import {WebSocketServer} from "ws"
 import Browser from "./browser.js"
 import {isAppiumNativeAppDriverConfig} from "./drivers/appium-driver.js"
 
+/**
+ * @typedef {object} FirstVisibleTestIDArgs
+ * @property {number} [timeout] Override timeout for lookup.
+ * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
+ */
+
 const CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 30000
 const CLIENT_WEBSOCKET_SERVER_LISTEN_TIMEOUT_MS = 15000
 const DEFAULT_INITIAL_ROOT_VISIT_TIMEOUT_MS = 60000
@@ -81,11 +87,6 @@ export function defaultClientWebSocketConnectTimeout({driver} = {}) {
  * @property {number} [humanSteps] Number of intermediate pointer moves before the final click target.
  * @property {boolean} [scrollTo] Whether to scroll found elements into view before returning them.
  * @property {string[]} [scrollContainerTestIDs] Native test IDs that should be tried as scroll containers before falling back to viewport gestures.
- * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
- */
-/**
- * @typedef {object} FirstVisibleTestIDArgs
- * @property {number} [timeout] Override timeout for lookup.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
 /**

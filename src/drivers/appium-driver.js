@@ -8,6 +8,12 @@ import timeout from "awaitery/build/timeout.js"
 import WebDriverDriver from "./webdriver-driver.js"
 import {testIdSelector} from "../test-id-selector.js"
 
+/**
+ * @typedef {object} FirstVisibleTestIDArgs
+ * @property {number} [timeout] Override timeout for lookup.
+ * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
+ */
+
 const MAX_NATIVE_VIEWPORT_SCROLL_STEPS = 8
 const DEFAULT_NATIVE_NEW_COMMAND_TIMEOUT_SECONDS = 180
 
@@ -279,12 +285,6 @@ export function isAppiumNativeAppDriverConfig(driverConfig) {
  * @property {string[]} [scrollContainerTestIDs] Native test IDs that should be tried as scroll containers before falling back to viewport gestures.
  * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
  */
-/**
- * @typedef {object} FirstVisibleTestIDArgs
- * @property {number} [timeout] Override timeout for lookup.
- * @property {boolean} [useBaseSelector] Whether to scope by the base selector.
- */
-
 /**
  * Appium driver backed by the Appium server package.
  */
