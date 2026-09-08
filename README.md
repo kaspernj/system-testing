@@ -529,6 +529,23 @@ Failed notification operations emit `[WebDriver operation]` JSON metadata: a loc
 
 Web startup root/component lookups use the same command ownership and diagnostics (`startup-root` and `startup-component`) with their existing finder and cleanup budgets. A successful lookup followed by terminal implicit-timeout restoration fails before startup advances. Both web and native startup preserve a lookup failure if its screenshot also fails: the resulting `AggregateError.cause` and first `errors` entry hold the original lookup error, and the second entry holds the screenshot error. A successful screenshot leaves the original error unchanged.
 
+### Default-checks startup evidence
+
+The repository's Default checks enable `SYSTEM_TEST_STARTUP_DIAGNOSTICS=true` in their existing runner. The shared Jasmine helper observes Selenium startup through its normal success/failure and failed-start cleanup. Appium and ordinary consumers do not enable this collection. For one focused local acquisition, use the normal dist/Selenium prerequisites and add the same environment variable to the selected Jasmine command.
+
+The helper writes `spec/dummy/tmp/startup-diagnostics/selenium.json`, included in CI artifacts. On failure it also prints a bounded `[Selenium startup diagnostics]` JSON snapshot **before cleanup**, then a second snapshot after cleanup completes or fails. Thus a stuck quit cannot erase the initial evidence. Successful startup writes the artifact without printing diagnostic events. Artifact-write failures are reported separately; they do not replace the originating startup/cleanup errors or their stacks/causes.
+
+Interpret the observations together:
+
+- `webdriver-request` means Selenium constructed an HTTP request; it does not prove socket delivery or receipt by the driver. `webdriver-response` records its HTTP status and local request sequence.
+- `driver-command` and `driver-response` come from the managed ChromeDriver's INFO command headers. They supply independent receipt/settlement evidence. `processSequence` correlates these with that service's spawn/exit; runtime `--version` probes are excluded. A response may classify a crash, disconnect or driver error without retaining its message payload.
+- `app-request` and `app-response` record delivery/completion and HTTP status for the owned dist server, using resource categories instead of URLs. A request with no completion remains in the bounded pending observations.
+- Runtime capabilities supply browser/driver versions and page-load strategy without extra WebDriver commands. Node and installed dependency versions, plus SHA-256 hashes of the exported index/blank documents and JavaScript, identify the local artifacts actually used.
+
+Collection retains at most 128 recent events, 32 pending observations, eight process candidates and 512 characters of a driver-line prefix while parsing. Only allowlisted fields are persisted: no session/element IDs, argv, request/response bodies, scripts, cookies, capability payloads or URLs. Provenance hashes at most eight JavaScript files plus the two documents, each at most 8 MiB; larger/missing inputs are reported as truncated/unavailable. `dropped` denotes incomplete event coverage, so missing receipt evidence alone is not proof of a command never reaching ChromeDriver.
+
+The collector uses Selenium's public logger/service builder and Node's documented diagnostics channels and process streams; it does not replace dependency methods. The active startup collector configures only its managed service's INFO output into consumed pipes. On startup completion, logger settings are restored, observers are removed, and the pipes remain drained without parsing or retention until normal owner teardown. Pipes add no event-loop ownership. Collection never queries a poisoned session, changes a deadline, retries a command, restarts a browser or changes teardown ownership. This is diagnostic hardening, **not a demonstrated fix for the CI startup stall or the original TensorBuzz notification stall**.
+
 ```js
 await systemTest.expectNotificationMessage("You were signed in.", {timeout: 1000})
 ```

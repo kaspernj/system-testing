@@ -8,6 +8,9 @@ describe("SystemTestHelper failed beforeAll cleanup", () => {
     const state = globalThis.__systemTestHelperState
     const originalState = {...state}
     const originalJasmineTimeout = jasmine.DEFAULT_TIMEOUT_INTERVAL
+    const originalStartupDiagnostics = process.env.SYSTEM_TEST_STARTUP_DIAGNOSTICS
+    // This fake lifecycle must not overwrite the real global-beforeAll artifact.
+    process.env.SYSTEM_TEST_STARTUP_DIAGNOSTICS = "false"
     state.started = false
     state.refCount = 0
     state.systemTest = undefined
@@ -45,6 +48,8 @@ describe("SystemTestHelper failed beforeAll cleanup", () => {
       jasmine.clock().uninstall()
       jasmine.DEFAULT_TIMEOUT_INTERVAL = originalJasmineTimeout
       Object.assign(state, originalState)
+      if (originalStartupDiagnostics === undefined) delete process.env.SYSTEM_TEST_STARTUP_DIAGNOSTICS
+      else process.env.SYSTEM_TEST_STARTUP_DIAGNOSTICS = originalStartupDiagnostics
     }
   })
 })
