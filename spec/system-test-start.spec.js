@@ -1,6 +1,7 @@
 // @ts-check
 
 import SystemTest from "../src/system-test.js"
+import {Session, WebDriver} from "selenium-webdriver"
 
 /** @returns {{promise: Promise<void>, reject: (error: Error) => void, resolve: () => void}} */
 function createDeferred() {
@@ -56,6 +57,100 @@ describe("SystemTest.start", () => {
       this.serverWebSocket = undefined
       this.server = undefined
     })
+  })
+
+  it("preserves the web startup lookup error when implicit restoration and its screenshot fail", async () => {
+    const originalHost = process.env.SYSTEM_TEST_HOST
+    process.env.SYSTEM_TEST_HOST = "expo-dev-server"
+    const systemTest = new SystemTest()
+    const adapter = systemTest.getDriverAdapter()
+    const lookupError = new Error("root renderer query rejected")
+    const restoring = createDeferred()
+    const restoration = createDeferred()
+    const commands = []
+    const diagnostics = spyOn(console, "error")
+    let timeoutChanges = 0
+    adapter.setWebDriver(new WebDriver(new Session("private-startup-session", {}), {
+      execute: async (command) => {
+        commands.push(command.getName())
+        if (command.getName() === "findElements") throw lookupError
+        if (command.getName() === "setTimeout" && ++timeoutChanges === 3) {
+          restoring.resolve()
+          await restoration.promise
+        }
+        return null
+      }
+    }))
+    spyOn(adapter, "start").and.resolveTo(undefined)
+    spyOn(systemTest, "startWebSocketServer").and.resolveTo(undefined)
+    spyOn(systemTest, "visitInitialRootPath").and.resolveTo(undefined)
+    spyOn(systemTest, "waitForClientWebSocket").and.resolveTo(undefined)
+    spyOn(systemTest, "reinitialize").and.resolveTo(undefined)
+    jasmine.clock().install()
+    jasmine.clock().mockDate(new Date(1000))
+    try {
+      const startup = systemTest.start().catch((error) => error)
+      await restoring.promise
+      jasmine.clock().tick(1000)
+      const failure = await startup
+      expect(failure).toEqual(jasmine.any(AggregateError))
+      expect(failure.cause?.cause?.cause).toBe(lookupError)
+      expect(failure.errors?.[0]).toBe(failure.cause)
+      expect(failure.errors?.[1].cause).toEqual(jasmine.objectContaining({
+        message: "timeout while restoring the implicit wait timeout",
+        terminalResource: {scope: "run", name: "webdriver-session"}
+      }))
+      expect(adapter.isSessionUnusable()).toBeTrue()
+      expect(systemTest.isStarted()).toBeFalse()
+      expect(systemTest.reinitialize).not.toHaveBeenCalled()
+      expect(systemTest.waitForClientWebSocket).not.toHaveBeenCalled()
+      const evidence = diagnostics.calls.allArgs().filter(([label]) => label === "[WebDriver operation]")
+      expect(evidence.length).toBe(2)
+      if (evidence.length) {
+        expect(JSON.parse(evidence[0][1])).toEqual(jasmine.objectContaining({
+          operation: "startup-root:implicit-timeout-restoration", pendingCount: 1,
+          commands: [jasmine.objectContaining({name: "setTimeout", status: "pending"})]
+        }))
+        expect(JSON.parse(evidence[1][1])).toEqual(jasmine.objectContaining({
+          operation: "startup-root", pendingCount: 0,
+          commands: jasmine.arrayContaining([jasmine.objectContaining({name: "findElements", status: "rejected"})])
+        }))
+      }
+      const commandsAtFailure = commands.slice()
+      restoration.resolve()
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(commands).toEqual(commandsAtFailure)
+      const lastEvidence = diagnostics.calls.mostRecent()
+      if (lastEvidence) expect(JSON.parse(lastEvidence.args[1]).phase).toBe("late-settlement")
+      expect(JSON.stringify(diagnostics.calls.allArgs())).not.toContain("private-startup-session")
+    } finally {
+      restoration.resolve()
+      jasmine.clock().uninstall()
+      if (originalHost === undefined) delete process.env.SYSTEM_TEST_HOST
+      else process.env.SYSTEM_TEST_HOST = originalHost
+    }
+  })
+
+  it("preserves the native startup error and a secondary screenshot error", async () => {
+    const {systemTest} = createSystemTest(jasmine.createSpy("start").and.resolveTo(undefined))
+    const lookupError = new Error("native lookup failed", {cause: new Error("native query rejected")})
+    const screenshotError = new Error("native screenshot failed")
+    systemTest.findByTestID.and.rejectWith(lookupError)
+    spyOn(systemTest, "takeScreenshot").and.rejectWith(screenshotError)
+    const failure = await systemTest.start().catch((error) => error)
+    expect(failure).toEqual(jasmine.any(AggregateError))
+    expect(failure.cause).toBe(lookupError)
+    expect(failure.errors).toEqual([lookupError, screenshotError])
+    expect(systemTest.isStarted()).toBeFalse()
+    expect(systemTest.waitForClientWebSocket).not.toHaveBeenCalled()
+  })
+
+  it("retains the startup error unchanged when its screenshot succeeds", async () => {
+    const {systemTest} = createSystemTest(jasmine.createSpy("start").and.resolveTo(undefined))
+    const lookupError = new Error("native lookup failed")
+    systemTest.findByTestID.and.rejectWith(lookupError)
+    spyOn(systemTest, "takeScreenshot").and.resolveTo(undefined)
+    await expectAsync(systemTest.start()).toBeRejectedWith(lookupError)
   })
 
   it("shares one pending driver startup between overlapping callers", async () => {

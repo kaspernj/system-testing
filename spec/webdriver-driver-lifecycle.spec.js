@@ -403,4 +403,21 @@ describe("WebDriverDriver lifecycle", () => {
 
     expect(calls).toEqual([{implicit: 10000, pageLoad: 60000}])
   })
+  it("quits a failed session only once across concurrent and repeated stop calls", async () => {
+    const {driver} = newDriver()
+    let rejectQuit
+    const quitPromise = new Promise((resolve, reject) => { rejectQuit = reject })
+    const quit = jasmine.createSpy("quit").and.returnValue(quitPromise)
+    driver.setWebDriver(/** @type {any} */ ({quit}))
+    const first = driver.stop().catch((error) => error)
+    const second = driver.stop().catch((error) => error)
+    const failure = new Error("quit failed")
+    rejectQuit(failure)
+    expect(await first).toBe(failure)
+    expect(await second).toBe(failure)
+    expect(await driver.stop().catch((error) => error)).toBe(failure)
+    expect(quit).toHaveBeenCalledTimes(1)
+    expect(driver.webDriver).toBeUndefined()
+  })
+
 })

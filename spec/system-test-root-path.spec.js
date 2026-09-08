@@ -105,6 +105,8 @@ describe("SystemTest root path", () => {
       setBaseUrl: jasmine.createSpy("setBaseUrl"),
       setTimeouts: jasmine.createSpy("setTimeouts").and.resolveTo(undefined),
       start: jasmine.createSpy("start").and.resolveTo(undefined),
+      runCommandOperation: jasmine.createSpy("runCommandOperation").and.callFake(async (_args, callback) => await callback()),
+      takeScreenshot: jasmine.createSpy("takeScreenshot").and.rejectWith(new Error("Unexpected screenshot during successful startup")),
       withPageLoadTimeout: jasmine.createSpy("withPageLoadTimeout").and.callFake(async (_pageLoadTimeoutMs, callback) => await callback())
     }
     const visitAttempts = []
@@ -146,6 +148,8 @@ describe("SystemTest root path", () => {
       setBaseUrl: jasmine.createSpy("setBaseUrl"),
       setTimeouts: jasmine.createSpy("setTimeouts").and.resolveTo(undefined),
       start: jasmine.createSpy("start").and.resolveTo(undefined),
+      runCommandOperation: jasmine.createSpy("runCommandOperation").and.callFake(async (_args, callback) => await callback()),
+      takeScreenshot: jasmine.createSpy("takeScreenshot").and.rejectWith(new Error("Unexpected screenshot during successful startup")),
       withPageLoadTimeout: jasmine.createSpy("withPageLoadTimeout").and.callFake(async (_pageLoadTimeoutMs, callback) => await callback())
     }
     const visitAttempts = []
@@ -189,6 +193,8 @@ describe("SystemTest root path", () => {
       setBaseUrl: jasmine.createSpy("setBaseUrl"),
       setTimeouts: jasmine.createSpy("setTimeouts").and.resolveTo(undefined),
       start: jasmine.createSpy("start").and.resolveTo(undefined),
+      runCommandOperation: jasmine.createSpy("runCommandOperation").and.callFake(async (_args, callback) => await callback()),
+      takeScreenshot: jasmine.createSpy("takeScreenshot").and.rejectWith(new Error("Unexpected screenshot during successful startup")),
       withPageLoadTimeout: jasmine.createSpy("withPageLoadTimeout").and.callFake(async (_pageLoadTimeoutMs, callback) => await callback())
     }
     const onWarning = jasmine.createSpy("onWarning")

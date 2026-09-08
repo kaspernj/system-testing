@@ -3,6 +3,7 @@ import timeout from "awaitery/build/timeout.js"
 import chrome from "selenium-webdriver/chrome.js"
 import {resolveChromeRuntime} from "../chrome-runtime-manager.js"
 import WebDriverDriver from "./webdriver-driver.js"
+import SeleniumStartupDiagnostics from "./selenium-startup-diagnostics.js"
 
 const DEFAULT_DRIVER_START_TIMEOUT_MS = 60000
 
@@ -72,7 +73,9 @@ export default class SeleniumDriver extends WebDriverDriver {
     const chromedriverPath = chromeRuntime?.chromedriverPath ?? this.options.chromedriverPath ?? process.env.SYSTEM_TEST_CHROMEDRIVER_PATH
 
     if (chromedriverPath) {
-      builder.setChromeService(new chrome.ServiceBuilder(chromedriverPath))
+      const service = new chrome.ServiceBuilder(chromedriverPath)
+      if (SeleniumStartupDiagnostics.current) SeleniumStartupDiagnostics.current.configureService(service, chromedriverPath)
+      builder.setChromeService(service)
     }
 
     const loggingPrefs = this.options.loggingPrefs ?? {browser: "ALL"}

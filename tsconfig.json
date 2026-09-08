@@ -5,7 +5,7 @@
     "declaration": true,
     "inlineSourceMap": true,
     "inlineSources": true,
-    "lib": ["dom", "ES2020"],
+    "lib": ["dom", "ES2022"],
     "moduleResolution": "nodenext",
     "module": "nodenext",
     "outDir": "build",

@@ -519,7 +519,32 @@ For clicks, prefer `click(selector, options)`. `interact(selector, "click", opti
 
 `expectNotificationMessage(message, {timeout, dismiss})` polls visible `[data-testid='notification-message']` elements without applying the global finder wait to every poll. `timeout` is one positive total budget for finding the message and, when `dismiss` is enabled, waiting for that specific notification to disappear. Bounded WebDriver cleanup may finish after that budget before the assertion returns. The timeout defaults to 5000 ms and rejects non-positive values. `dismiss` defaults to `true`.
 
-If a non-cancellable WebDriver dismissal command exceeds that budget, the current session is marked unusable so later commands, including operations on retained element handles, cannot race the pending click. The default `SystemTest.run(...)` failure lifecycle reinitializes that session.
+Notification detection, dismissal and disappearance own their WebDriver commands through that deadline. Commands already sent to Selenium are observed through settlement; a timer does not cancel them. After ownership expires, retained elements cannot issue another command. An outstanding command when the operation times out or fails marks the session unusable; a settled sequence that cumulatively crosses the deadline, or an idle poll waiting for a missing/wrong message, does not by itself make the session terminal. Disappearance retains the finder's existing bounded cleanup/outcome ownership while guarding subsequent commands.
+
+Dispatch checks the deadline again after preparing command metadata. Rejected commands that never reach the executor do not appear as pending wire work. Implicit-wait restoration has a separate, fixed cleanup owner using its existing one-second bound; it can finish after the application deadline only when no application command remains pending and the same session/change still owns restoration. The operation awaits this cleanup while rejecting subsequent application commands. Failed restoration makes the session terminal, including a settled refusal; an outgoing lookup error retains its identity, stack and cause and also receives the terminal marker. Cleanup diagnostics use the `:implicit-timeout-restoration` operation suffix and retain late settlement independently of the application operation.
+
+Terminal failures carry `error.terminalResource = {scope: "run", name: "webdriver-session"}`. `SystemTest.run(...)` preserves the original failure before artifact collection and never automatically reinitializes a terminal session. Screenshot and teardown failures are retained in an `AggregateError` whose `cause` is the original failure. Runners must recognize this marker recursively through `cause` and `AggregateError.errors`, stop retries and later callbacks, report remaining cases as not run, perform cleanup once, and return an unsuccessful run. Older runners that ignore the marker must be upgraded together with this lifecycle change; the package does not depend on a particular runner.
+
+Failed notification operations emit `[WebDriver operation]` JSON metadata: a local random session correlation (not the Selenium session id), operation name, bounded origin stack, deadline, pending command sequences, and the latest 32 command issue/settlement records. Late settlements emit another record without issuing new browser work. Command parameters, scripts, results, URLs and notification text are excluded. This evidence distinguishes pending work from a cumulative deadline crossing; it does not establish why ChromeDriver stalled. Primary errors and their full stacks/causes remain available separately.
+
+Web startup root/component lookups use the same command ownership and diagnostics (`startup-root` and `startup-component`) with their existing finder and cleanup budgets. A successful lookup followed by terminal implicit-timeout restoration fails before startup advances. Both web and native startup preserve a lookup failure if its screenshot also fails: the resulting `AggregateError.cause` and first `errors` entry hold the original lookup error, and the second entry holds the screenshot error. A successful screenshot leaves the original error unchanged.
+
+### Default-checks startup evidence
+
+The repository's Default checks enable `SYSTEM_TEST_STARTUP_DIAGNOSTICS=true` in their existing runner. The shared Jasmine helper observes Selenium startup through its normal success/failure and failed-start cleanup. Appium and ordinary consumers do not enable this collection. For one focused local acquisition, use the normal dist/Selenium prerequisites and add the same environment variable to the selected Jasmine command.
+
+The helper writes `spec/dummy/tmp/startup-diagnostics/selenium.json`, included in CI artifacts. On failure it also prints a bounded `[Selenium startup diagnostics]` JSON snapshot **before cleanup**, then a second snapshot after cleanup completes or fails. Thus a stuck quit cannot erase the initial evidence. Successful startup writes the artifact without printing diagnostic events. Artifact-write failures are reported separately; they do not replace the originating startup/cleanup errors or their stacks/causes.
+
+Interpret the observations together:
+
+- `webdriver-request` means Selenium constructed an HTTP request; it does not prove socket delivery or receipt by the driver. `webdriver-response` records its HTTP status and local request sequence.
+- `driver-command` and `driver-response` come from the managed ChromeDriver's INFO command headers. They supply independent receipt/settlement evidence. `processSequence` correlates these with that service's spawn/exit; runtime `--version` probes are excluded. A response may classify a crash, disconnect or driver error without retaining its message payload.
+- `app-request` and `app-response` record delivery/completion and HTTP status for the owned dist server, using resource categories instead of URLs. A request with no completion remains in the bounded pending observations.
+- Runtime capabilities supply browser/driver versions and page-load strategy without extra WebDriver commands. Node and installed dependency versions, plus SHA-256 hashes of the exported index/blank documents and JavaScript, identify the local artifacts actually used.
+
+Collection retains at most 128 recent events, 32 pending observations, eight process candidates and 512 characters of a driver-line prefix while parsing. Only allowlisted fields are persisted: no session/element IDs, argv, request/response bodies, scripts, cookies, capability payloads or URLs. Provenance hashes at most eight JavaScript files plus the two documents, each at most 8 MiB; larger/missing inputs are reported as truncated/unavailable. `dropped` denotes incomplete event coverage, so missing receipt evidence alone is not proof of a command never reaching ChromeDriver.
+
+The collector uses Selenium's public logger/service builder and Node's documented diagnostics channels and process streams; it does not replace dependency methods. The active startup collector configures only its managed service's INFO output into consumed pipes. On startup completion, logger settings are restored, observers are removed, and the pipes remain drained without parsing or retention until normal owner teardown. Pipes add no event-loop ownership. Collection never queries a poisoned session, changes a deadline, retries a command, restarts a browser or changes teardown ownership. This is diagnostic hardening, **not a demonstrated fix for the CI startup stall or the original TensorBuzz notification stall**.
 
 ```js
 await systemTest.expectNotificationMessage("You were signed in.", {timeout: 1000})
@@ -610,7 +635,7 @@ await systemTest.reinitialize()
 
 This tears down the browser, servers, and sockets, then starts them again so subsequent steps run against a fresh app instance.
 
-`SystemTest.run(...)` does this automatically after a failed callback or teardown by default. Disable it only for tests that intentionally inspect the broken session after failure:
+`SystemTest.run(...)` does this automatically after a failed callback or teardown by default, except when the driver session is terminal. Terminal sessions require the runner to end the affected run. Disable ordinary failure reinitialization for tests that intentionally inspect the broken session after failure:
 
 ```js
 await SystemTest.run({reinitializeAfterFailure: false}, async (systemTest) => {

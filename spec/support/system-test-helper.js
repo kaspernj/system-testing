@@ -1,9 +1,11 @@
 // @ts-check
 
 import wait from "awaitery/build/wait.js"
+import path from "node:path"
 
 import SystemTest, {defaultClientWebSocketConnectTimeout} from "../../src/system-test.js"
 import DummyHttpServerEnvironment from "./dummy-http-server.js"
+import SeleniumStartupDiagnostics from "../../src/drivers/selenium-startup-diagnostics.js"
 
 const MINIMUM_JASMINE_TIMEOUT_INTERVAL_MS = 60000
 const JASMINE_TIMEOUT_INTERVAL_HEADROOM_MS = 30000
@@ -119,8 +121,18 @@ export default class SystemTestHelper {
     }
 
     sharedState.started = true
+    let startupDiagnostics
+    if (process.env.SYSTEM_TEST_STARTUP_DIAGNOSTICS === "true" && process.env.SYSTEM_TEST_DRIVER !== "appium") {
+      startupDiagnostics = new SeleniumStartupDiagnostics({
+        directory: path.join(this.dummyHttpServerEnvironment.dummyAppRoot, "tmp/startup-diagnostics"),
+        appRoot: this.dummyHttpServerEnvironment.dummyAppRoot,
+        httpPort: integerEnv("SYSTEM_TEST_HTTP_PORT", 3602),
+        chromedriverPath: process.env.SYSTEM_TEST_CHROMEDRIVER_PATH
+      })
+    }
     this.debugLog("[system-test] beforeAll: starting dummy HTTP env")
     try {
+      if (startupDiagnostics) startupDiagnostics.start()
       await this.dummyHttpServerEnvironment.start()
       await wait(1000)
 
@@ -144,12 +156,22 @@ export default class SystemTestHelper {
       sharedState.systemTest = this.systemTest
       this.debugLog("[system-test] beforeAll: starting SystemTest")
       await this.systemTest.start()
+      if (startupDiagnostics) startupDiagnostics.snapshot("ready")
       this.debugLog("[system-test] beforeAll: SystemTest started")
     } catch (error) {
-      sharedState.started = false
-      sharedState.refCount = Math.max(0, sharedState.refCount - 1)
-      console.error("[system-test] beforeAll error", error)
-      throw error
+      let startupError = error
+      if (startupDiagnostics) startupDiagnostics.snapshot("startup-failed")
+      try {
+        await this.stop()
+        if (startupDiagnostics) startupDiagnostics.snapshot("cleanup-completed")
+      } catch (cleanupError) {
+        if (startupDiagnostics) startupDiagnostics.snapshot("cleanup-failed")
+        startupError = new AggregateError([error, cleanupError], "System test startup and cleanup failed", {cause: error})
+      }
+      console.error("[system-test] beforeAll error", startupError)
+      throw startupError
+    } finally {
+      if (startupDiagnostics) startupDiagnostics.dispose()
     }
   }
 
@@ -160,16 +182,27 @@ export default class SystemTestHelper {
     if (sharedState.refCount > 0) return
 
     this.debugLog("[system-test] afterAll: stopping SystemTest and dummy HTTP env")
+    const errors = []
     try {
       await this.systemTest?.stop()
+    } catch (error) {
+      errors.push(error)
+    }
+    try {
       await this.dummyHttpServerEnvironment.stop()
-      this.debugLog("[system-test] afterAll: teardown complete")
+    } catch (error) {
+      errors.push(error)
+    } finally {
       sharedState.started = false
       sharedState.systemTest = undefined
-    } catch (error) {
-      console.error("[system-test] afterAll error", error)
-      throw error
+      this.systemTest = undefined
     }
+    if (errors.length) {
+      const cleanupError = errors.length === 1 ? errors[0] : new AggregateError(errors, "System test cleanup failed", {cause: errors[0]})
+      console.error("[system-test] afterAll error", cleanupError)
+      throw cleanupError
+    }
+    this.debugLog("[system-test] afterAll: teardown complete")
   }
 
   /** @returns {SystemTest} */

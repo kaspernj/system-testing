@@ -31,6 +31,7 @@ function createSystemTestRunDouble() {
     dismissTo: jasmine.createSpy("dismissTo").and.resolveTo(undefined),
     driverVisit: jasmine.createSpy("driverVisit").and.resolveTo(undefined),
     findByTestID: jasmine.createSpy("findByTestID").and.resolveTo(undefined),
+    getDriverAdapter: () => ({isSessionUnusable: () => false}),
     getCommandTimeout: jasmine.createSpy("getCommandTimeout").and.callFake((timeout) => timeout ?? 500),
     getCommunicator: jasmine.createSpy("getCommunicator").and.returnValue(communicator),
     getRootPath: jasmine.createSpy("getRootPath").and.returnValue("/blank?systemTest=true"),
@@ -228,4 +229,29 @@ describe("SystemTest.run", () => {
     expect(systemTest._failOnBrowserError).toBeTrue()
     expect(systemTest._failOnConsoleError).toBeFalse()
   })
+  it("preserves the callback and secondary artifact/teardown errors without restarting a terminal session", async () => {
+    const {communicator, systemTest} = createSystemTestRunDouble()
+    spyOn(SystemTest.prototype, "startScoundrel")
+    const adapter = new SystemTest().getDriverAdapter()
+    systemTest.getDriverAdapter = () => adapter
+    spyOn(SystemTest, "current").and.returnValue(/** @type {SystemTest} */ (systemTest))
+    const cause = new Error("pending command")
+    const primary = new Error("notification deadline", {cause})
+    const screenshot = new Error("screenshot rejected", {cause: primary})
+    const teardown = new Error("teardown rejected")
+    systemTest.takeScreenshot.and.rejectWith(screenshot)
+    communicator.sendCommand.and.callFake(async ({type}) => {
+      if (type === "teardown") throw teardown
+    })
+    const failure = await SystemTest.run(async () => {
+      adapter.markSessionUnusable(primary)
+      throw primary
+    }).catch((error) => error)
+
+    expect(failure.cause).toBe(primary)
+    expect(failure.errors).toEqual([primary, screenshot, teardown])
+    expect(systemTest.reinitialize).not.toHaveBeenCalled()
+    expect(communicator.sendCommand.calls.allArgs().filter(([command]) => command.type === "teardown").length).toBe(1)
+  })
+
 })

@@ -1,10 +1,15 @@
 // @ts-check
 
+import {Session, WebDriver} from "selenium-webdriver"
+import WebDriverDriver from "../src/drivers/webdriver-driver.js"
 import SystemTest from "../src/system-test.js"
 
 /** @returns {SystemTest} */
 function createSystemTest() {
-  return Object.create(SystemTest.prototype)
+  const systemTest = Object.create(SystemTest.prototype)
+  systemTest.driverAdapter = new WebDriverDriver({browser: systemTest})
+  systemTest.driverAdapter.setWebDriver(new WebDriver(new Session("notification-test", {}), {execute: async () => null}))
+  return systemTest
 }
 
 describe("SystemTest notifications", () => {
@@ -113,6 +118,7 @@ describe("SystemTest notifications", () => {
   it("uses the remaining assertion timeout while waiting for a dismissed notification to disappear", async () => {
     const systemTest = createSystemTest()
     const notification = {
+      getId: async () => "notification",
       getAttribute: async () => "3",
       getText: async () => "Expected notification"
     }
@@ -137,17 +143,18 @@ describe("SystemTest notifications", () => {
     expect(waitArgs.timeout).toBeLessThan(100)
   })
 
-  it("includes the dismissal click in the total timeout", async () => {
+  it("bounds a pending dismissal callback without claiming a pending wire command", async () => {
     const systemTest = createSystemTest()
     const markSessionUnusableSpy = jasmine.createSpy("markSessionUnusable")
     const notification = {
+      getId: async () => "notification",
       getAttribute: async () => "4",
       getText: async () => "Expected notification"
     }
 
     systemTest.all = /** @type {any} */ (async () => [notification])
     systemTest.getDriver = /** @type {any} */ (() => ({executeScript: async () => "Expected notification"}))
-    systemTest.getDriverAdapter = /** @type {any} */ (() => ({markSessionUnusable: markSessionUnusableSpy}))
+    spyOn(systemTest.getDriverAdapter(), "markSessionUnusable").and.callFake(markSessionUnusableSpy)
     systemTest.interact = /** @type {any} */ (async () => await new Promise(() => {}))
 
     const result = await Promise.race([
@@ -157,10 +164,10 @@ describe("SystemTest notifications", () => {
 
     expect(result).toEqual(jasmine.any(Error))
     expect(/** @type {Error} */ (result).message).toContain("timeout while dismissing notification: Expected notification")
-    expect(markSessionUnusableSpy).toHaveBeenCalledOnceWith(result)
+    expect(markSessionUnusableSpy).not.toHaveBeenCalled()
   })
 
-  it("enforces the total timeout when notification detection does not settle", async () => {
+  it("bounds a pending enumeration callback without claiming a pending wire command", async () => {
     const systemTest = createSystemTest()
     const markSessionUnusableSpy = jasmine.createSpy("markSessionUnusable")
     let lookupCount = 0
@@ -172,7 +179,7 @@ describe("SystemTest notifications", () => {
 
       return await new Promise(() => {})
     })
-    systemTest.getDriverAdapter = /** @type {any} */ (() => ({markSessionUnusable: markSessionUnusableSpy}))
+    spyOn(systemTest.getDriverAdapter(), "markSessionUnusable").and.callFake(markSessionUnusableSpy)
 
     const result = await Promise.race([
       systemTest.expectNotificationMessage("Expected notification", {dismiss: false, timeout: 80}).catch((error) => error),
@@ -181,12 +188,13 @@ describe("SystemTest notifications", () => {
 
     expect(result).toEqual(jasmine.any(Error))
     expect(/** @type {Error} */ (result).message).toContain("timeout while finding notification: Expected notification")
-    expect(markSessionUnusableSpy).toHaveBeenCalledOnceWith(result)
+    expect(markSessionUnusableSpy).not.toHaveBeenCalled()
   })
 
   it("waits for disappearance cleanup after the total timeout expires", async () => {
     const systemTest = createSystemTest()
     const notification = {
+      getId: async () => "notification",
       getAttribute: async () => "5",
       getText: async () => "Expected notification"
     }

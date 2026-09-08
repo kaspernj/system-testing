@@ -9,6 +9,7 @@ import {wait, waitFor} from "awaitery"
 import timeout from "awaitery/build/timeout.js"
 import {ensureError} from "typanic"
 import {WebSocketServer} from "ws"
+import {WebElement} from "selenium-webdriver"
 import Browser from "./browser.js"
 import {isAppiumNativeAppDriverConfig} from "./drivers/appium-driver.js"
 
@@ -271,6 +272,9 @@ export default class SystemTest extends Browser {
     let runError = undefined
     /** @type {unknown} */
     let teardownError = undefined
+    let runFailed = false
+    let teardownFailed = false
+    const secondaryErrors = []
 
     try {
       systemTest.debugLog("findByTestID blankText")
@@ -282,9 +286,13 @@ export default class SystemTest extends Browser {
       systemTest.debugLog("Run callback completed")
     } catch (error) {
       systemTest.debugLog(`Run error caught, taking screenshot: ${error instanceof Error ? error.message : error}`)
-      await systemTest.takeScreenshot()
-
+      runFailed = true
       runError = error
+      try {
+        await systemTest.takeScreenshot()
+      } catch (screenshotError) {
+        secondaryErrors.push(screenshotError)
+      }
     } finally {
       systemTest.debugLog("Run finished - send teardown")
       const teardownWs = systemTest.getCommunicator().ws
@@ -301,6 +309,7 @@ export default class SystemTest extends Browser {
             await systemTest.getCommunicator().sendCommand({type: "teardown"})
           })
         } catch (error) {
+          teardownFailed = true
           teardownError = error
         }
       }
@@ -309,37 +318,22 @@ export default class SystemTest extends Browser {
       systemTest.applyArgs({errorFilter: undefined, failOnBrowserError: true, failOnConsoleError: false})
     }
 
-    if (runError) {
-      if (teardownError) {
-        console.error("System test teardown failed after test failure", teardownError)
-      }
+    if (!runFailed && !teardownFailed) return
+    const primaryError = runFailed ? runError : teardownError
+    if (runFailed && teardownFailed) secondaryErrors.push(teardownError)
 
-      if (reinitializeAfterFailure) {
-        try {
-          systemTest.debugLog("Run failed - reinitialize SystemTest")
-          await systemTest.reinitialize()
-          systemTest.debugLog("Reinitialized SystemTest after failed run")
-        } catch (error) {
-          console.error("System test reinitialize failed after test failure", error)
-        }
+    if (reinitializeAfterFailure && !systemTest.getDriverAdapter().isSessionUnusable()) {
+      try {
+        await systemTest.reinitialize()
+      } catch (error) {
+        secondaryErrors.push(error)
       }
-
-      throw runError
     }
 
-    if (teardownError) {
-      if (reinitializeAfterFailure) {
-        try {
-          systemTest.debugLog("Teardown failed - reinitialize SystemTest")
-          await systemTest.reinitialize()
-          systemTest.debugLog("Reinitialized SystemTest after failed teardown")
-        } catch (error) {
-          console.error("System test reinitialize failed after teardown failure", error)
-        }
-      }
-
-      throw teardownError
+    if (secondaryErrors.length) {
+      throw new AggregateError([primaryError, ...secondaryErrors], "System test failed with secondary lifecycle errors", {cause: primaryError})
     }
+    throw primaryError
   }
 
   /**
@@ -788,34 +782,27 @@ export default class SystemTest extends Browser {
 
     const detectionErrorMessage = `timeout while finding notification: ${expectedNotificationMessage}`
     const detectionTimeout = getTimeLeft()
-    /** @type {unknown} */
     let lastDetectionError
-    let detectionPollPending = false
 
     if (detectionTimeout === 0) throw new Error(detectionErrorMessage)
 
     try {
-      await timeout({timeout: detectionTimeout, errorMessage: detectionErrorMessage}, async () => {
+      await this.getDriverAdapter().runCommandOperation({name: "notification-detection", timeout: detectionTimeout, errorMessage: detectionErrorMessage}, async () => {
         await waitFor({timeout: detectionTimeout}, async () => {
-          detectionPollPending = true
+          // The executor also checks after Selenium resolves command parameters, so a
+          // retained element cannot issue work after its owning assertion has ended.
+          this.getDriver()
           lastDetectionError = undefined
-
           try {
             await findExpectedNotification()
           } catch (error) {
             lastDetectionError = error
             throw error
-          } finally {
-            detectionPollPending = false
           }
         })
       })
     } catch (error) {
-      if (error instanceof Error && error.message === detectionErrorMessage) {
-        if (detectionPollPending) this.getDriverAdapter().markSessionUnusable(error)
-        if (lastDetectionError) throw lastDetectionError
-      }
-
+      if (!this.getDriverAdapter().isSessionUnusable() && lastDetectionError) throw lastDetectionError
       throw error
     }
 
@@ -825,17 +812,10 @@ export default class SystemTest extends Browser {
 
       if (dismissTimeout === 0) throw new Error(dismissErrorMessage)
 
-      try {
-        await timeout({timeout: dismissTimeout, errorMessage: dismissErrorMessage}, async () => {
-          await this.interact(/** @type {import("selenium-webdriver").WebElement} */ (foundNotificationMessageElement), "click")
-        })
-      } catch (error) {
-        if (error instanceof Error && error.message === dismissErrorMessage) {
-          this.getDriverAdapter().markSessionUnusable(error)
-        }
-
-        throw error
-      }
+      await this.getDriverAdapter().runCommandOperation({name: "notification-dismissal", timeout: dismissTimeout, errorMessage: dismissErrorMessage}, async () => {
+        const notification = new WebElement(this.getDriver(), /** @type {import("selenium-webdriver").WebElement} */ (foundNotificationMessageElement).getId())
+        await this.interact(notification, "click")
+      })
 
       if (!foundNotificationMessageCount) {
         throw new Error("Expected notification message to have a data-count")
@@ -845,7 +825,16 @@ export default class SystemTest extends Browser {
 
       if (disappearanceTimeout === 0) throw new Error(`timeout while waiting for notification to disappear: ${expectedNotificationMessage}`)
 
-      await this.waitForNoSelector(`${NOTIFICATION_MESSAGE_SELECTOR}[data-count='${foundNotificationMessageCount}']`, {timeout: disappearanceTimeout, useBaseSelector: false})
+      await this.getDriverAdapter().runCommandOperation({
+        name: "notification-disappearance",
+        timeout: disappearanceTimeout,
+        // The finder already bounds and awaits implicit-timeout cleanup. Guard its
+        // commands without racing away its primary error or cleanup settlement.
+        callbackOwnsTimeout: true,
+        errorMessage: `timeout while waiting for notification to disappear: ${expectedNotificationMessage}`
+      }, async () => {
+        await this.waitForNoSelector(`${NOTIFICATION_MESSAGE_SELECTOR}[data-count='${foundNotificationMessageCount}']`, {timeout: disappearanceTimeout, useBaseSelector: false})
+      })
     }
   }
 
@@ -999,18 +988,20 @@ export default class SystemTest extends Browser {
 
       try {
         this.debugLog("Finding root element body > #root")
-        await this.find("body > #root", {useBaseSelector: false})
+        await this.getDriverAdapter().runCommandOperation({
+          name: "startup-root", timeout: this.getTimeouts(), errorMessage: "timeout while finding startup root", callbackOwnsTimeout: true
+        }, async () => await this.find("body > #root", {useBaseSelector: false}))
         this.debugLog("Found root element body > #root")
 
         this.debugLog("Finding systemTestingComponent")
-        await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true})
+        await this.getDriverAdapter().runCommandOperation({
+          name: "startup-component", timeout: 30000, errorMessage: "timeout while finding startup component", callbackOwnsTimeout: true
+        }, async () => await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true}))
         this.debugLog("Found systemTestingComponent")
         this.debugLog("Found root and systemTestingComponent")
       } catch (error) {
         this.debugLog("Error while finding root/systemTestingComponent, taking screenshot")
-        await this.takeScreenshot()
-        this.debugLog("Screenshot captured after root/systemTestingComponent lookup failure")
-        throw error
+        await this.throwStartupFailure(error)
       }
     } else {
       try {
@@ -1019,9 +1010,7 @@ export default class SystemTest extends Browser {
         this.debugLog("Found systemTestingComponent for native app")
       } catch (error) {
         this.debugLog("Error while finding native systemTestingComponent, taking screenshot")
-        await this.takeScreenshot()
-        this.debugLog("Screenshot captured after native systemTestingComponent lookup failure")
-        throw error
+        await this.throwStartupFailure(error)
       }
     }
 
@@ -1040,6 +1029,24 @@ export default class SystemTest extends Browser {
       this.debugLog("Base selector set")
     }
     this.debugLog("Start completed")
+  }
+
+  /**
+   * @param {unknown} error Original startup failure.
+   * @returns {Promise<never>}
+   */
+  async throwStartupFailure(error) {
+    const errors = [error]
+    try {
+      await this.takeScreenshot()
+      this.debugLog("Screenshot captured after startup lookup failure")
+    } catch (screenshotError) {
+      errors.push(screenshotError)
+    }
+    if (errors.length > 1) {
+      throw new AggregateError(errors, "System test startup failed with a secondary screenshot error", {cause: error})
+    }
+    throw error
   }
 
   /**

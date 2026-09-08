@@ -40,6 +40,7 @@ function runAllChecks(chromedriverPath) {
     const child = spawn("npm", ["run", "all-checks"], {
       env: {
         ...process.env,
+        SYSTEM_TEST_STARTUP_DIAGNOSTICS: "true",
         SYSTEM_TEST_CHROMEDRIVER_PATH: chromedriverPath
       },
       stdio: "inherit"
