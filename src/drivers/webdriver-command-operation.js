@@ -38,6 +38,10 @@ export default class WebDriverCommandOperation {
     this.commands = []
     /** @type {Set<CommandRecord>} */
     this.pending = new Set()
+    /** @type {number | undefined} */
+    this.implicitTimeoutChangeId = undefined
+    /** @type {Promise<void> | undefined} */
+    this.cleanupPromise = undefined
     const source = adapter.getWebDriver()
     this.executor = source.getExecutor()
     // A session view uses Selenium's public constructor/executor contract. It neither
@@ -45,10 +49,14 @@ export default class WebDriverCommandOperation {
     this.webDriver = new WebDriver(source.getSession(), {execute: (command) => this.execute(command)})
   }
 
-  /** @returns {void} */
-  assertActive() {
+  /**
+   * @param {number} [observedAt] Time sampled at the dispatch boundary.
+   * @returns {void}
+   */
+  assertActive(observedAt = Date.now()) {
     if (this.session !== this.adapter.sessionCorrelation) this.active = false
-    if (this.active && Date.now() >= this.deadline) this.expire()
+    if (this.implicitTimeoutChangeId !== undefined && this.implicitTimeoutChangeId !== this.adapter._implicitTimeoutChangeId) this.active = false
+    if (this.active && observedAt >= this.deadline) this.expire()
     if (!this.active) throw this.error
     this.adapter.assertSessionUsable()
   }
@@ -68,12 +76,17 @@ export default class WebDriverCommandOperation {
    */
   async execute(command) {
     this.assertActive()
+    const name = command.getName()
+    const issuedAt = Date.now()
+    // Recheck after preparation, before registering any pending wire work. Use
+    // this same clock sample for both dispatch ownership and its evidence.
+    this.assertActive(issuedAt)
     /** @type {CommandRecord} */
     const record = {
       sequence: ++this.sequence,
-      name: command.getName(),
-      issuedAt: Date.now(),
-      remainingMs: Math.max(0, this.deadline - Date.now()),
+      name,
+      issuedAt,
+      remainingMs: this.deadline - issuedAt,
       status: "pending"
     }
     this.commands.push(record)
@@ -91,6 +104,40 @@ export default class WebDriverCommandOperation {
       this.pending.delete(record)
       if (!this.active) this.report("late-settlement")
     }
+  }
+
+  /**
+   * Restores only the implicit wait under the existing cleanup budget. The
+   * cleanup driver never escapes to an application callback or retained element.
+   * @param {number} implicitTimeout Original implicit wait.
+   * @param {number} timeoutChangeId Owner of the temporary change.
+   * @param {{timeout: number, errorMessage: string}} args Existing cleanup bound.
+   * @returns {Promise<void>}
+   */
+  async restoreImplicitTimeout(implicitTimeout, timeoutChangeId, args) {
+    if (this.session !== this.adapter.sessionCorrelation || timeoutChangeId !== this.adapter._implicitTimeoutChangeId) return
+    if (this.pending.size) this.adapter.markSessionUnusable(this.error)
+    this.adapter.assertSessionUsable()
+
+    // Only this fixed restoration command may leave the application's expired
+    // context. It has its own executor guard, deadline and settlement evidence.
+    const cleanup = this.adapter.commandOperationStorage.exit(() => new WebDriverCommandOperation({
+      adapter: this.adapter, name: `${this.name}:implicit-timeout-restoration`, ...args
+    }))
+    cleanup.implicitTimeoutChangeId = timeoutChangeId
+    this.cleanupPromise = this.adapter.commandOperationStorage.run(cleanup, async () => {
+      try {
+        await cleanup.run(async () => {
+          await this.adapter.getWebDriver().manage().setTimeouts({implicit: implicitTimeout})
+        })
+      } catch (error) {
+        if (error instanceof Error && this.session === this.adapter.sessionCorrelation && timeoutChangeId === this.adapter._implicitTimeoutChangeId) {
+          this.adapter.markSessionUnusable(error)
+        }
+        throw error
+      }
+    })
+    await this.cleanupPromise
   }
 
   /**
@@ -130,9 +177,16 @@ export default class WebDriverCommandOperation {
     } catch (error) {
       this.active = false
       this.error = error instanceof Error ? error : new Error("WebDriver operation failed", {cause: error})
+      if (this.cleanupPromise) {
+        try {
+          await this.cleanupPromise
+        } catch (cleanupError) {
+          if (cleanupError !== error) console.error("[WebDriver implicit timeout restoration failed]", cleanupError)
+        }
+      }
       // A nested finder can end before this outer deadline while its command is
       // still pending. Ending ownership cannot make that command safe to reuse.
-      if (this.pending.size && this.session === this.adapter.sessionCorrelation) this.adapter.markSessionUnusable(this.error)
+      if ((this.pending.size || this.adapter.isSessionUnusable()) && this.session === this.adapter.sessionCorrelation) this.adapter.markSessionUnusable(this.error)
       this.report(this.expired ? "deadline" : "failure")
       throw error
     } finally {

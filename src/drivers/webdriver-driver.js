@@ -269,8 +269,9 @@ export default class WebDriverDriver {
    * @returns {void}
    */
   markSessionUnusable(error) {
+    Object.assign(error, {terminalResource: {scope: "run", name: "webdriver-session"}})
     if (!this._sessionUnusableError) {
-      this._sessionUnusableError = Object.assign(error, {terminalResource: {scope: "run", name: "webdriver-session"}})
+      this._sessionUnusableError = error
     }
   }
 
@@ -445,6 +446,7 @@ export default class WebDriverDriver {
 
     const webDriver = this.getWebDriver()
     const sessionCorrelation = this.sessionCorrelation
+    const operation = this.commandOperationStorage.getStore()
     this._implicitTimeoutChangeId += 1
     const timeoutChangeId = this._implicitTimeoutChangeId
 
@@ -470,7 +472,12 @@ export default class WebDriverDriver {
       // the bookkeeping and quarantine the owning session if that bound expires, while
       // preserving the callback's own outcome — success or failure — as decisive.
       try {
-        await timeout({timeout: 1000, errorMessage: IMPLICIT_TIMEOUT_RESTORE_ERROR_MESSAGE}, async () => await webDriver.manage().setTimeouts({implicit: originalImplicitTimeout}))
+        const restoreArgs = {timeout: 1000, errorMessage: IMPLICIT_TIMEOUT_RESTORE_ERROR_MESSAGE}
+        if (operation) {
+          await operation.restoreImplicitTimeout(originalImplicitTimeout, timeoutChangeId, restoreArgs)
+        } else {
+          await timeout(restoreArgs, async () => await webDriver.manage().setTimeouts({implicit: originalImplicitTimeout}))
+        }
       } catch (error) {
         if (error instanceof Error && error.message === IMPLICIT_TIMEOUT_RESTORE_ERROR_MESSAGE) {
           if (this._implicitTimeoutChangeId === timeoutChangeId && this.sessionCorrelation === sessionCorrelation) this.markSessionUnusable(error)

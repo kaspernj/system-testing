@@ -105,10 +105,14 @@ describe("SystemTest.start", () => {
       expect(systemTest.reinitialize).not.toHaveBeenCalled()
       expect(systemTest.waitForClientWebSocket).not.toHaveBeenCalled()
       const evidence = diagnostics.calls.allArgs().filter(([label]) => label === "[WebDriver operation]")
-      expect(evidence.length).toBe(1)
+      expect(evidence.length).toBe(2)
       if (evidence.length) {
         expect(JSON.parse(evidence[0][1])).toEqual(jasmine.objectContaining({
-          operation: "startup-root", pendingCount: 1,
+          operation: "startup-root:implicit-timeout-restoration", pendingCount: 1,
+          commands: [jasmine.objectContaining({name: "setTimeout", status: "pending"})]
+        }))
+        expect(JSON.parse(evidence[1][1])).toEqual(jasmine.objectContaining({
+          operation: "startup-root", pendingCount: 0,
           commands: jasmine.arrayContaining([jasmine.objectContaining({name: "findElements", status: "rejected"})])
         }))
       }
