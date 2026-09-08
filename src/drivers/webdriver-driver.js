@@ -1,3 +1,6 @@
+import {AsyncLocalStorage} from "node:async_hooks"
+import {randomUUID} from "node:crypto"
+import WebDriverCommandOperation from "./webdriver-command-operation.js"
 import {By, error as SeleniumError} from "selenium-webdriver"
 import logging from "selenium-webdriver/lib/logging.js"
 import {wait, waitFor} from "awaitery"
@@ -198,6 +201,11 @@ export default class WebDriverDriver {
     /** @type {Error | undefined} */
     this._sessionUnusableError = undefined
     this._timeouts = 5000
+    /** @type {Promise<void> | undefined} */
+    this.stopPromise = undefined
+    this.sessionCorrelation = randomUUID()
+    /** @type {AsyncLocalStorage<WebDriverCommandOperation>} */
+    this.commandOperationStorage = new AsyncLocalStorage()
     /**
      * Process-exit handlers installed while a WebDriver session is alive.
      * Retained so `stop()` can deregister them before removing the
@@ -232,11 +240,13 @@ export default class WebDriverDriver {
    */
   getWebDriver() {
     if (!this.webDriver) throw new Error("Driver hasn't been initialized yet")
-    if (this._sessionUnusableError) {
-      throw errorWithCause(`WebDriver session is unusable: ${this._sessionUnusableError.message}`, this._sessionUnusableError)
-    }
+    this.assertSessionUsable()
     this.browser.throwIfHttpServerError()
-
+    const operation = this.commandOperationStorage.getStore()
+    if (operation) {
+      operation.assertActive()
+      return operation.webDriver
+    }
     return this.webDriver
   }
 
@@ -247,6 +257,8 @@ export default class WebDriverDriver {
   setWebDriver(webDriver) {
     this._implicitTimeoutChangeId += 1
     this._sessionUnusableError = undefined
+    this.sessionCorrelation = randomUUID()
+    this.stopPromise = undefined
     this.webDriver = webDriver
     this.browser.driver = webDriver
   }
@@ -257,7 +269,30 @@ export default class WebDriverDriver {
    * @returns {void}
    */
   markSessionUnusable(error) {
-    if (!this._sessionUnusableError) this._sessionUnusableError = error
+    if (!this._sessionUnusableError) {
+      this._sessionUnusableError = Object.assign(error, {terminalResource: {scope: "run", name: "webdriver-session"}})
+    }
+  }
+
+  /** @returns {boolean} */
+  isSessionUnusable() { return Boolean(this._sessionUnusableError) }
+
+  /** @returns {void} */
+  assertSessionUsable() {
+    if (this._sessionUnusableError) {
+      throw errorWithCause(`WebDriver session is unusable: ${this._sessionUnusableError.message}`, this._sessionUnusableError)
+    }
+  }
+
+  /**
+   * @template T
+   * @param {{name: string, timeout: number, errorMessage: string, callbackOwnsTimeout?: boolean}} args Operation budget.
+   * @param {() => Promise<T>} callback Work owned by this deadline.
+   * @returns {Promise<T>}
+   */
+  async runCommandOperation(args, callback) {
+    const operation = new WebDriverCommandOperation({adapter: this, ...args})
+    return await this.commandOperationStorage.run(operation, async () => await operation.run(callback))
   }
 
   /**
@@ -323,14 +358,25 @@ export default class WebDriverDriver {
   /**
    * @returns {Promise<void>}
    */
-  async stop() {
-    this._removeExitHandlers()
-    if (this.webDriver) {
-      await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while quitting WebDriver"}, async () => await /** @type {NonNullable<typeof this.webDriver>} */ (this.webDriver).quit())
-    }
+  stop() {
+    this.stopPromise ??= this.stopSession()
+    return this.stopPromise
+  }
 
-    this.webDriver = undefined
-    this.browser.driver = undefined
+  /** @returns {Promise<void>} */
+  async stopSession() {
+    this._removeExitHandlers()
+    const webDriver = this.webDriver
+    try {
+      if (webDriver) {
+        await timeout({timeout: this.getTimeouts(), errorMessage: "timeout while quitting WebDriver"}, async () => await webDriver.quit())
+      }
+    } finally {
+      if (this.webDriver === webDriver) {
+        this.webDriver = undefined
+        this.browser.driver = undefined
+      }
+    }
   }
 
   /**
@@ -398,6 +444,7 @@ export default class WebDriverDriver {
     if (originalImplicitTimeout === implicitTimeout) return await callback()
 
     const webDriver = this.getWebDriver()
+    const sessionCorrelation = this.sessionCorrelation
     this._implicitTimeoutChangeId += 1
     const timeoutChangeId = this._implicitTimeoutChangeId
 
@@ -426,7 +473,7 @@ export default class WebDriverDriver {
         await timeout({timeout: 1000, errorMessage: IMPLICIT_TIMEOUT_RESTORE_ERROR_MESSAGE}, async () => await webDriver.manage().setTimeouts({implicit: originalImplicitTimeout}))
       } catch (error) {
         if (error instanceof Error && error.message === IMPLICIT_TIMEOUT_RESTORE_ERROR_MESSAGE) {
-          if (this._implicitTimeoutChangeId === timeoutChangeId && this.webDriver === webDriver) this.markSessionUnusable(error)
+          if (this._implicitTimeoutChangeId === timeoutChangeId && this.sessionCorrelation === sessionCorrelation) this.markSessionUnusable(error)
         } else {
           if (callbackFailed) throw callbackError
 

@@ -519,7 +519,11 @@ For clicks, prefer `click(selector, options)`. `interact(selector, "click", opti
 
 `expectNotificationMessage(message, {timeout, dismiss})` polls visible `[data-testid='notification-message']` elements without applying the global finder wait to every poll. `timeout` is one positive total budget for finding the message and, when `dismiss` is enabled, waiting for that specific notification to disappear. Bounded WebDriver cleanup may finish after that budget before the assertion returns. The timeout defaults to 5000 ms and rejects non-positive values. `dismiss` defaults to `true`.
 
-If a non-cancellable WebDriver dismissal command exceeds that budget, the current session is marked unusable so later commands, including operations on retained element handles, cannot race the pending click. The default `SystemTest.run(...)` failure lifecycle reinitializes that session.
+Notification detection, dismissal and disappearance own their WebDriver commands through that deadline. Commands already sent to Selenium are observed through settlement; a timer does not cancel them. After ownership expires, retained elements cannot issue another command. An outstanding command when the operation times out or fails marks the session unusable; a settled sequence that cumulatively crosses the deadline, or an idle poll waiting for a missing/wrong message, does not by itself make the session terminal. Disappearance retains the finder's existing bounded cleanup/outcome ownership while guarding subsequent commands.
+
+Terminal failures carry `error.terminalResource = {scope: "run", name: "webdriver-session"}`. `SystemTest.run(...)` preserves the original failure before artifact collection and never automatically reinitializes a terminal session. Screenshot and teardown failures are retained in an `AggregateError` whose `cause` is the original failure. Runners must recognize this marker recursively through `cause` and `AggregateError.errors`, stop retries and later callbacks, report remaining cases as not run, perform cleanup once, and return an unsuccessful run. Older runners that ignore the marker must be upgraded together with this lifecycle change; the package does not depend on a particular runner.
+
+Failed notification operations emit `[WebDriver operation]` JSON metadata: a local random session correlation (not the Selenium session id), operation name, bounded origin stack, deadline, pending command sequences, and the latest 32 command issue/settlement records. Late settlements emit another record without issuing new browser work. Command parameters, scripts, results, URLs and notification text are excluded. This evidence distinguishes pending work from a cumulative deadline crossing; it does not establish why ChromeDriver stalled. Primary errors and their full stacks/causes remain available separately.
 
 ```js
 await systemTest.expectNotificationMessage("You were signed in.", {timeout: 1000})
@@ -610,7 +614,7 @@ await systemTest.reinitialize()
 
 This tears down the browser, servers, and sockets, then starts them again so subsequent steps run against a fresh app instance.
 
-`SystemTest.run(...)` does this automatically after a failed callback or teardown by default. Disable it only for tests that intentionally inspect the broken session after failure:
+`SystemTest.run(...)` does this automatically after a failed callback or teardown by default, except when the driver session is terminal. Terminal sessions require the runner to end the affected run. Disable ordinary failure reinitialization for tests that intentionally inspect the broken session after failure:
 
 ```js
 await SystemTest.run({reinitializeAfterFailure: false}, async (systemTest) => {
