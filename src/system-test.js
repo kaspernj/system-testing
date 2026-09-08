@@ -988,18 +988,20 @@ export default class SystemTest extends Browser {
 
       try {
         this.debugLog("Finding root element body > #root")
-        await this.find("body > #root", {useBaseSelector: false})
+        await this.getDriverAdapter().runCommandOperation({
+          name: "startup-root", timeout: this.getTimeouts(), errorMessage: "timeout while finding startup root", callbackOwnsTimeout: true
+        }, async () => await this.find("body > #root", {useBaseSelector: false}))
         this.debugLog("Found root element body > #root")
 
         this.debugLog("Finding systemTestingComponent")
-        await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true})
+        await this.getDriverAdapter().runCommandOperation({
+          name: "startup-component", timeout: 30000, errorMessage: "timeout while finding startup component", callbackOwnsTimeout: true
+        }, async () => await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true}))
         this.debugLog("Found systemTestingComponent")
         this.debugLog("Found root and systemTestingComponent")
       } catch (error) {
         this.debugLog("Error while finding root/systemTestingComponent, taking screenshot")
-        await this.takeScreenshot()
-        this.debugLog("Screenshot captured after root/systemTestingComponent lookup failure")
-        throw error
+        await this.throwStartupFailure(error)
       }
     } else {
       try {
@@ -1008,9 +1010,7 @@ export default class SystemTest extends Browser {
         this.debugLog("Found systemTestingComponent for native app")
       } catch (error) {
         this.debugLog("Error while finding native systemTestingComponent, taking screenshot")
-        await this.takeScreenshot()
-        this.debugLog("Screenshot captured after native systemTestingComponent lookup failure")
-        throw error
+        await this.throwStartupFailure(error)
       }
     }
 
@@ -1029,6 +1029,24 @@ export default class SystemTest extends Browser {
       this.debugLog("Base selector set")
     }
     this.debugLog("Start completed")
+  }
+
+  /**
+   * @param {unknown} error Original startup failure.
+   * @returns {Promise<never>}
+   */
+  async throwStartupFailure(error) {
+    const errors = [error]
+    try {
+      await this.takeScreenshot()
+      this.debugLog("Screenshot captured after startup lookup failure")
+    } catch (screenshotError) {
+      errors.push(screenshotError)
+    }
+    if (errors.length > 1) {
+      throw new AggregateError(errors, "System test startup failed with a secondary screenshot error", {cause: error})
+    }
+    throw error
   }
 
   /**

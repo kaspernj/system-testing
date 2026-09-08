@@ -525,6 +525,8 @@ Terminal failures carry `error.terminalResource = {scope: "run", name: "webdrive
 
 Failed notification operations emit `[WebDriver operation]` JSON metadata: a local random session correlation (not the Selenium session id), operation name, bounded origin stack, deadline, pending command sequences, and the latest 32 command issue/settlement records. Late settlements emit another record without issuing new browser work. Command parameters, scripts, results, URLs and notification text are excluded. This evidence distinguishes pending work from a cumulative deadline crossing; it does not establish why ChromeDriver stalled. Primary errors and their full stacks/causes remain available separately.
 
+Web startup root/component lookups use the same command ownership and diagnostics (`startup-root` and `startup-component`) with their existing finder and cleanup budgets. A successful lookup followed by terminal implicit-timeout restoration fails before startup advances. Both web and native startup preserve a lookup failure if its screenshot also fails: the resulting `AggregateError.cause` and first `errors` entry hold the original lookup error, and the second entry holds the screenshot error. A successful screenshot leaves the original error unchanged.
+
 ```js
 await systemTest.expectNotificationMessage("You were signed in.", {timeout: 1000})
 ```

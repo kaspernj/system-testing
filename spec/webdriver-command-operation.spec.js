@@ -124,4 +124,44 @@ describe("WebDriver command operation evidence", () => {
       jasmine.clock().uninstall()
     }
   })
+
+  it("reports a terminal restore after a successful finder without discarding the finder's cleanup ownership", async () => {
+    const systemTest = new SystemTest()
+    const adapter = systemTest.getDriverAdapter()
+    const diagnostics = spyOn(console, "error")
+    let issued
+    let release
+    const restoring = new Promise((resolve) => { issued = resolve })
+    const pending = new Promise((resolve) => { release = resolve })
+    adapter.setWebDriver(new WebDriver(new Session("restoration", {}), {
+      execute: async (command) => {
+        if (command.getName() === "setTimeout" && command.getParameter("implicit") === 5000) {
+          issued()
+          return await pending
+        }
+        return null
+      }
+    }))
+    jasmine.clock().install()
+    try {
+      const operation = adapter.runCommandOperation({
+        name: "startup-root", timeout: 5000, errorMessage: "root deadline", callbackOwnsTimeout: true
+      }, async () => await adapter.withTemporaryImplicitTimeout(0, async () => "found")).catch((error) => error)
+      await restoring
+      jasmine.clock().tick(1000)
+      const outcome = await operation
+      expect(outcome).toEqual(jasmine.any(Error))
+      expect(outcome.cause?.message).toBe("timeout while restoring the implicit wait timeout")
+      expect(diagnostics).toHaveBeenCalled()
+      if (diagnostics.calls.count()) {
+        expect(JSON.parse(diagnostics.calls.mostRecent().args[1])).toEqual(jasmine.objectContaining({
+          phase: "failure", operation: "startup-root", terminal: true, pendingCount: 1
+        }))
+      }
+    } finally {
+      release(null)
+      await new Promise((resolve) => setImmediate(resolve))
+      jasmine.clock().uninstall()
+    }
+  })
 })

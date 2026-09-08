@@ -146,10 +146,14 @@ export default class SystemTestHelper {
       await this.systemTest.start()
       this.debugLog("[system-test] beforeAll: SystemTest started")
     } catch (error) {
-      sharedState.started = false
-      sharedState.refCount = Math.max(0, sharedState.refCount - 1)
-      console.error("[system-test] beforeAll error", error)
-      throw error
+      let startupError = error
+      try {
+        await this.stop()
+      } catch (cleanupError) {
+        startupError = new AggregateError([error, cleanupError], "System test startup and cleanup failed", {cause: error})
+      }
+      console.error("[system-test] beforeAll error", startupError)
+      throw startupError
     }
   }
 
@@ -160,16 +164,27 @@ export default class SystemTestHelper {
     if (sharedState.refCount > 0) return
 
     this.debugLog("[system-test] afterAll: stopping SystemTest and dummy HTTP env")
+    const errors = []
     try {
       await this.systemTest?.stop()
+    } catch (error) {
+      errors.push(error)
+    }
+    try {
       await this.dummyHttpServerEnvironment.stop()
-      this.debugLog("[system-test] afterAll: teardown complete")
+    } catch (error) {
+      errors.push(error)
+    } finally {
       sharedState.started = false
       sharedState.systemTest = undefined
-    } catch (error) {
-      console.error("[system-test] afterAll error", error)
-      throw error
+      this.systemTest = undefined
     }
+    if (errors.length) {
+      const cleanupError = errors.length === 1 ? errors[0] : new AggregateError(errors, "System test cleanup failed", {cause: errors[0]})
+      console.error("[system-test] afterAll error", cleanupError)
+      throw cleanupError
+    }
+    this.debugLog("[system-test] afterAll: teardown complete")
   }
 
   /** @returns {SystemTest} */

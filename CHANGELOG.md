@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- Preserve startup lookup errors alongside screenshot failures, and trace startup command ownership and late settlement without advancing past terminal implicit-timeout restoration.
+- Clean up resources allocated by a failed Jasmine startup hook once, retaining startup and cleanup causes together.
 - Add `findFirstVisibleByTestID` as an explicit escape hatch for transitions that retain duplicate visible test IDs.
 - Bound notification assertions with one configurable timeout across detection and dismissal.
 - Wait for bounded WebDriver cleanup before returning from notification disappearance assertions.

@@ -102,7 +102,13 @@ export default class WebDriverCommandOperation {
     /** @type {ReturnType<typeof setTimeout> | undefined} */
     let timer
     try {
-      if (this.callbackOwnsTimeout) return await callback()
+      if (this.callbackOwnsTimeout) {
+        const result = await callback()
+        // The finder owns its cleanup budget, but a restore that quarantined the
+        // session cannot be reported as a successful operation.
+        this.adapter.assertSessionUsable()
+        return result
+      }
       // This races ownership, not cancellation: execute() keeps observing commands
       // already issued, and every later executor invocation checks ownership again.
       return await new Promise((resolve, reject) => {
