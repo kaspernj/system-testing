@@ -104,6 +104,6 @@
     "globals": "^17.0.0",
     "jasmine": "^6.0.0",
     "release-patch": "^1.0.0",
-    "typescript": "^6.0.2"
+    "typescript": "^7.0.2"
   }
 }
