@@ -1,5 +1,7 @@
 // @ts-check
 
+import {setTimeout as wait} from "node:timers/promises"
+
 import StartStopLifecycle from "../src/start-stop-lifecycle.js"
 
 /** @returns {{promise: Promise<void>, resolve: () => void}} */
@@ -77,6 +79,57 @@ describe("StartStopLifecycle", () => {
     await lifecycle.start()
     expect(startCalls).toBe(2)
     expect(lifecycle.state).toBe("running")
+  })
+
+  it("recognizes standard signal cancellation by its lifecycle abort cause", async () => {
+    let startCalls = 0
+    const cleanup = jasmine.createSpy("stop").and.resolveTo(undefined)
+    const lifecycle = new StartStopLifecycle({
+      start: async ({signal}) => {
+        startCalls += 1
+        if (startCalls === 1) await wait(60000, undefined, {signal})
+      },
+      stop: cleanup
+    })
+    const firstStartFailure = lifecycle.start().catch((error) => error)
+
+    await Promise.resolve()
+    const stopOutcome = lifecycle.stop().catch((error) => error)
+    const restartOutcome = lifecycle.start().catch((error) => error)
+    const cancellationError = await firstStartFailure
+
+    expect(cancellationError.name).toBe("AbortError")
+    expect(cancellationError).not.toBe(cancellationError.cause)
+    expect(cancellationError.cause).toEqual(jasmine.any(Error))
+    expect(await stopOutcome).toBeUndefined()
+    expect(await restartOutcome).toBeUndefined()
+    expect(cleanup).toHaveBeenCalledTimes(1)
+    expect(startCalls).toBe(2)
+    expect(lifecycle.state).toBe("running")
+  })
+
+  it("preserves an unrelated AbortError raised while stopping startup", async () => {
+    const initialization = createDeferred()
+    const unrelatedAbortError = new Error("unrelated operation aborted", {cause: new Error("unrelated reason")})
+    unrelatedAbortError.name = "AbortError"
+    const cleanup = jasmine.createSpy("stop").and.resolveTo(undefined)
+    const lifecycle = new StartStopLifecycle({
+      start: async () => {
+        await initialization.promise
+        throw unrelatedAbortError
+      },
+      stop: cleanup
+    })
+    const startOutcome = lifecycle.start().catch((error) => error)
+
+    await Promise.resolve()
+    const stopOutcome = lifecycle.stop().catch((error) => error)
+    initialization.resolve()
+
+    expect(await startOutcome).toBe(unrelatedAbortError)
+    expect(await stopOutcome).toBe(unrelatedAbortError)
+    expect(cleanup).toHaveBeenCalledTimes(1)
+    expect(lifecycle.state).toBe("idle")
   })
 
   it("waits for shutdown before honoring a start requested while stopping", async () => {

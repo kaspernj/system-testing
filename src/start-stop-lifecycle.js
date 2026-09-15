@@ -14,6 +14,15 @@ function createAbortError() {
 }
 
 /**
+ * @param {any} error
+ * @param {Error} abortReason
+ * @returns {boolean}
+ */
+function isAbortErrorForReason(error, abortReason) {
+  return error === abortReason || (error?.name === "AbortError" && error.cause === abortReason)
+}
+
+/**
  * Coordinates single-flight startup and shutdown callbacks.
  */
 export default class StartStopLifecycle {
@@ -147,7 +156,7 @@ export default class StartStopLifecycle {
       try {
         await startPromise
       } catch (startError) {
-        if (startError !== abortError) throw startError
+        if (!isAbortErrorForReason(startError, abortError)) throw startError
       }
     })
 
