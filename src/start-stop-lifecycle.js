@@ -1,7 +1,7 @@
 /**
  * @typedef {object} StartStopLifecycleArgs
- * @property {(args: {signal: AbortSignal}) => Promise<void> | void} start
- * @property {() => Promise<void> | void} stop
+ * @property {(args: {signal: AbortSignal}) => Promise<void> | void} start Starts the managed resource with a cancellation signal.
+ * @property {() => Promise<void> | void} stop Stops or cleans up the managed resource.
  */
 
 /** @typedef {"idle" | "starting" | "running" | "stopping"} StartStopLifecycleState */
@@ -114,9 +114,16 @@ export default class StartStopLifecycle {
       )
     }
 
+    let cleanupFailed = false
+    let cleanupError
     try {
       await cleanupPromise
-    } catch (cleanupError) {
+    } catch (error) {
+      cleanupFailed = true
+      cleanupError = error
+    }
+
+    if (cleanupFailed) {
       throw new AggregateError(
         [startError, cleanupError],
         "Lifecycle startup and cleanup both failed",
