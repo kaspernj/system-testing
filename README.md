@@ -39,6 +39,28 @@ The `useSystemTest*` hooks support three browser-side lifecycle callbacks:
 
 Use `onTeardown` for per-example browser cleanup such as clearing auth state or resetting app-local fixtures. Keep destructive cleanup there instead of `onInitialize` so signed-in flows can still run normally during an example.
 
+## Framework-neutral start/stop lifecycle
+
+Use `StartStopLifecycle` to coordinate an asynchronously started resource outside `SystemTest`. It keeps startup and shutdown single-flight, exposes `idle`, `starting`, `running`, and `stopping` through `state`, and does not report `running` until the startup callback resolves.
+
+```js
+import {StartStopLifecycle} from "system-testing"
+
+const lifecycle = new StartStopLifecycle({
+  start: async ({signal}) => {
+    await startBackend({signal})
+  },
+  stop: async () => {
+    await stopBackend()
+  }
+})
+
+await lifecycle.ensureRunning()
+await lifecycle.stop()
+```
+
+`start()` is an alias for `ensureRunning()`. Concurrent callers share the active operation. Calling `stop()` during startup aborts its `signal`, waits for the startup callback to settle, and runs cleanup once. A start requested during shutdown waits for shutdown before starting. Startup callbacks must observe the signal and settle when aborted; cleanup runs after every failed or aborted startup. If both startup and cleanup fail, the startup promise rejects with an `AggregateError` containing both failures.
+
 ## Getting started
 
 1. Add one of the browser-side hooks to your app:
