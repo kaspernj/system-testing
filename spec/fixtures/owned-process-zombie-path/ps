@@ -1,0 +1,3 @@
+#!/usr/bin/env node
+
+process.stdout.write(`99999 ${process.env.OWNED_PROCESS_TEST_PGID} Z\n`)

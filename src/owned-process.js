@@ -7,7 +7,7 @@ import {promisify} from "node:util"
  * @typedef {object} OwnedProcessControl
  * @property {string} platform Platform on which process ownership is implemented.
  * @property {(command: string, args: string[], options: import("node:child_process").SpawnOptions) => import("node:child_process").ChildProcess} spawn Spawns the direct child.
- * @property {(processGroupId: number) => Promise<number[]>} listProcessGroupPids Lists exact process-group members.
+ * @property {(processGroupId: number) => Promise<number[]>} listProcessGroupPids Lists exact non-zombie process-group members.
  * @property {(processGroupId: number, signal: OwnedProcessStopSignal) => Promise<void> | void} signalProcessGroup Signals the exact process group.
  * @property {(milliseconds: number) => Promise<void>} wait Waits between ownership checks.
  * @property {() => number} now Reads a monotonic clock.
@@ -49,12 +49,12 @@ function validateDuration(value, name) {
  * @returns {Promise<number[]>}
  */
 async function listProcessGroupPids(processGroupId) {
-  const {stdout} = await execFileAsync("ps", ["-A", "-o", "pid=,pgid="], {encoding: "utf8"})
+  const {stdout} = await execFileAsync("ps", ["-A", "-o", "pid=,pgid=,stat="], {encoding: "utf8"})
   const pids = []
 
   for (const line of stdout.split("\n")) {
-    const [pidValue, processGroupIdValue] = line.trim().split(/\s+/)
-    if (!pidValue || !processGroupIdValue || Number(processGroupIdValue) !== processGroupId) continue
+    const [pidValue, processGroupIdValue, stateValue] = line.trim().split(/\s+/)
+    if (!pidValue || !processGroupIdValue || Number(processGroupIdValue) !== processGroupId || stateValue?.startsWith("Z")) continue
 
     pids.push(Number(pidValue))
   }

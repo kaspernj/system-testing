@@ -340,6 +340,44 @@ describe("OwnedProcess", () => {
     }
   })
 
+  it("treats a zombie process-group member as terminated after the direct child closes", async () => {
+    const originalPath = process.env.PATH
+    const originalProcessGroupId = process.env.OWNED_PROCESS_TEST_PGID
+    /** @type {OwnedProcess | undefined} */
+    let ownedProcess
+    try {
+      const fixturePath = new URL("fixtures/owned-process-zombie-path", import.meta.url).pathname
+      if (originalPath === undefined) {
+        process.env.PATH = fixturePath
+      } else {
+        process.env.PATH = `${fixturePath}:${originalPath}`
+      }
+      ownedProcess = await OwnedProcess.spawn(process.execPath, ["-e", ""], {
+        forceKillWaitMs: 0,
+        killGraceMs: 0,
+        pollIntervalMs: 1,
+        stderr: "pipe",
+        stdout: "pipe"
+      })
+      await ownedProcess.closed
+      process.env.OWNED_PROCESS_TEST_PGID = String(ownedProcess.identity.processGroupId)
+
+      await ownedProcess.stop()
+    } finally {
+      if (originalPath === undefined) {
+        delete process.env.PATH
+      } else {
+        process.env.PATH = originalPath
+      }
+      if (originalProcessGroupId === undefined) {
+        delete process.env.OWNED_PROCESS_TEST_PGID
+      } else {
+        process.env.OWNED_PROCESS_TEST_PGID = originalProcessGroupId
+      }
+      await forceStopOwnedProcess(ownedProcess)
+    }
+  })
+
   it("rejects spawn failure without signaling an unowned process", async () => {
     const child = new FakeChildProcess(undefined)
     const signalProcessGroup = jasmine.createSpy("signalProcessGroup")
