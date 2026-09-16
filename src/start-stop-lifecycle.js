@@ -1,10 +1,11 @@
 /**
  * @typedef {object} StartStopLifecycleArgs
- * @property {(args: {signal: AbortSignal}) => Promise<void> | void} start Starts the managed resource with a cancellation signal.
+ * @property {(args: {signal: AbortSignal, generation: StartStopLifecycleGeneration}) => Promise<void> | void} start Starts the managed resource with a cancellation signal.
  * @property {() => Promise<void> | void} stop Stops or cleans up the managed resource.
  */
 
-/** @typedef {"idle" | "starting" | "running" | "stopping"} StartStopLifecycleState */
+/** @typedef {Readonly<{id: number}>} StartStopLifecycleGeneration */
+/** @typedef {"idle" | "starting" | "running" | "stopping" | "cleanup-failed"} StartStopLifecycleState */
 
 /** @returns {Error} */
 function createAbortError() {
@@ -23,6 +24,19 @@ function isAbortErrorForReason(error, abortReason) {
 }
 
 /**
+ * @param {any} startError
+ * @param {any} cleanupError
+ * @returns {AggregateError}
+ */
+function createStartCleanupError(startError, cleanupError) {
+  return new AggregateError(
+    [startError, cleanupError],
+    "Lifecycle startup and cleanup both failed",
+    {cause: startError}
+  )
+}
+
+/**
  * Coordinates single-flight startup and shutdown callbacks.
  */
 export default class StartStopLifecycle {
@@ -31,13 +45,16 @@ export default class StartStopLifecycle {
   /** @type {Promise<void> | undefined} */
   _startPromise = undefined
   /** @type {Promise<void> | undefined} */
-  _stopPromise = undefined
-  /** @type {Promise<void> | undefined} */
   _shutdownPromise = undefined
   /** @type {Promise<void> | undefined} */
   _queuedStartPromise = undefined
   /** @type {AbortController | undefined} */
   _startAbortController = undefined
+  /** @type {StartStopLifecycleGeneration | undefined} */
+  _activeGeneration = undefined
+  /** @type {unknown} */
+  _cleanupError = undefined
+  _nextGenerationId = 1
 
   /** @param {StartStopLifecycleArgs} args */
   constructor({start, stop}) {
@@ -63,11 +80,17 @@ export default class StartStopLifecycle {
       return this._startPromise
     }
     if (this._state === "stopping") return this._startAfterShutdown()
+    if (this._state === "cleanup-failed") {
+      return Promise.reject(new Error("Lifecycle cleanup failed; call stop() to retry cleanup before starting", {cause: this._cleanupError}))
+    }
 
     this._state = "starting"
     const abortController = new AbortController()
+    const generation = Object.freeze({id: this._nextGenerationId})
+    this._nextGenerationId += 1
+    this._activeGeneration = generation
     this._startAbortController = abortController
-    const startPromise = Promise.resolve().then(async () => await this._runStart(abortController))
+    const startPromise = Promise.resolve().then(async () => await this._runStart({abortController, generation}))
     this._startPromise = startPromise
 
     return startPromise
@@ -83,22 +106,40 @@ export default class StartStopLifecycle {
     }
     if (this._state === "starting") return this._stopPendingStart()
 
+    const generation = this._activeGeneration
+    if (!generation) throw new Error(`Lifecycle is ${this._state} without an active generation`)
+
     this._state = "stopping"
-    return this._trackStop(this._invokeStop())
+    return this._trackShutdown(this._completeCleanup(generation))
   }
 
   /**
-   * @param {AbortController} abortController
+   * Reports that a resource has completed independently of an explicit stop.
+   * Only the current running generation can be invalidated.
+   * @param {StartStopLifecycleGeneration} generation
+   * @returns {boolean}
+   */
+  notifyResourceStopped(generation) {
+    if (this._state !== "running" || this._activeGeneration !== generation) return false
+
+    this._activeGeneration = undefined
+    this._cleanupError = undefined
+    this._state = "idle"
+    return true
+  }
+
+  /**
+   * @param {{abortController: AbortController, generation: StartStopLifecycleGeneration}} args
    * @returns {Promise<void>}
    */
-  async _runStart(abortController) {
+  async _runStart({abortController, generation}) {
     try {
-      await this._startCallback({signal: abortController.signal})
+      await this._startCallback({signal: abortController.signal, generation})
       if (abortController.signal.aborted) throw abortController.signal.reason
 
       this._state = "running"
     } catch (startError) {
-      await this._cleanupFailedStart(startError)
+      await this._cleanupFailedStart({generation, startError})
     } finally {
       if (this._startAbortController === abortController) {
         this._startAbortController = undefined
@@ -108,36 +149,18 @@ export default class StartStopLifecycle {
   }
 
   /**
-   * @param {any} startError
+   * @param {{generation: StartStopLifecycleGeneration, startError: any}} args
    * @returns {Promise<never>}
    */
-  async _cleanupFailedStart(startError) {
+  async _cleanupFailedStart({generation, startError}) {
     this._state = "stopping"
-    const cleanupPromise = this._invokeStop()
+    const cleanupPromise = this._completeCleanup(generation)
+    if (!this._shutdownPromise) this._trackShutdown(cleanupPromise)
 
-    if (!this._shutdownPromise) {
-      this._shutdownPromise = cleanupPromise
-      void cleanupPromise.then(
-        () => this._finishAutomaticShutdown(cleanupPromise),
-        () => this._finishAutomaticShutdown(cleanupPromise)
-      )
-    }
-
-    let cleanupFailed = false
-    let cleanupError
     try {
       await cleanupPromise
-    } catch (error) {
-      cleanupFailed = true
-      cleanupError = error
-    }
-
-    if (cleanupFailed) {
-      throw new AggregateError(
-        [startError, cleanupError],
-        "Lifecycle startup and cleanup both failed",
-        {cause: startError}
-      )
+    } catch (cleanupError) {
+      throw createStartCleanupError(startError, cleanupError)
     }
 
     throw startError
@@ -152,15 +175,13 @@ export default class StartStopLifecycle {
     this._state = "stopping"
     const abortError = createAbortError()
     abortController.abort(abortError)
-    const stopPromise = Promise.resolve().then(async () => {
+    return this._trackShutdown(Promise.resolve().then(async () => {
       try {
         await startPromise
       } catch (startError) {
         if (!isAbortErrorForReason(startError, abortError)) throw startError
       }
-    })
-
-    return this._trackStop(stopPromise)
+    }))
   }
 
   /** @returns {Promise<void>} */
@@ -186,38 +207,40 @@ export default class StartStopLifecycle {
     return queuedStartPromise
   }
 
-  /** @returns {Promise<void>} */
-  _invokeStop() { return Promise.resolve().then(async () => await this._stopCallback()) }
-
   /**
-   * @param {Promise<void>} stopPromise
+   * @param {StartStopLifecycleGeneration} generation
    * @returns {Promise<void>}
    */
-  _trackStop(stopPromise) {
-    this._stopPromise = stopPromise
-    this._shutdownPromise = stopPromise
-    void stopPromise.then(
-      () => this._finishStop(stopPromise),
-      () => this._finishStop(stopPromise)
+  async _completeCleanup(generation) {
+    try {
+      await this._stopCallback()
+    } catch (error) {
+      this._cleanupError = error
+      this._state = "cleanup-failed"
+      throw error
+    }
+
+    if (this._activeGeneration === generation) this._activeGeneration = undefined
+    this._cleanupError = undefined
+    this._state = "idle"
+  }
+
+  /**
+   * @param {Promise<void>} shutdownPromise
+   * @returns {Promise<void>}
+   */
+  _trackShutdown(shutdownPromise) {
+    this._shutdownPromise = shutdownPromise
+    void shutdownPromise.then(
+      () => this._clearShutdownPromise(shutdownPromise),
+      () => this._clearShutdownPromise(shutdownPromise)
     )
 
-    return stopPromise
+    return shutdownPromise
   }
 
-  /** @param {Promise<void>} cleanupPromise */
-  _finishAutomaticShutdown(cleanupPromise) {
-    if (this._shutdownPromise !== cleanupPromise || this._stopPromise) return
-
-    this._shutdownPromise = undefined
-    this._state = "idle"
-  }
-
-  /** @param {Promise<void>} stopPromise */
-  _finishStop(stopPromise) {
-    if (this._stopPromise !== stopPromise) return
-
-    this._stopPromise = undefined
-    if (this._shutdownPromise === stopPromise) this._shutdownPromise = undefined
-    this._state = "idle"
+  /** @param {Promise<void>} shutdownPromise */
+  _clearShutdownPromise(shutdownPromise) {
+    if (this._shutdownPromise === shutdownPromise) this._shutdownPromise = undefined
   }
 }

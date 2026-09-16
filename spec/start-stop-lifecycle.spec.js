@@ -221,6 +221,142 @@ describe("StartStopLifecycle", () => {
     expect(failure).toEqual(jasmine.any(AggregateError))
     expect(failure.cause).toBe(startupError)
     expect(failure.errors).toEqual([startupError, cleanupError])
+    expect(lifecycle.state).toBe("cleanup-failed")
+  })
+
+  it("retains failed explicit cleanup, blocks starts, and retries cleanup", async () => {
+    const cleanupError = new Error("backend cleanup failed")
+    const start = jasmine.createSpy("start").and.resolveTo(undefined)
+    let stopCalls = 0
+    const lifecycle = new StartStopLifecycle({
+      start,
+      stop: async () => {
+        stopCalls += 1
+        if (stopCalls === 1) throw cleanupError
+      }
+    })
+
+    await lifecycle.start()
+    await expectAsync(lifecycle.stop()).toBeRejectedWith(cleanupError)
+
+    expect(lifecycle.state).toBe("cleanup-failed")
+    const blockedStartError = await lifecycle.ensureRunning().catch((error) => error)
+    expect(blockedStartError).toEqual(jasmine.any(Error))
+    expect(blockedStartError.message).toContain("cleanup failed")
+    expect(blockedStartError.cause).toBe(cleanupError)
+    expect(start).toHaveBeenCalledTimes(1)
+
+    await lifecycle.stop()
+
+    expect(stopCalls).toBe(2)
+    expect(lifecycle.state).toBe("idle")
+  })
+
+  it("retains failed-start cleanup and permits only a cleanup retry", async () => {
+    const startupError = new Error("backend startup failed")
+    const cleanupError = new Error("backend cleanup failed")
+    const start = jasmine.createSpy("start").and.rejectWith(startupError)
+    let stopCalls = 0
+    const lifecycle = new StartStopLifecycle({
+      start,
+      stop: async () => {
+        stopCalls += 1
+        if (stopCalls === 1) throw cleanupError
+      }
+    })
+
+    const failure = await lifecycle.start().catch((error) => error)
+
+    expect(failure).toEqual(jasmine.any(AggregateError))
+    expect(failure.cause).toBe(startupError)
+    expect(failure.errors).toEqual([startupError, cleanupError])
+    expect(lifecycle.state).toBe("cleanup-failed")
+    await expectAsync(lifecycle.start()).toBeRejectedWithError(/cleanup failed/)
+    expect(start).toHaveBeenCalledTimes(1)
+
+    await lifecycle.stop()
+
+    expect(stopCalls).toBe(2)
+    expect(lifecycle.state).toBe("idle")
+  })
+
+  it("joins concurrent cleanup retries after a cleanup failure", async () => {
+    const retryCleanup = createDeferred()
+    let stopCalls = 0
+    const lifecycle = new StartStopLifecycle({
+      start: async () => {},
+      stop: async () => {
+        stopCalls += 1
+        if (stopCalls === 1) throw new Error("backend cleanup failed")
+        await retryCleanup.promise
+      }
+    })
+
+    await lifecycle.start()
+    await expectAsync(lifecycle.stop()).toBeRejected()
+    const firstRetry = lifecycle.stop()
+    const secondRetry = lifecycle.stop()
+
+    await Promise.resolve()
+    expect(firstRetry).toBe(secondRetry)
+    expect(stopCalls).toBe(2)
+    expect(lifecycle.state).toBe("stopping")
+
+    retryCleanup.resolve()
+    await Promise.all([firstRetry, secondRetry])
+
+    expect(lifecycle.state).toBe("idle")
+  })
+
+  it("rejects a queued start when cleanup fails without running it later", async () => {
+    const cleanup = createDeferred()
+    const cleanupError = new Error("backend cleanup failed")
+    const start = jasmine.createSpy("start").and.resolveTo(undefined)
+    const lifecycle = new StartStopLifecycle({
+      start,
+      stop: async () => {
+        await cleanup.promise
+        throw cleanupError
+      }
+    })
+
+    await lifecycle.start()
+    const stopping = lifecycle.stop()
+    const queuedStart = lifecycle.start()
+
+    cleanup.resolve()
+    await expectAsync(stopping).toBeRejectedWith(cleanupError)
+    await expectAsync(queuedStart).toBeRejectedWith(cleanupError)
+    await Promise.resolve()
+
+    expect(start).toHaveBeenCalledTimes(1)
+    expect(lifecycle.state).toBe("cleanup-failed")
+  })
+
+  it("accepts unexpected completion only for the current running generation", async () => {
+    const shutdown = createDeferred()
+    const generations = []
+    const lifecycle = new StartStopLifecycle({
+      start: async ({generation}) => {
+        generations.push(generation)
+      },
+      stop: async () => await shutdown.promise
+    })
+
+    await lifecycle.start()
+    expect(lifecycle.notifyResourceStopped(generations[0])).toBeTrue()
+    expect(lifecycle.state).toBe("idle")
+
+    await lifecycle.start()
+    expect(lifecycle.notifyResourceStopped(generations[0])).toBeFalse()
+    expect(lifecycle.state).toBe("running")
+
+    const stopping = lifecycle.stop()
+    expect(lifecycle.notifyResourceStopped(generations[1])).toBeFalse()
+    expect(lifecycle.state).toBe("stopping")
+
+    shutdown.resolve()
+    await stopping
     expect(lifecycle.state).toBe("idle")
   })
 })
