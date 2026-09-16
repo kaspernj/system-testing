@@ -1,1 +1,1 @@
-Add a framework-neutral `StartStopLifecycle` coordinator with retryable cleanup-failed state and generation-safe unexpected completion, plus a Node `OwnedProcess` primitive for single-flight, proven process-group shutdown with structured survivor reporting.
+Add a framework-neutral `StartStopLifecycle` coordinator with retryable cleanup-failed state and generation-safe unexpected completion, plus a Node `OwnedProcess` primitive for single-flight, generation-anchored process-group shutdown with structured survivor reporting.

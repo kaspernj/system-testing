@@ -308,6 +308,42 @@ describe("StartStopLifecycle", () => {
     expect(lifecycle.state).toBe("idle")
   })
 
+  it("queues exactly one fresh generation while retrying failed cleanup", async () => {
+    const retryCleanup = createDeferred()
+    const generations = []
+    let stopCalls = 0
+    const lifecycle = new StartStopLifecycle({
+      start: async ({generation}) => {
+        generations.push(generation)
+      },
+      stop: async () => {
+        stopCalls += 1
+        if (stopCalls === 1) throw new Error("backend cleanup failed")
+        await retryCleanup.promise
+      }
+    })
+
+    await lifecycle.start()
+    await expectAsync(lifecycle.stop()).toBeRejected()
+    const cleanupRetry = lifecycle.stop()
+    const firstQueuedStart = lifecycle.ensureRunning()
+    const secondQueuedStart = lifecycle.ensureRunning()
+
+    await Promise.resolve()
+    expect(lifecycle.state).toBe("stopping")
+    expect(firstQueuedStart).toBe(secondQueuedStart)
+    expect(generations).toHaveSize(1)
+
+    retryCleanup.resolve()
+    await Promise.all([cleanupRetry, firstQueuedStart, secondQueuedStart])
+
+    expect(stopCalls).toBe(2)
+    expect(generations).toHaveSize(2)
+    expect(generations[1].id).toBeGreaterThan(generations[0].id)
+    expect(generations[1]).not.toBe(generations[0])
+    expect(lifecycle.state).toBe("running")
+  })
+
   it("rejects a queued start when cleanup fails without running it later", async () => {
     const cleanup = createDeferred()
     const cleanupError = new Error("backend cleanup failed")

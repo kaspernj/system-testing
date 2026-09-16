@@ -8,7 +8,7 @@ import {promisify} from "node:util"
  * @property {string} platform Platform on which process ownership is implemented.
  * @property {(command: string, args: string[], options: import("node:child_process").SpawnOptions) => import("node:child_process").ChildProcess} spawn Spawns the direct child.
  * @property {(processGroupId: number) => Promise<number[]>} listProcessGroupPids Lists exact non-zombie process-group members.
- * @property {(processGroupId: number, signal: OwnedProcessStopSignal) => Promise<void> | void} signalProcessGroup Signals the exact process group.
+ * @property {(identity: OwnedProcessIdentity, signal: OwnedProcessStopSignal) => Promise<boolean> | boolean} signalProcessGroupIfOwned Atomically verifies the generation and signals its exact process group, returning false on an identity mismatch.
  * @property {(milliseconds: number) => Promise<void>} wait Waits between ownership checks.
  * @property {() => number} now Reads a monotonic clock.
  */
@@ -31,6 +31,7 @@ import {promisify} from "node:util"
 /** @typedef {{directChildClosed: boolean, survivingPids: number[]}} OwnedProcessTerminationStatus */
 
 const execFileAsync = promisify(execFile)
+const ownedProcessAnchorUrl = new URL("owned-process-anchor.js", import.meta.url)
 const SUPPORTED_PLATFORMS = new Set(["aix", "darwin", "freebsd", "linux", "openbsd", "sunos"])
 
 /**
@@ -62,22 +63,28 @@ async function listProcessGroupPids(processGroupId) {
   return pids.sort((firstPid, secondPid) => firstPid - secondPid)
 }
 
-/**
- * @param {number} processGroupId
- * @param {OwnedProcessStopSignal} signal
- */
-function signalProcessGroup(processGroupId, signal) {
-  process.kill(-processGroupId, signal)
-}
-
 /** @type {OwnedProcessControl} */
 const defaultProcessControl = {
   listProcessGroupPids,
   now: () => performance.now(),
   platform: process.platform,
-  signalProcessGroup,
+  signalProcessGroupIfOwned: () => {
+    throw new Error("Default owned process groups must be signalled through their anchor")
+  },
   spawn: spawnChild,
   wait: async (milliseconds) => await wait(milliseconds)
+}
+
+/**
+ * @param {{message?: string, name?: string, code?: string | number}} serializedError
+ * @returns {Error}
+ */
+function deserializeError(serializedError) {
+  const error = new Error(serializedError.message ?? "Owned process anchor failed")
+  if (serializedError.name) error.name = serializedError.name
+  if (serializedError.code !== undefined) Object.assign(error, {code: serializedError.code})
+
+  return error
 }
 
 export class OwnedProcessUnsupportedPlatformError extends Error {
@@ -140,16 +147,21 @@ export default class OwnedProcess {
     if (stdout === undefined) stdout = "inherit"
     let stderr = options.stderr
     if (stderr === undefined) stderr = "inherit"
+    const anchored = processControl === defaultProcessControl
     /** @type {import("node:child_process").SpawnOptions} */
     const spawnOptions = {
       cwd: options.cwd,
       detached: true,
       env: options.env,
-      stdio: ["ignore", stdout, stderr]
+      stdio: anchored ? ["ignore", stdout, stderr, "ipc"] : ["ignore", stdout, stderr]
     }
-    const child = processControl.spawn(command, args, spawnOptions)
+    const child = processControl.spawn(
+      anchored ? process.execPath : command,
+      anchored ? [ownedProcessAnchorUrl.pathname] : args,
+      spawnOptions
+    )
 
-    return await new Promise((resolve, reject) => {
+    const ownedProcess = await new Promise((resolve, reject) => {
       const cleanupSpawnListeners = () => {
         child.off("error", onSpawnError)
         child.off("spawn", onSpawn)
@@ -165,16 +177,21 @@ export default class OwnedProcess {
           return
         }
 
-        resolve(new OwnedProcess({child, forceKillWaitMs, killGraceMs, pollIntervalMs, processControl}))
+        resolve(new OwnedProcess({anchored, child, forceKillWaitMs, killGraceMs, pollIntervalMs, processControl}))
       }
 
       child.once("error", onSpawnError)
       child.once("spawn", onSpawn)
     })
+    if (!(ownedProcess instanceof OwnedProcess)) throw new Error("Owned process spawn returned an invalid owner")
+    if (anchored) await ownedProcess._startAnchoredTarget(command, args)
+
+    return ownedProcess
   }
 
   /**
    * @param {{
+   *   anchored: boolean,
    *   child: import("node:child_process").ChildProcess,
    *   forceKillWaitMs: number,
    *   killGraceMs: number,
@@ -182,7 +199,7 @@ export default class OwnedProcess {
    *   processControl: OwnedProcessControl
    * }} args
    */
-  constructor({child, forceKillWaitMs, killGraceMs, pollIntervalMs, processControl}) {
+  constructor({anchored, child, forceKillWaitMs, killGraceMs, pollIntervalMs, processControl}) {
     if (!child.pid) throw new Error("Owned process requires a PID")
 
     this.identity = Object.freeze({pid: child.pid, processGroupId: child.pid, token: randomUUID()})
@@ -193,6 +210,8 @@ export default class OwnedProcess {
     this._killGraceMs = killGraceMs
     this._forceKillWaitMs = forceKillWaitMs
     this._pollIntervalMs = pollIntervalMs
+    this._anchored = anchored
+    this._anchorPid = child.pid
 
     /** @type {(result: OwnedProcessCloseResult) => void} */
     let resolveClosed = () => {}
@@ -200,12 +219,35 @@ export default class OwnedProcess {
       resolveClosed = resolve
     })
     this._resolveClosed = resolveClosed
-    this._onClose = (code, signal) => this._recordClose(code, signal)
+    this._onClose = (code, signal) => {
+      if (this._anchored) {
+        this._recordAnchorClose(code, signal)
+      } else {
+        this._recordClose(code, signal)
+      }
+    }
     this._onError = (error) => {
       this._processError = error
     }
+    this._onMessage = (message) => this._handleAnchorMessage(message)
     child.once("close", this._onClose)
     child.on("error", this._onError)
+    if (this._anchored) child.on("message", this._onMessage)
+  }
+
+  /**
+   * @param {string} command
+   * @param {string[]} args
+   * @returns {Promise<void>}
+   */
+  async _startAnchoredTarget(command, args) {
+    /** @type {Promise<void>} */
+    const targetSpawned = new Promise((resolve, reject) => {
+      this._resolveTargetSpawn = () => resolve()
+      this._rejectTargetSpawn = reject
+    })
+    await this._sendAnchorMessage({args, command, type: "start"})
+    await targetSpawned
   }
 
   /** @returns {Promise<void>} */
@@ -227,18 +269,39 @@ export default class OwnedProcess {
   async _stopOwnedScope() {
     let terminationStatus = await this._terminationStatus()
     if (this._isTerminated(terminationStatus)) {
-      this._finishTermination()
+      await this._completeTermination()
+      return
+    }
+
+    if (this._forceKillSent) {
+      terminationStatus = await this._waitForTermination(this._forceKillWaitMs)
+      if (!this._isTerminated(terminationStatus)) {
+        throw new OwnedProcessTerminationError(
+          this.identity,
+          terminationStatus.survivingPids,
+          terminationStatus.directChildClosed
+        )
+      }
+
+      await this._completeTermination()
       return
     }
 
     await this._signal("SIGTERM", terminationStatus.survivingPids)
     terminationStatus = await this._waitForTermination(this._killGraceMs)
     if (this._isTerminated(terminationStatus)) {
-      this._finishTermination()
+      await this._completeTermination()
       return
     }
 
-    await this._signal("SIGKILL", terminationStatus.survivingPids)
+    this._forceKillRequested = true
+    try {
+      await this._signal("SIGKILL", terminationStatus.survivingPids)
+      this._forceKillSent = true
+    } catch (error) {
+      this._forceKillRequested = false
+      throw error
+    }
     terminationStatus = await this._waitForTermination(this._forceKillWaitMs)
     if (!this._isTerminated(terminationStatus)) {
       throw new OwnedProcessTerminationError(
@@ -248,7 +311,7 @@ export default class OwnedProcess {
       )
     }
 
-    this._finishTermination()
+    await this._completeTermination()
   }
 
   /**
@@ -256,12 +319,117 @@ export default class OwnedProcess {
    * @param {number[]} knownSurvivingPids
    */
   async _signal(signal, knownSurvivingPids) {
+    if (this._anchored) {
+      if (this._anchorClosed) {
+        throw new OwnedProcessInspectionError(this.identity, new Error("Owned process anchor closed before signalling completed"))
+      }
+
+      try {
+        await this._signalWithAnchor(signal)
+        return
+      } catch (error) {
+        throw new OwnedProcessTerminationError(this.identity, knownSurvivingPids, this._directChildClosed, error)
+      }
+    }
+
     try {
-      await this._processControl.signalProcessGroup(this.identity.processGroupId, signal)
+      if (await this._processControl.signalProcessGroupIfOwned(this.identity, signal)) return
     } catch (error) {
       if (error instanceof Error && "code" in error && error.code === "ESRCH") return
 
       throw new OwnedProcessTerminationError(this.identity, knownSurvivingPids, this._directChildClosed, error)
+    }
+
+    throw new OwnedProcessInspectionError(this.identity, new Error("Owned process-group generation is no longer verifiable"))
+  }
+
+  /** @param {OwnedProcessStopSignal} signal */
+  async _signalWithAnchor(signal) {
+    if (this._pendingAnchorSignal) throw new Error("Owned process anchor already has a pending signal")
+
+    const requestId = randomUUID()
+    /** @type {{requestId: string, resolve: () => void, reject: (error: Error) => void}} */
+    const pendingAnchorSignal = {reject: () => {}, requestId, resolve: () => {}}
+    /** @type {Promise<void>} */
+    const signalResponse = new Promise((resolve, reject) => {
+      pendingAnchorSignal.reject = reject
+      pendingAnchorSignal.resolve = () => resolve()
+    })
+    this._pendingAnchorSignal = pendingAnchorSignal
+    try {
+      await this._sendAnchorMessage({requestId, signal, type: "signal"})
+      await signalResponse
+    } catch (error) {
+      if (this._pendingAnchorSignal === pendingAnchorSignal) this._pendingAnchorSignal = undefined
+      throw error
+    }
+  }
+
+  /**
+   * @param {Record<string, unknown>} message
+   * @returns {Promise<void>}
+   */
+  async _sendAnchorMessage(message) {
+    if (!this._child?.send || !this._child.connected) throw new Error("Owned process anchor IPC is unavailable")
+
+    /** @type {Promise<void>} */
+    const messageSent = new Promise((resolve, reject) => {
+      this._child?.send?.(message, (error) => {
+        if (error) {
+          reject(error)
+        } else {
+          resolve()
+        }
+      })
+    })
+    await messageSent
+  }
+
+  /** @param {any} message */
+  _handleAnchorMessage(message) {
+    if (!message || typeof message !== "object" || typeof message.type !== "string") return
+
+    if (message.type === "target-spawned") {
+      if (!Number.isInteger(message.pid) || message.pid <= 0) {
+        this._rejectTargetSpawn?.(new Error("Owned process anchor reported an invalid target PID"))
+      } else {
+        this.identity = Object.freeze({
+          pid: message.pid,
+          processGroupId: this._anchorPid,
+          token: this.identity.token
+        })
+        this._resolveTargetSpawn?.()
+      }
+      this._rejectTargetSpawn = undefined
+      this._resolveTargetSpawn = undefined
+      return
+    }
+
+    if (message.type === "target-error") {
+      const error = deserializeError(message.error ?? {})
+      if (this._rejectTargetSpawn) {
+        this._rejectTargetSpawn(error)
+        this._rejectTargetSpawn = undefined
+        this._resolveTargetSpawn = undefined
+      } else {
+        this._processError = error
+      }
+      return
+    }
+
+    if (message.type === "target-closed") {
+      this._recordClose(message.code ?? null, message.signal ?? null)
+      return
+    }
+
+    const pendingAnchorSignal = this._pendingAnchorSignal
+    if (message.type !== "signal-result" || !pendingAnchorSignal || pendingAnchorSignal.requestId !== message.requestId) return
+
+    this._pendingAnchorSignal = undefined
+    if (message.error) {
+      pendingAnchorSignal.reject(deserializeError(message.error))
+    } else {
+      pendingAnchorSignal.resolve()
     }
   }
 
@@ -285,6 +453,10 @@ export default class OwnedProcess {
 
   /** @returns {Promise<OwnedProcessTerminationStatus>} */
   async _terminationStatus() {
+    if (this._anchored && this._anchorClosed && !this._forceKillRequested && !this._releasingAnchor) {
+      throw new OwnedProcessInspectionError(this.identity, new Error("Owned process anchor closed before terminal proof"))
+    }
+
     /** @type {number[]} */
     let processGroupPids
     try {
@@ -293,9 +465,14 @@ export default class OwnedProcess {
       throw new OwnedProcessInspectionError(this.identity, error)
     }
 
+    const uniqueProcessGroupPids = [...new Set(processGroupPids)].sort((firstPid, secondPid) => firstPid - secondPid)
+    if (this._anchored && !this._anchorClosed && !this._forceKillRequested && !uniqueProcessGroupPids.includes(this._anchorPid)) {
+      throw new OwnedProcessInspectionError(this.identity, new Error("Owned process anchor is no longer a member of its process group"))
+    }
+
     return {
       directChildClosed: this._directChildClosed,
-      survivingPids: [...new Set(processGroupPids)].sort((firstPid, secondPid) => firstPid - secondPid)
+      survivingPids: this._anchored ? uniqueProcessGroupPids.filter((pid) => pid !== this._anchorPid) : uniqueProcessGroupPids
     }
   }
 
@@ -312,18 +489,68 @@ export default class OwnedProcess {
    * @param {string | null} signal
    */
   _recordClose(code, signal) {
+    if (this._directChildClosed) return
+
     this._directChildClosed = true
     /** @type {OwnedProcessCloseResult} */
     const result = {code, signal}
     if (this._processError) result.error = this._processError
     this._resolveClosed(result)
-    this._child?.off("error", this._onError)
+    if (!this._anchored) this._child?.off("error", this._onError)
+  }
+
+  /**
+   * @param {number | null} code
+   * @param {string | null} signal
+   */
+  _recordAnchorClose(code, signal) {
+    this._anchorClosed = true
+    if (this._pendingAnchorSignal) {
+      this._pendingAnchorSignal.reject(new Error("Owned process anchor closed before acknowledging its signal"))
+      this._pendingAnchorSignal = undefined
+    }
+    if (this._rejectTargetSpawn) {
+      this._rejectTargetSpawn(new Error(`Owned process anchor closed before target spawn (${code ?? signal ?? "unknown"})`))
+      this._rejectTargetSpawn = undefined
+      this._resolveTargetSpawn = undefined
+    }
+    if (this._forceKillRequested && !this._directChildClosed) this._recordClose(null, signal ?? "SIGKILL")
+  }
+
+  /** @returns {Promise<void>} */
+  async _completeTermination() {
+    if (this._anchored && !this._anchorClosed) {
+      this._releasingAnchor = true
+      try {
+        await this._sendAnchorMessage({type: "release"})
+      } catch (error) {
+        if (!this._anchorClosed) throw new OwnedProcessInspectionError(this.identity, error)
+      }
+      await this._waitForAnchorClose(this._forceKillWaitMs)
+      if (!this._anchorClosed) {
+        throw new OwnedProcessTerminationError(this.identity, [], this._directChildClosed, new Error("Owned process anchor did not close"))
+      }
+    }
+
+    this._finishTermination()
+  }
+
+  /** @param {number} timeoutMs */
+  async _waitForAnchorClose(timeoutMs) {
+    const deadline = this._processControl.now() + timeoutMs
+    while (!this._anchorClosed) {
+      const remainingMs = deadline - this._processControl.now()
+      if (remainingMs <= 0) return
+
+      await this._processControl.wait(Math.min(this._pollIntervalMs, remainingMs))
+    }
   }
 
   _finishTermination() {
     this._terminated = true
     this._child?.off("close", this._onClose)
     this._child?.off("error", this._onError)
+    this._child?.off("message", this._onMessage)
     this._child = undefined
     this.stdout = null
     this.stderr = null
@@ -355,6 +582,18 @@ export default class OwnedProcess {
   /** @type {Promise<void> | undefined} */
   _stopPromise = undefined
   /** @type {boolean} */
+  _anchored
+  /** @type {number} */
+  _anchorPid
+  /** @type {boolean} */
+  _anchorClosed = false
+  /** @type {boolean} */
+  _forceKillRequested = false
+  /** @type {boolean} */
+  _forceKillSent = false
+  /** @type {boolean} */
+  _releasingAnchor = false
+  /** @type {boolean} */
   _directChildClosed = false
   /** @type {boolean} */
   _terminated = false
@@ -362,8 +601,16 @@ export default class OwnedProcess {
   _processError = undefined
   /** @type {(result: OwnedProcessCloseResult) => void} */
   _resolveClosed
+  /** @type {(() => void) | undefined} */
+  _resolveTargetSpawn = undefined
+  /** @type {((error: Error) => void) | undefined} */
+  _rejectTargetSpawn = undefined
+  /** @type {{requestId: string, resolve: () => void, reject: (error: Error) => void} | undefined} */
+  _pendingAnchorSignal = undefined
   /** @type {(code: number | null, signal: string | null) => void} */
   _onClose
   /** @type {(error: Error) => void} */
   _onError
+  /** @type {(message: any) => void} */
+  _onMessage
 }

@@ -138,13 +138,14 @@ describe("OwnedProcess", () => {
         return child
       },
       listProcessGroupPids: async () => pids,
-      signalProcessGroup: async (_processGroupId, signal) => {
+      signalProcessGroupIfOwned: async (_identity, signal) => {
         signals.push(signal)
         if (signal === "SIGTERM") termSent.resolve()
         if (signal === "SIGKILL") {
           pids = []
           killSent.resolve()
         }
+        return true
       },
       wait: async (milliseconds) => {
         activeWaits += 1
@@ -194,7 +195,7 @@ describe("OwnedProcess", () => {
     expect(child.listenerCount("error")).toBe(0)
   })
 
-  it("retains exact survivors after terminal failure and permits cleanup retry", async () => {
+  it("retains exact survivors after terminal failure and never re-signals a reused group during cleanup retry", async () => {
     const child = new FakeChildProcess(12002)
     const signals = []
     let currentTime = 0
@@ -207,9 +208,10 @@ describe("OwnedProcess", () => {
         return child
       },
       listProcessGroupPids: async () => pids,
-      signalProcessGroup: async (_processGroupId, signal) => {
+      signalProcessGroupIfOwned: async (_identity, signal) => {
         signals.push(signal)
         if (signal === "SIGKILL") pids = [12003]
+        return true
       },
       wait: async (milliseconds) => {
         currentTime += milliseconds
@@ -229,6 +231,13 @@ describe("OwnedProcess", () => {
     expect(failure.directChildClosed).toBeFalse()
     expect(signals).toEqual(["SIGTERM", "SIGKILL"])
 
+    pids = [13000]
+    const reusedGroupFailure = await ownedProcess.stop().catch((error) => error)
+
+    expect(reusedGroupFailure).toEqual(jasmine.any(OwnedProcessTerminationError))
+    expect(reusedGroupFailure.survivingPids).toEqual([13000])
+    expect(signals).toEqual(["SIGTERM", "SIGKILL"])
+
     pids = []
     child.emit("close", null, "SIGKILL")
     await ownedProcess.stop()
@@ -239,7 +248,7 @@ describe("OwnedProcess", () => {
 
   it("retains ownership when scope inspection fails and permits cleanup retry", async () => {
     const child = new FakeChildProcess(12004)
-    const signalProcessGroup = jasmine.createSpy("signalProcessGroup")
+    const signalProcessGroupIfOwned = jasmine.createSpy("signalProcessGroupIfOwned")
     let inspectionFails = true
     const processControl = {
       platform: "linux",
@@ -253,13 +262,13 @@ describe("OwnedProcess", () => {
 
         return []
       },
-      signalProcessGroup,
+      signalProcessGroupIfOwned,
       wait: async () => {}
     }
     const ownedProcess = await OwnedProcess.spawn("fake", [], {processControl})
 
     await expectAsync(ownedProcess.stop()).toBeRejectedWith(jasmine.any(OwnedProcessInspectionError))
-    expect(signalProcessGroup).not.toHaveBeenCalled()
+    expect(signalProcessGroupIfOwned).not.toHaveBeenCalled()
 
     inspectionFails = false
     child.emit("close", 0, null)
@@ -267,6 +276,40 @@ describe("OwnedProcess", () => {
 
     expect(child.listenerCount("close")).toBe(0)
     expect(child.listenerCount("error")).toBe(0)
+  })
+
+  it("refuses to signal a process group whose numeric identity was reused", async () => {
+    const child = new FakeChildProcess(12005)
+    const signalUnrelatedProcessGroup = jasmine.createSpy("signalUnrelatedProcessGroup")
+    const signalProcessGroupIfOwned = jasmine.createSpy("signalProcessGroupIfOwned").and.callFake(async (identity) => {
+      if (identity.token !== "reused-generation") return false
+
+      signalUnrelatedProcessGroup()
+      return true
+    })
+    const processControl = {
+      platform: "linux",
+      now: () => 0,
+      spawn: () => {
+        queueMicrotask(() => child.emit("spawn"))
+        return child
+      },
+      listProcessGroupPids: async () => [13000],
+      signalProcessGroupIfOwned,
+      wait: async () => {}
+    }
+    const ownedProcess = await OwnedProcess.spawn("fake", [], {
+      forceKillWaitMs: 0,
+      killGraceMs: 0,
+      pollIntervalMs: 1,
+      processControl
+    })
+    child.emit("close", 0, null)
+
+    await expectAsync(ownedProcess.stop()).toBeRejectedWith(jasmine.any(OwnedProcessInspectionError))
+
+    expect(signalProcessGroupIfOwned).toHaveBeenCalledOnceWith(ownedProcess.identity, "SIGTERM")
+    expect(signalUnrelatedProcessGroup).not.toHaveBeenCalled()
   })
 
   it("distinguishes a post-spawn close from spawn failure", async () => {
@@ -296,7 +339,7 @@ describe("OwnedProcess", () => {
         {forceKillWaitMs: 1000, killGraceMs: 50, stderr: "pipe", stdout: "pipe"}
       )
       if (!ownedProcess.stdout) throw new Error("Expected piped fixture stdout")
-      expect(ownedProcess.identity.pid).toBe(ownedProcess.identity.processGroupId)
+      expect(ownedProcess.identity.pid).not.toBe(ownedProcess.identity.processGroupId)
       expect(Object.isFrozen(ownedProcess.identity)).toBeTrue()
       await waitForLine(ownedProcess.stdout, "ready")
       const termReceived = waitForLine(ownedProcess.stdout, "term")
@@ -367,7 +410,7 @@ describe("OwnedProcess", () => {
         process.env.PATH = `${fixturePath}:${originalPath}`
       }
       ownedProcess = await OwnedProcess.spawn(process.execPath, ["-e", ""], {
-        forceKillWaitMs: 0,
+        forceKillWaitMs: 1000,
         killGraceMs: 0,
         pollIntervalMs: 1,
         stderr: "pipe",
@@ -394,7 +437,7 @@ describe("OwnedProcess", () => {
 
   it("rejects spawn failure without signaling an unowned process", async () => {
     const child = new FakeChildProcess(undefined)
-    const signalProcessGroup = jasmine.createSpy("signalProcessGroup")
+    const signalProcessGroupIfOwned = jasmine.createSpy("signalProcessGroupIfOwned")
     const processControl = {
       platform: "linux",
       now: () => 0,
@@ -403,13 +446,13 @@ describe("OwnedProcess", () => {
         return child
       },
       listProcessGroupPids: async () => [],
-      signalProcessGroup,
+      signalProcessGroupIfOwned,
       wait: async () => {}
     }
 
     await expectAsync(OwnedProcess.spawn("missing", [], {processControl})).toBeRejectedWithError(/spawn failed/)
 
-    expect(signalProcessGroup).not.toHaveBeenCalled()
+    expect(signalProcessGroupIfOwned).not.toHaveBeenCalled()
     expect(child.listenerCount("spawn")).toBe(0)
     expect(child.listenerCount("error")).toBe(0)
   })
@@ -421,7 +464,7 @@ describe("OwnedProcess", () => {
       now: () => 0,
       spawn: spawnProcess,
       listProcessGroupPids: async () => [],
-      signalProcessGroup: async () => {},
+      signalProcessGroupIfOwned: async () => true,
       wait: async () => {}
     }
 
@@ -436,7 +479,7 @@ describe("OwnedProcess", () => {
       now: () => 0,
       spawn: spawnProcess,
       listProcessGroupPids: async () => [],
-      signalProcessGroup: async () => {},
+      signalProcessGroupIfOwned: async () => true,
       wait: async () => {}
     }
 
