@@ -142,6 +142,52 @@ describe("WebDriverDriver lifecycle", () => {
     expect(await driver.exists("#does-not-exist", {timeout: 30, useBaseSelector: false})).toBeFalse()
   })
 
+  it("does not dispatch a scheduled WebDriver wait poll after the lookup deadline", async () => {
+    const driver = new WebDriverDriver({
+      browser: /** @type {any} */ ({
+        driver: undefined,
+        getSelector: (selector) => selector,
+        throwIfHttpServerError: () => {}
+      })
+    })
+    let findElementsCalls = 0
+    let scheduledPoll
+    let signalPollScheduled
+    const pollScheduledPromise = new Promise((resolve) => { signalPollScheduled = resolve })
+
+    driver.setWebDriver(/** @type {any} */ ({
+      findElements: async () => {
+        findElementsCalls += 1
+        return []
+      },
+      manage: () => ({setTimeouts: async () => {}}),
+      wait: async (condition) => {
+        if (await condition()) return true
+
+        scheduledPoll = condition
+        signalPollScheduled()
+        return await new Promise(() => {})
+      }
+    }))
+
+    jasmine.clock().install()
+    jasmine.clock().mockDate(new Date(1000))
+    try {
+      const resultPromise = driver.exists("#does-not-exist", {timeout: 30, useBaseSelector: false})
+
+      await pollScheduledPromise
+      jasmine.clock().tick(30)
+
+      expect(await resultPromise).toBeFalse()
+      if (!scheduledPoll) throw new Error("Expected WebDriver.wait to schedule a poll")
+      await scheduledPoll()
+
+      expect(findElementsCalls).toBe(1)
+    } finally {
+      jasmine.clock().uninstall()
+    }
+  })
+
   it("installs SIGINT/SIGTERM/beforeExit listeners when installExitHandlers() is called", () => {
     const before = {
       sigint: process.listenerCount("SIGINT"),

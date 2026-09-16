@@ -16,6 +16,12 @@ describe("package entrypoints", () => {
     expect(indexSource).not.toContain("use-system-test-expo")
   })
 
+  it("exports the framework-neutral start/stop lifecycle through the root index", async () => {
+    const indexSource = await fs.readFile(new URL("../src/index.js", import.meta.url), "utf8")
+
+    expect(indexSource).toContain('export {default as StartStopLifecycle} from "./start-stop-lifecycle.js"')
+  })
+
   it("keeps the Expo Router hook available through the explicit Expo entrypoint", async () => {
     const expoSource = await fs.readFile(new URL("../src/expo.js", import.meta.url), "utf8")
 

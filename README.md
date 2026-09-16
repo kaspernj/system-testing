@@ -39,6 +39,54 @@ The `useSystemTest*` hooks support three browser-side lifecycle callbacks:
 
 Use `onTeardown` for per-example browser cleanup such as clearing auth state or resetting app-local fixtures. Keep destructive cleanup there instead of `onInitialize` so signed-in flows can still run normally during an example.
 
+## Framework-neutral start/stop lifecycle
+
+Use `StartStopLifecycle` to coordinate an asynchronously started resource outside `SystemTest`. It keeps startup and shutdown single-flight, exposes `idle`, `starting`, `running`, `stopping`, and `cleanup-failed` through `state`, and does not report `running` until the startup callback resolves.
+
+```js
+import {StartStopLifecycle} from "system-testing"
+
+const lifecycle = new StartStopLifecycle({
+  start: async ({signal}) => {
+    await startBackend({signal})
+  },
+  stop: async () => {
+    await stopBackend()
+  }
+})
+
+await lifecycle.ensureRunning()
+await lifecycle.stop()
+```
+
+`start()` is an alias for `ensureRunning()`. Concurrent callers share the active operation. Calling `stop()` during startup aborts its `signal`, waits for the startup callback to settle, and runs cleanup once. A start requested during shutdown waits for shutdown before starting. Startup callbacks must observe the signal and settle when aborted; cleanup runs after every failed or aborted startup. If both startup and cleanup fail, the startup promise rejects with an `AggregateError` containing both failures.
+
+If cleanup rejects, the lifecycle stays in `cleanup-failed`. New starts reject without invoking the start callback, and a later `stop()` retries cleanup. The lifecycle returns to `idle` only after that retry succeeds. Keep the generation passed to the start callback with the owned resource; after an unexpected resource completion is fully proven, `notifyResourceStopped(generation)` returns the matching `running` generation to `idle`. Notifications from stale generations, or notifications received while stopping, are ignored.
+
+## Owned Node processes
+
+Use the Node-only `OwnedProcess` deep import when a test or development helper owns a command and its descendants:
+
+```js
+import OwnedProcess from "system-testing/build/owned-process.js"
+
+const ownedProcess = await OwnedProcess.spawn(command, args, {
+  cwd,
+  env,
+  stdout: "inherit",
+  stderr: "inherit",
+  killGraceMs: 1000,
+  forceKillWaitMs: 1000
+})
+
+await ownedProcess.stop()
+const directChildResult = await ownedProcess.closed
+```
+
+`closed` reports the owned command's `{code, signal, error?}` and does not by itself prove that descendants are gone. `stop()` is single-flight. On supported POSIX platforms an internal IPC-held anchor remains the process-group leader for the full cleanup generation and performs signals against its own current group; the parent never signals a later process through a recycled numeric group ID. `identity.pid` identifies the owned command, while `identity.processGroupId` identifies that private anchored group. Shutdown sends `SIGTERM`, waits through the configured grace period, sends `SIGKILL` if necessary, and resolves only after command close and exact process-group inspection report no live survivors. Descendants created after shutdown starts remain in the owned group and are included. Terminal zombie entries are not survivors: inspection requires their OS-reported zombie state before excluding them, which avoids claiming a live process is gone when a container init delays reaping an already-dead descendant.
+
+If termination finishes with survivors, `stop()` rejects with `OwnedProcessTerminationError`, exact `survivingPids`, and `directChildClosed`. Inspection or generation-verification failures reject with `OwnedProcessInspectionError`. Both retain ownership so a later `stop()` can retry; after a verified group-wide `SIGKILL`, retries only observe terminal progress and never signal a possibly reused group. Unsupported platforms reject with `OwnedProcessUnsupportedPlatformError` before spawning; the API never claims descendant cleanup where it cannot prove it. Spawn failures reject from `OwnedProcess.spawn(...)`, while a process that closes after a successful spawn settles `closed`. After proven termination, the anchor, internal child/listener references, and exposed pipe references are released.
+
 ## Getting started
 
 1. Add one of the browser-side hooks to your app:

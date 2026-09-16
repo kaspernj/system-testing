@@ -650,9 +650,15 @@ export default class WebDriverDriver {
             // so a findElements call to an unresponsive renderer would hang the lookup
             // forever. Race it against the same deadline so the lookup always settles.
             const errorMessage = `Timed out getting elements with selector: ${actualSelector}`
+            let pollingActive = true
 
             try {
               await timeout({timeout: timeLeft, errorMessage}, async () => await this.getWebDriver().wait(async () => {
+                // WebDriver.wait schedules its next poll after an empty result. The outer
+                // deadline can settle first, so prevent that delayed callback from issuing
+                // browser work after this lookup has begun restoring its implicit timeout.
+                if (!pollingActive) return true
+
                 elements = await getElements()
 
                 return elements.length > 0
@@ -661,6 +667,8 @@ export default class WebDriverDriver {
               if (!(error instanceof Error) || error instanceof WebDriverError || error.message !== errorMessage) throw error
 
               throw new ElementLookupDeadlineError(`Wait timed out after ${timeLeft}ms`)
+            } finally {
+              pollingActive = false
             }
           }
 
