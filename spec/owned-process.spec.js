@@ -1,13 +1,16 @@
 // @ts-check
 
-import {spawn} from "node:child_process"
+import {execFile, spawn} from "node:child_process"
 import {EventEmitter} from "node:events"
+import {promisify} from "node:util"
 
 import OwnedProcess, {
   OwnedProcessInspectionError,
   OwnedProcessTerminationError,
   OwnedProcessUnsupportedPlatformError
 } from "../src/owned-process.js"
+
+const execFileAsync = promisify(execFile)
 
 /** @returns {{promise: Promise<void>, resolve: () => void}} */
 function createDeferred() {
@@ -54,6 +57,22 @@ function waitForLine(stream, prefix) {
     stream.on("error", onError)
     stream.on("end", onEnd)
   })
+}
+
+/**
+ * @param {number} pid
+ * @returns {Promise<string | undefined>}
+ */
+async function readProcessState(pid) {
+  try {
+    const {stdout} = await execFileAsync("ps", ["-o", "stat=", "-p", String(pid)], {encoding: "utf8"})
+
+    return stdout.trim() || undefined
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === 1) return undefined
+
+    throw error
+  }
 }
 
 /** @param {OwnedProcess | undefined} ownedProcess */
@@ -326,13 +345,8 @@ describe("OwnedProcess", () => {
       const descendantPid = Number((await descendantCreated).split(":")[1])
       await stopping
 
-      let descendantProbeError
-      try {
-        process.kill(descendantPid, 0)
-      } catch (error) {
-        descendantProbeError = error
-      }
-      expect(descendantProbeError).toEqual(jasmine.objectContaining({code: "ESRCH"}))
+      const descendantState = await readProcessState(descendantPid)
+      expect(descendantState === undefined || descendantState.startsWith("Z")).toBeTrue()
       expect(() => process.kill(/** @type {number} */ (unrelatedChild?.pid), 0)).not.toThrow()
     } finally {
       await forceStopOwnedProcess(ownedProcess)
