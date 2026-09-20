@@ -30,6 +30,24 @@ const INITIAL_ROOT_VISIT_ATTEMPT_PAGE_LOAD_TIMEOUT_MS = 20000
 const NATIVE_CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 120000
 const NOTIFICATION_MESSAGE_SELECTOR = "[data-testid='notification-message']"
 const NOTIFICATION_MESSAGE_TIMEOUT_MS = 5000
+// Flash notifications auto-dismiss within a few seconds and the stack re-renders as it
+// changes, so a message can leave the DOM between a one-shot element snapshot and the
+// per-element work that follows it (visibility check, text read, click). A stale element
+// reference in that window is an expected state for these helpers, not a failure: the
+// snapshot is re-taken on a fresh pass after a short settle so the re-render completes.
+const NOTIFICATION_STALE_PASS_LIMIT = 3
+const NOTIFICATION_STALE_SETTLE_MS = 50
+
+/**
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+function isStaleElementReferenceError(error) {
+  return error instanceof Error && (
+    error.constructor.name === "StaleElementReferenceError"
+    || error.message.toLowerCase().includes("stale element reference")
+  )
+}
 
 /**
  * Whether a system test runs against a native app rather than a web/dist browser.
@@ -721,20 +739,42 @@ export default class SystemTest extends Browser {
   }
 
   /**
-   * Gets notification messages
+   * Gets notification messages.
+   *
+   * A stale element reference means the snapshot raced a notification leaving the DOM, so the
+   * snapshot is re-taken on a fresh pass. A read that still cannot settle throws instead of
+   * fabricating an empty result, because callers treat an empty result as "no notification to
+   * dismiss".
    * @returns {Promise<string[]>}
    */
   async notificationMessages() {
-    const notificationMessageElements = await this.all(NOTIFICATION_MESSAGE_SELECTOR, {timeout: 0, useBaseSelector: false})
-    const notificationMessageTexts = []
+    /** @type {Error | null} */
+    let lastStaleError = null
 
-    for (const notificationMessageElement of notificationMessageElements) {
-      const text = await notificationMessageElement.getText()
+    for (let pass = 0; pass < NOTIFICATION_STALE_PASS_LIMIT; pass += 1) {
+      try {
+        const notificationMessageElements = await this.all(NOTIFICATION_MESSAGE_SELECTOR, {timeout: 0, useBaseSelector: false})
+        const notificationMessageTexts = []
 
-      notificationMessageTexts.push(text)
+        for (const notificationMessageElement of notificationMessageElements) {
+          const text = await notificationMessageElement.getText()
+
+          notificationMessageTexts.push(text)
+        }
+
+        return notificationMessageTexts
+      } catch (error) {
+        if (!isStaleElementReferenceError(error)) throw error
+
+        lastStaleError = /** @type {Error} */ (error)
+
+        if (pass === NOTIFICATION_STALE_PASS_LIMIT - 1) break
+
+        await wait(NOTIFICATION_STALE_SETTLE_MS)
+      }
     }
 
-    return notificationMessageTexts
+    throw new Error(`Notification messages could not be read because the notification stack kept changing (stale element reference) after ${NOTIFICATION_STALE_PASS_LIMIT} attempts: ${lastStaleError?.message}`)
   }
 
   /**
@@ -854,12 +894,32 @@ export default class SystemTest extends Browser {
     await this.dismissNotificationMessages()
   }
 
-  /** @returns {Promise<void>} */
+  /**
+   * Dismisses every current notification message and waits for the stack to disappear.
+   *
+   * A stale element reference means the snapshot raced a notification auto-dismissing, which is
+   * a success state for this cleanup path: the snapshot is re-taken on a fresh pass. The
+   * trailing waitForNoSelector remains the disappearance contract and reports loudly if a
+   * notification actually persists.
+   * @returns {Promise<void>}
+   */
   async dismissNotificationMessages() {
-    const notificationMessageElements = await this.all(NOTIFICATION_MESSAGE_SELECTOR, {timeout: 0, useBaseSelector: false})
+    for (let pass = 0; pass < NOTIFICATION_STALE_PASS_LIMIT; pass += 1) {
+      try {
+        const notificationMessageElements = await this.all(NOTIFICATION_MESSAGE_SELECTOR, {timeout: 0, useBaseSelector: false})
 
-    for (const notificationMessageElement of notificationMessageElements) {
-      await this.interact(notificationMessageElement, "click")
+        for (const notificationMessageElement of notificationMessageElements) {
+          await this.interact(notificationMessageElement, "click")
+        }
+
+        break
+      } catch (error) {
+        if (!isStaleElementReferenceError(error)) throw error
+
+        if (pass === NOTIFICATION_STALE_PASS_LIMIT - 1) break
+
+        await wait(NOTIFICATION_STALE_SETTLE_MS)
+      }
     }
 
     await this.waitForNoSelector(NOTIFICATION_MESSAGE_SELECTOR, {useBaseSelector: false})
