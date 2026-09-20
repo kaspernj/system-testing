@@ -12,6 +12,15 @@ function createSystemTest() {
   return systemTest
 }
 
+/**
+ * Builds the wrapped stale-element error exactly as the driver reports it from a one-shot
+ * lookup: a plain Error whose message embeds the stale element reference.
+ * @returns {Error}
+ */
+function staleLookupError() {
+  return new Error("Couldn't get elements with selector: [data-testid='notification-message']: stale element reference: stale element not found in the current frame")
+}
+
 describe("SystemTest notifications", () => {
   it("reads the current notification messages without waiting", async () => {
     const systemTest = createSystemTest()
@@ -46,6 +55,103 @@ describe("SystemTest notifications", () => {
       [secondNotification, "click"]
     ])
     expect(waitForNoSelectorSpy).toHaveBeenCalledOnceWith("[data-testid='notification-message']", {useBaseSelector: false})
+  })
+
+  it("retries a stale snapshot before reading the settled notification messages", async () => {
+    const systemTest = createSystemTest()
+    let lookupCount = 0
+    const allSpy = jasmine.createSpy("all").and.callFake(async () => {
+      lookupCount += 1
+
+      if (lookupCount === 1) throw staleLookupError()
+
+      return [{getText: async () => "Settled notification"}]
+    })
+
+    systemTest.all = /** @type {any} */ (allSpy)
+
+    expect(await systemTest.notificationMessages()).toEqual(["Settled notification"])
+    expect(lookupCount).toBe(2)
+  })
+
+  it("throws instead of fabricating an empty result when the notification read keeps racing the auto-dismiss", async () => {
+    const systemTest = createSystemTest()
+    const allSpy = jasmine.createSpy("all").and.rejectWith(staleLookupError())
+
+    systemTest.all = /** @type {any} */ (allSpy)
+
+    const result = await systemTest.notificationMessages().catch((error) => error)
+
+    expect(result).toEqual(jasmine.any(Error))
+    expect(/** @type {Error} */ (result).message).toContain("kept changing (stale element reference) after 3 attempts")
+    expect(allSpy).toHaveBeenCalledTimes(3)
+  })
+
+  it("propagates a non-stale lookup error without retrying the notification read", async () => {
+    const systemTest = createSystemTest()
+    const lookupError = new Error("browser session crashed")
+    const allSpy = jasmine.createSpy("all").and.rejectWith(lookupError)
+
+    systemTest.all = /** @type {any} */ (allSpy)
+
+    await expectAsync(systemTest.notificationMessages()).toBeRejectedWith(lookupError)
+    expect(allSpy).toHaveBeenCalledOnceWith("[data-testid='notification-message']", {timeout: 0, useBaseSelector: false})
+  })
+
+  it("retries a stale snapshot before dismissing the surviving notification messages", async () => {
+    const systemTest = createSystemTest()
+    let lookupCount = 0
+    const survivor = {click: async () => {}}
+    const allSpy = jasmine.createSpy("all").and.callFake(async () => {
+      lookupCount += 1
+
+      if (lookupCount === 1) throw staleLookupError()
+
+      return [survivor]
+    })
+    const interactSpy = jasmine.createSpy("interact").and.resolveTo(undefined)
+    const waitForNoSelectorSpy = jasmine.createSpy("waitForNoSelector").and.resolveTo(undefined)
+
+    systemTest.all = /** @type {any} */ (allSpy)
+    systemTest.interact = /** @type {any} */ (interactSpy)
+    systemTest.waitForNoSelector = /** @type {any} */ (waitForNoSelectorSpy)
+
+    await systemTest.dismissNotificationMessages()
+
+    expect(lookupCount).toBe(2)
+    expect(interactSpy).toHaveBeenCalledOnceWith(survivor, "click")
+    expect(waitForNoSelectorSpy).toHaveBeenCalledOnceWith("[data-testid='notification-message']", {useBaseSelector: false})
+  })
+
+  it("settles to the disappearance wait when every dismissal pass races the auto-dismiss", async () => {
+    const systemTest = createSystemTest()
+    const allSpy = jasmine.createSpy("all").and.rejectWith(staleLookupError())
+    const interactSpy = jasmine.createSpy("interact").and.resolveTo(undefined)
+    const waitForNoSelectorSpy = jasmine.createSpy("waitForNoSelector").and.resolveTo(undefined)
+
+    systemTest.all = /** @type {any} */ (allSpy)
+    systemTest.interact = /** @type {any} */ (interactSpy)
+    systemTest.waitForNoSelector = /** @type {any} */ (waitForNoSelectorSpy)
+
+    await systemTest.dismissNotificationMessages()
+
+    expect(allSpy).toHaveBeenCalledTimes(3)
+    expect(interactSpy).not.toHaveBeenCalled()
+    expect(waitForNoSelectorSpy).toHaveBeenCalledOnceWith("[data-testid='notification-message']", {useBaseSelector: false})
+  })
+
+  it("propagates a non-stale dismissal error without retrying or waiting for disappearance", async () => {
+    const systemTest = createSystemTest()
+    const lookupError = new Error("browser session crashed")
+    const allSpy = jasmine.createSpy("all").and.rejectWith(lookupError)
+    const waitForNoSelectorSpy = jasmine.createSpy("waitForNoSelector").and.resolveTo(undefined)
+
+    systemTest.all = /** @type {any} */ (allSpy)
+    systemTest.waitForNoSelector = /** @type {any} */ (waitForNoSelectorSpy)
+
+    await expectAsync(systemTest.dismissNotificationMessages()).toBeRejectedWith(lookupError)
+    expect(allSpy).toHaveBeenCalledTimes(1)
+    expect(waitForNoSelectorSpy).not.toHaveBeenCalled()
   })
 
   it("expects a notification before dismissing the current notification stack", async () => {
