@@ -1,6 +1,7 @@
 import {AsyncLocalStorage} from "node:async_hooks"
 import {randomUUID} from "node:crypto"
 import WebDriverCommandOperation from "./webdriver-command-operation.js"
+import LatencyCalibrator from "./latency-calibrator.js"
 import {By, error as SeleniumError} from "selenium-webdriver"
 import logging from "selenium-webdriver/lib/logging.js"
 import {wait, waitFor} from "awaitery"
@@ -206,6 +207,7 @@ export default class WebDriverDriver {
     this.sessionCorrelation = randomUUID()
     /** @type {AsyncLocalStorage<WebDriverCommandOperation>} */
     this.commandOperationStorage = new AsyncLocalStorage()
+    this.latencyCalibrator = new LatencyCalibrator()
     /**
      * Process-exit handlers installed while a WebDriver session is alive.
      * Retained so `stop()` can deregister them before removing the
@@ -234,6 +236,15 @@ export default class WebDriverDriver {
 
   /** @returns {number} */
   getTimeouts() { return this._timeouts }
+
+  /**
+   * Scales a base deadline budget to the measured responsiveness of this session. On a
+   * healthy runner the budget is returned unchanged; under load it grows to cover recent
+   * operation latency, bounded by the calibrator ceiling. See {@link LatencyCalibrator}.
+   * @param {number} baseMs Healthy-box base budget.
+   * @returns {number}
+   */
+  adaptiveTimeout(baseMs) { return this.latencyCalibrator.adaptive(baseMs) }
 
   /**
    * @returns {import("selenium-webdriver").WebDriver}
@@ -293,7 +304,17 @@ export default class WebDriverDriver {
    */
   async runCommandOperation(args, callback) {
     const operation = new WebDriverCommandOperation({adapter: this, ...args})
-    return await this.commandOperationStorage.run(operation, async () => await operation.run(callback))
+    const startedAt = Date.now()
+    let succeeded = false
+    try {
+      const result = await this.commandOperationStorage.run(operation, async () => await operation.run(callback))
+      succeeded = true
+      return result
+    } finally {
+      // Only an operation that waited and then settled measures responsiveness. A
+      // deadline expiry is the failure we are trying to prevent, not a latency sample.
+      if (succeeded) this.latencyCalibrator.record(Date.now() - startedAt)
+    }
   }
 
   /**
@@ -605,7 +626,7 @@ export default class WebDriverDriver {
     let actualTimeout
 
     if (lookupTimeout === undefined) {
-      actualTimeout = this._driverTimeouts
+      actualTimeout = this.adaptiveTimeout(this._driverTimeouts)
     } else {
       actualTimeout = lookupTimeout
     }
@@ -697,6 +718,8 @@ export default class WebDriverDriver {
         }
       }
     })
+
+    if (actualTimeout > 0) this.latencyCalibrator.record(Date.now() - startTime)
 
     if (scrollTo) {
       for (const element of elements) {

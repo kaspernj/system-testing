@@ -784,7 +784,9 @@ export default class SystemTest extends Browser {
    * @returns {Promise<void>}
    */
   async expectNotificationMessage(expectedNotificationMessage, args = {}) {
-    const {dismiss = true, timeout: waitTimeout = NOTIFICATION_MESSAGE_TIMEOUT_MS, ...restArgs} = args
+    // A caller-supplied timeout always wins; only the default window adapts to the
+    // measured responsiveness of this session (see LatencyCalibrator).
+    const {dismiss = true, timeout: waitTimeout = this.getDriverAdapter().adaptiveTimeout(NOTIFICATION_MESSAGE_TIMEOUT_MS), ...restArgs} = args
 
     if (Object.keys(restArgs).length > 0) {
       throw new Error(`Unexpected args: ${Object.keys(restArgs).join(", ")}`)
