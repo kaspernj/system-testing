@@ -29,6 +29,16 @@ describe("LatencyCalibrator", () => {
     expect(calibrator.adaptive(5000)).toEqual(24600)
   })
 
+  it("never scales an explicit no-wait (zero) base", () => {
+    const calibrator = new LatencyCalibrator()
+    for (const sample of [8000, 8200, 7900]) calibrator.record(sample)
+    // A base of zero is a "do not wait" signal (e.g. a no-wait element peek), not a budget:
+    // scaling it would turn an instant check into a deadline that throws instead of
+    // settling to "not found". Positive bases are still scaled from the same samples.
+    expect(calibrator.adaptive(0)).toEqual(0)
+    expect(calibrator.adaptive(5000)).toEqual(24600)
+  })
+
   it("never returns a budget below the base", () => {
     const calibrator = new LatencyCalibrator()
     for (const sample of [250, 260, 240]) calibrator.record(sample)

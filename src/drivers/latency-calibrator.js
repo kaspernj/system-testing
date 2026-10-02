@@ -57,10 +57,14 @@ export default class LatencyCalibrator {
   /**
    * Scales a base budget to cover recent runner latency. Returns `baseMs` until enough
    * real samples have been recorded, then `min(ceiling, max(base, recentHigh * safety))`.
+   * A base of zero (or less) is an explicit "do not wait" signal (e.g. a no-wait element
+   * peek), not a budget to scale, so it is returned unchanged: scaling it would turn an
+   * instant check into a deadline that throws instead of settling to "not found".
    * @param {number} baseMs Healthy-box base budget.
    * @returns {number}
    */
   adaptive(baseMs) {
+    if (baseMs <= 0) return baseMs
     if (this.samples.length < this.minSamples) return baseMs
     const scaled = Math.round(this.recentHighMs() * this.safetyFactor)
     return Math.min(this.ceilingMs, Math.max(baseMs, scaled))

@@ -7,3 +7,7 @@
 
 - scale the default notification-message window and the element-lookup base budget to cover recent operation latency on slow runners, bounded by a hard ceiling
 - keep caller-supplied timeouts and healthy-box defaults unchanged: the budget only grows when recent operations actually waited, and never drops below the existing default
+
+## Fixed
+
+- preserve an explicit no-wait (zero) element-lookup base so a `findNoWait`/`expectNoElement` peek still settles to "not found" instead of being scaled into a deadline that throws
