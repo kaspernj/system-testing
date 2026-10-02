@@ -17,9 +17,15 @@ before_install:
   - sudo unzip -o -q /tmp/chrome-for-testing.zip -d /opt/chrome-for-testing
   - sudo chmod -R a+rx /opt/chrome-for-testing/chrome-linux64
   - rm -f /tmp/chrome-for-testing.zip
-before_script:
-  - npm install
-  - cd spec/dummy && npm install
+# Cache-aware dependency installs (docs/cache-aware-dependency-installs.md): the
+# executor installs these roots before the script phase and inherits unchanged
+# trees from the base image instead of running npm install in a phase command.
+# Both the root package and the spec/dummy app carry their own package-lock.json.
+dependency_roots:
+  - path: .
+    install: npm ci --no-audit --no-fund
+  - path: spec/dummy
+    install: npm ci --no-audit --no-fund
 mem_limit: 16384m
 builds:
   build_1:
