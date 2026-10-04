@@ -28,5 +28,11 @@ export default defineConfig([
       "jsdoc/require-param-description": "off",
       "jsdoc/require-returns-description": "off"
     }
-  })
+  }),
+  {
+    files: ["src/cli.js", "src/cli-helpers.js"],
+    rules: {
+      "jsdoc/reject-any-type": "error"
+    }
+  }
 ])
