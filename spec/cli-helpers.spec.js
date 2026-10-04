@@ -1,6 +1,6 @@
 // @ts-check
 
-import {parseArgv, resolveBrowserCommand, resolveBrowserDaemonToken} from "../src/cli-helpers.js"
+import {parseArgv, resolveBrowserCommand, resolveBrowserDaemonToken, resolveBrowserDriverOptions} from "../src/cli-helpers.js"
 
 describe("cli helpers", () => {
   describe("resolveBrowserDaemonToken", () => {
@@ -41,11 +41,91 @@ describe("cli helpers", () => {
     })
   })
 
+  describe("resolveBrowserDriverOptions", () => {
+    it("returns undefined when no launch flags are set", () => {
+      expect(resolveBrowserDriverOptions({})).toBeUndefined()
+    })
+
+    it("returns the Chrome binary path when --chrome-binary is set", () => {
+      expect(resolveBrowserDriverOptions({"chrome-binary": "/opt/chrome"})).toEqual({
+        chromeBinaryPath: "/opt/chrome",
+        chromedriverPath: undefined,
+        chromeArguments: undefined
+      })
+    })
+
+    it("returns the chromedriver path when --chromedriver is set", () => {
+      expect(resolveBrowserDriverOptions({"chromedriver": "/opt/chromedriver"})).toEqual({
+        chromeBinaryPath: undefined,
+        chromedriverPath: "/opt/chromedriver",
+        chromeArguments: undefined
+      })
+    })
+
+    it("wraps a single --chrome-arg into an array", () => {
+      expect(resolveBrowserDriverOptions({"chrome-arg": "--start-maximized"})).toEqual({
+        chromeBinaryPath: undefined,
+        chromedriverPath: undefined,
+        chromeArguments: ["--start-maximized"]
+      })
+    })
+
+    it("preserves repeated --chrome-arg values in order", () => {
+      expect(resolveBrowserDriverOptions({"chrome-arg": ["--ignore-certificate-errors", "--start-maximized"]})).toEqual({
+        chromeBinaryPath: undefined,
+        chromedriverPath: undefined,
+        chromeArguments: ["--ignore-certificate-errors", "--start-maximized"]
+      })
+    })
+
+    it("combines the binary, driver, and argument flags", () => {
+      expect(
+        resolveBrowserDriverOptions({"chrome-arg": ["--a"], "chrome-binary": "/opt/chrome", chromedriver: "/opt/chromedriver"})
+      ).toEqual({
+        chromeBinaryPath: "/opt/chrome",
+        chromedriverPath: "/opt/chromedriver",
+        chromeArguments: ["--a"]
+      })
+    })
+
+    it("throws when --chrome-binary is passed without a value", () => {
+      expect(() => resolveBrowserDriverOptions({"chrome-binary": true})).toThrowError("--chrome-binary requires a value")
+    })
+
+    it("throws when --chromedriver is passed without a value", () => {
+      expect(() => resolveBrowserDriverOptions({chromedriver: true})).toThrowError("--chromedriver requires a value")
+    })
+
+    it("throws when --chrome-arg is passed without a value", () => {
+      expect(() => resolveBrowserDriverOptions({"chrome-arg": true})).toThrowError(
+        "--chrome-arg requires a value; use --chrome-arg=<arg> for arguments that start with --"
+      )
+    })
+  })
+
   it("parses repeated flags into arrays", () => {
     const parsed = parseArgv(["browser-command", "--command=interact", "--arg", "one", "--arg", "two"])
 
     expect(parsed._).toEqual(["browser-command"])
     expect(parsed.flags.arg).toEqual(["one", "two"])
+  })
+
+  it("keeps chrome argument values that start with -- when passed with =", () => {
+    const parsed = parseArgv(["browser", "dozer", "--chrome-arg=--ignore-certificate-errors"])
+
+    expect(parsed._).toEqual(["browser", "dozer"])
+    expect(parsed.flags["chrome-arg"]).toBe("--ignore-certificate-errors")
+  })
+
+  it("accumulates repeated --chrome-arg= values in order", () => {
+    const parsed = parseArgv([
+      "browser",
+      "dozer",
+      "--chrome-arg=--ignore-certificate-errors",
+      "--chrome-arg=--start-maximized"
+    ])
+
+    expect(parsed.flags["chrome-arg"]).toEqual(["--ignore-certificate-errors", "--start-maximized"])
   })
 
   it("resolves convenience visit commands", () => {

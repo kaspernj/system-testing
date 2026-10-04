@@ -4,12 +4,13 @@ import BrowserCommandClient from "./browser-command-client.js"
 import BrowserProcess from "./browser-process.js"
 import {browserDaemonTokenEnvVar} from "./browser-daemon-constants.js"
 import BrowserRegistry from "./browser-registry.js"
-import {parseArgv, resolveBrowserCommand, resolveBrowserDaemonToken} from "./cli-helpers.js"
+import {parseArgv, resolveBrowserCommand, resolveBrowserDaemonToken, resolveBrowserDriverOptions, resolveFlagString} from "./cli-helpers.js"
 
 /** @returns {void} */
 function printHelp() {
   console.log(`Usage:
   system-testing browser <name> [--port 1991] [--base-url https://example.com] [--host 127.0.0.1] [--token SECRET]
+      [--driver <selenium|appium>] [--chrome-binary <path>] [--chromedriver <path>] [--chrome-arg=<arg>]...
   system-testing browser-list
   system-testing browser-stop [--name my-browser]
   system-testing browser-command [--name my-browser] [--port 1991] [--token SECRET] --visit=https://example.com
@@ -21,6 +22,7 @@ function printHelp() {
 
 The browser daemon binds to 127.0.0.1 by default. Override with --host only when remote access is intended.
 Set a shared token with --token or the ${browserDaemonTokenEnvVar} environment variable to require it on every command.
+Chrome launch options: --chrome-binary and --chromedriver set a path; --chrome-arg is repeatable. Chrome args that start with -- must use the = form, e.g. --chrome-arg=--ignore-certificate-errors.
 `)
 }
 
@@ -44,13 +46,19 @@ async function main(argv) {
       throw new Error("browser requires a name")
     }
 
+    const driverOptions = resolveBrowserDriverOptions(parsed.flags)
+    const driverConfig =
+      parsed.flags.driver || driverOptions
+        ? {type: parsed.flags.driver, options: driverOptions}
+        : undefined
+
     const browserProcess = new BrowserProcess({
-      baseUrl: parsed.flags["base-url"],
+      baseUrl: resolveFlagString(parsed.flags, "base-url"),
       browserArgs: {
-        driver: parsed.flags.driver ? {type: parsed.flags.driver} : undefined
+        driver: driverConfig
       },
       debug: parsed.flags.debug === true || parsed.flags.debug === "true",
-      host: parsed.flags.host,
+      host: resolveFlagString(parsed.flags, "host"),
       name,
       port: parsed.flags.port ? Number(parsed.flags.port) : 0,
       token: resolveBrowserDaemonToken(parsed.flags)
@@ -71,7 +79,7 @@ async function main(argv) {
       console.log(`${entry.name}\t${entry.port}\tpid=${entry.pid}`)
     }
   } else if (mainCommand === "browser-stop") {
-    const stoppedEntry = await BrowserRegistry.stop(parsed.flags.name)
+    const stoppedEntry = await BrowserRegistry.stop(resolveFlagString(parsed.flags, "name"))
 
     if (parsed.flags.json) {
       console.log(JSON.stringify(stoppedEntry, null, 2))
@@ -81,8 +89,8 @@ async function main(argv) {
     console.log(`Stopped ${stoppedEntry.name}\tpid=${stoppedEntry.pid}`)
   } else if (mainCommand === "browser-command") {
     const client = new BrowserCommandClient({
-      host: parsed.flags.host,
-      name: parsed.flags.name,
+      host: resolveFlagString(parsed.flags, "host"),
+      name: resolveFlagString(parsed.flags, "name"),
       port: parsed.flags.port ? Number(parsed.flags.port) : undefined,
       token: resolveBrowserDaemonToken(parsed.flags)
     })

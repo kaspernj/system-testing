@@ -1,10 +1,22 @@
 import {browserDaemonTokenEnvVar} from "./browser-daemon-constants.js"
 
 /**
+ * A single parsed CLI flag value. A flag passed without a value is the boolean `true`;
+ * a repeatable flag accumulates into an array.
+ * @typedef {(string | boolean | (string | boolean)[])} ParsedFlagValue
+ */
+/** @typedef {Record<string, ParsedFlagValue>} ParsedFlags */
+/**
+ * The argument bag a browser command forwards to the daemon. Values are scalars or arrays
+ * of scalars as produced by the CLI parser and the timeout/number resolvers.
+ * @typedef {Record<string, string | number | boolean | null | undefined | (string | number | boolean)[]>} BrowserCommandArgs
+ */
+
+/**
  * Resolves the optional browser daemon token from the CLI flag, falling back to the
  * environment variable. Returns undefined when neither is set. Throws when `--token` is
  * passed without a value so token auth never silently enables with the literal `"true"`.
- * @param {Record<string, any>} flags
+ * @param {ParsedFlags} flags
  * @returns {string | undefined}
  */
 export function resolveBrowserDaemonToken(flags) {
@@ -18,23 +30,67 @@ export function resolveBrowserDaemonToken(flags) {
 }
 
 /**
+ * Resolves Chrome launch options from the `browser` CLI flags, forwarding them to the
+ * Selenium driver. Returns an options object, or undefined when no launch flags are set.
+ * `--chrome-arg` is repeatable. Because the parser treats any `--...` token as a flag,
+ * Chrome arguments that themselves start with `--` must use the `=` form, e.g.
+ * `--chrome-arg=--ignore-certificate-errors`.
+ * @param {ParsedFlags} flags
+ * @returns {{chromeBinaryPath?: string, chromedriverPath?: string, chromeArguments?: string[]} | undefined}
+ */
+export function resolveBrowserDriverOptions(flags) {
+  const chromeBinaryPath = flags["chrome-binary"]
+  const chromedriverPath = flags["chromedriver"]
+  const chromeArg = flags["chrome-arg"]
+
+  if (chromeBinaryPath === true) throw new Error("--chrome-binary requires a value")
+  if (chromedriverPath === true) throw new Error("--chromedriver requires a value")
+  if (chromeArg === true) {
+    throw new Error("--chrome-arg requires a value; use --chrome-arg=<arg> for arguments that start with --")
+  }
+
+  const chromeArguments =
+    chromeArg === undefined ? undefined : Array.isArray(chromeArg) ? chromeArg.map((arg) => String(arg)) : [String(chromeArg)]
+
+  if (chromeBinaryPath === undefined && chromedriverPath === undefined && chromeArguments === undefined) {
+    return undefined
+  }
+
+  return {
+    chromeBinaryPath: chromeBinaryPath !== undefined ? String(chromeBinaryPath) : undefined,
+    chromedriverPath: chromedriverPath !== undefined ? String(chromedriverPath) : undefined,
+    chromeArguments
+  }
+}
+
+/**
+ * Returns a flag's value when it is a scalar string, or undefined for bare flags (`true`)
+ * and repeatable flags (arrays). Used to feed scalar string CLI flags into daemon options.
+ * @param {ParsedFlags} flags
+ * @param {string} key
+ * @returns {string | undefined}
+ */
+export function resolveFlagString(flags, key) {
+  const value = flags[key]
+
+  return typeof value === "string" ? value : undefined
+}
+
+/**
  * @param {string[]} argv
- * @returns {{_: string[], flags: Record<string, any>}}
+ * @returns {{_: string[], flags: ParsedFlags}}
  */
 export function parseArgv(argv) {
-  /** @type {{_: string[], flags: Record<string, any>}} */
+  /** @type {{_: string[], flags: ParsedFlags}} */
   const result = {_: [], flags: {}}
-  const setFlag = (/** @type {string} */ key, /** @type {any} */ value) => {
+  const setFlag = (/** @type {string} */ key, /** @type {string | boolean} */ value) => {
     if (!(key in result.flags)) {
       result.flags[key] = value
       return
     }
 
-    if (!Array.isArray(result.flags[key])) {
-      result.flags[key] = [result.flags[key]]
-    }
-
-    result.flags[key].push(value)
+    const existing = result.flags[key]
+    result.flags[key] = Array.isArray(existing) ? [...existing, value] : [existing, value]
   }
 
   for (let index = 0; index < argv.length; index++) {
@@ -70,7 +126,7 @@ export function parseArgv(argv) {
 /**
  * Parses a CLI timeout flag into milliseconds.
  * Bare numeric values are treated as seconds for CLI ergonomics.
- * @param {any} timeoutFlag
+ * @param {ParsedFlagValue | number} timeoutFlag
  * @returns {number | undefined}
  */
 function resolveCliTimeout(timeoutFlag) {
@@ -100,7 +156,7 @@ function resolveCliTimeout(timeoutFlag) {
 }
 
 /**
- * @param {any} numberFlag
+ * @param {ParsedFlagValue | number} numberFlag
  * @param {string} flagName
  * @returns {number | undefined}
  */
@@ -116,8 +172,8 @@ function resolveCliNumber(numberFlag, flagName) {
 }
 
 /**
- * @param {Record<string, any>} flags
- * @param {Record<string, any>} args
+ * @param {ParsedFlags} flags
+ * @param {BrowserCommandArgs} args
  * @returns {void}
  */
 function applyPointerFlags(flags, args) {
@@ -134,14 +190,14 @@ function applyPointerFlags(flags, args) {
 }
 
 /**
- * @param {Record<string, any>} flags
- * @returns {{command: string, args: Record<string, any>}}
+ * @param {ParsedFlags} flags
+ * @returns {{command: string, args: BrowserCommandArgs}}
  */
 export function resolveBrowserCommand(flags) {
   const timeout = resolveCliTimeout(flags.timeout)
 
   if (flags.visit) {
-    /** @type {Record<string, any>} */
+    /** @type {BrowserCommandArgs} */
     const args = {url: flags.visit}
 
     if (timeout !== undefined) {
@@ -152,7 +208,7 @@ export function resolveBrowserCommand(flags) {
   }
 
   if (flags["dismiss-to"]) {
-    /** @type {Record<string, any>} */
+    /** @type {BrowserCommandArgs} */
     const args = {path: flags["dismiss-to"]}
 
     if (timeout !== undefined) {
@@ -163,7 +219,7 @@ export function resolveBrowserCommand(flags) {
   }
 
   if (flags["find-by-test-id"]) {
-    /** @type {Record<string, any>} */
+    /** @type {BrowserCommandArgs} */
     const args = {
       testID: flags["find-by-test-id"],
       timeout,
@@ -182,7 +238,7 @@ export function resolveBrowserCommand(flags) {
   }
 
   if (flags.find) {
-    /** @type {Record<string, any>} */
+    /** @type {BrowserCommandArgs} */
     const args = {
       selector: flags.find,
       timeout,
@@ -201,7 +257,7 @@ export function resolveBrowserCommand(flags) {
   }
 
   if (flags.click) {
-    /** @type {Record<string, any>} */
+    /** @type {BrowserCommandArgs} */
     const args = {
       selector: flags.click,
       timeout,
@@ -263,6 +319,7 @@ export function resolveBrowserCommand(flags) {
   }
 
   if (flags.command) {
+    /** @type {BrowserCommandArgs} */
     const args = {}
 
     if (flags.url) args.url = flags.url
@@ -289,7 +346,7 @@ export function resolveBrowserCommand(flags) {
     if (flags["cookie-expiry"] !== undefined) args.expiry = flags["cookie-expiry"]
     if (flags["cookie-same-site"]) args.sameSite = flags["cookie-same-site"]
 
-    return {args, command: flags.command}
+    return {args, command: String(flags.command)}
   }
 
   throw new Error("No browser command was given")
