@@ -27,6 +27,12 @@ const INITIAL_ROOT_VISIT_RETRY_DELAY_MS = 100
 // renderer-communication timeout on a loaded host) cannot consume the whole
 // initialRootVisitTimeout budget and leave no room for a retry.
 const INITIAL_ROOT_VISIT_ATTEMPT_PAGE_LOAD_TIMEOUT_MS = 20000
+// The startup readiness assertions run against a freshly loaded renderer. On heavily loaded
+// hosts chromedriver can stall waiting for the renderer to answer these first lookups even
+// though the navigation itself succeeded — the same load class the initial root visit above
+// retries for. The lookups are idempotent, so one stalled readiness pass recycles the
+// browser session and retries the assertions on a fresh browser instead of failing the run.
+const WEB_STARTUP_READINESS_ATTEMPTS = 2
 const NATIVE_CLIENT_WEBSOCKET_CONNECT_TIMEOUT_MS = 120000
 const NOTIFICATION_MESSAGE_SELECTOR = "[data-testid='notification-message']"
 const NOTIFICATION_MESSAGE_TIMEOUT_MS = 5000
@@ -47,6 +53,23 @@ function isStaleElementReferenceError(error) {
     error.constructor.name === "StaleElementReferenceError"
     || error.message.toLowerCase().includes("stale element reference")
   )
+}
+
+/**
+ * Whether a web startup readiness failure is the renderer-stall class that a fresh browser
+ * session can recover from (a lookup deadline while chromedriver waits on an unresponsive
+ * renderer), as opposed to a settled negative result such as a genuinely absent element.
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+function isRetryableWebStartupReadinessError(error) {
+  let current = error
+  while (current instanceof Error) {
+    if (current.constructor.name === "ElementLookupDeadlineError") return true
+    if (current.message.toLowerCase().includes("timed out receiving message from renderer")) return true
+    current = current.cause
+  }
+  return false
 }
 
 /**
@@ -1048,22 +1071,22 @@ export default class SystemTest extends Browser {
       await this.visitInitialRootPath(rootPath)
       this.debugLog(`Visited root path ${rootPath}`)
 
-      try {
-        this.debugLog("Finding root element body > #root")
-        await this.getDriverAdapter().runCommandOperation({
-          name: "startup-root", timeout: this.getTimeouts(), errorMessage: "timeout while finding startup root", callbackOwnsTimeout: true
-        }, async () => await this.find("body > #root", {useBaseSelector: false}))
-        this.debugLog("Found root element body > #root")
+      for (let readinessAttempt = 1; readinessAttempt <= WEB_STARTUP_READINESS_ATTEMPTS; readinessAttempt += 1) {
+        try {
+          await this.assertWebStartupReadiness()
+          break
+        } catch (error) {
+          if (readinessAttempt >= WEB_STARTUP_READINESS_ATTEMPTS || !isRetryableWebStartupReadinessError(error)) {
+            this.debugLog("Error while finding root/systemTestingComponent, taking screenshot")
+            await this.throwStartupFailure(error)
+          }
 
-        this.debugLog("Finding systemTestingComponent")
-        await this.getDriverAdapter().runCommandOperation({
-          name: "startup-component", timeout: 30000, errorMessage: "timeout while finding startup component", callbackOwnsTimeout: true
-        }, async () => await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true}))
-        this.debugLog("Found systemTestingComponent")
-        this.debugLog("Found root and systemTestingComponent")
-      } catch (error) {
-        this.debugLog("Error while finding root/systemTestingComponent, taking screenshot")
-        await this.throwStartupFailure(error)
+          // A lookup deadline against an unresponsive renderer also quarantines the session,
+          // so the retry runs on a fresh browser instead of the stalled one.
+          const stallMessage = error instanceof Error ? error.message : String(error)
+          this.warn(`System test startup readiness stalled (${stallMessage}); recycling the browser session and retrying`)
+          await this.recycleStalledBrowserSession()
+        }
       }
     } else {
       try {
@@ -1109,6 +1132,54 @@ export default class SystemTest extends Browser {
       throw new AggregateError(errors, "System test startup failed with a secondary screenshot error", {cause: error})
     }
     throw error
+  }
+
+  /**
+   * Asserts the web startup readiness: the app root renders and the focused system
+   * testing component checks in.
+   * @returns {Promise<void>}
+   */
+  async assertWebStartupReadiness() {
+    this.debugLog("Finding root element body > #root")
+    await this.getDriverAdapter().runCommandOperation({
+      name: "startup-root", timeout: this.getTimeouts(), errorMessage: "timeout while finding startup root", callbackOwnsTimeout: true
+    }, async () => await this.find("body > #root", {useBaseSelector: false}))
+    this.debugLog("Found root element body > #root")
+
+    this.debugLog("Finding systemTestingComponent")
+    await this.getDriverAdapter().runCommandOperation({
+      name: "startup-component", timeout: 30000, errorMessage: "timeout while finding startup component", callbackOwnsTimeout: true
+    }, async () => await this.findByTestID("systemTestingComponent", {useBaseSelector: false, timeout: 30000, visible: true}))
+    this.debugLog("Found systemTestingComponent")
+    this.debugLog("Found root and systemTestingComponent")
+  }
+
+  /**
+   * Stops a stalled browser session and starts a replacement for another startup readiness
+   * attempt. The client WebSocket server stays up; the replacement session loads the root
+   * path again and reconnects to it on its own.
+   * @returns {Promise<void>}
+   */
+  async recycleStalledBrowserSession() {
+    try {
+      await this.getDriverAdapter().stop()
+    } catch (error) {
+      this.warn(`Stalled browser session did not stop cleanly: ${error instanceof Error ? error.message : String(error)}`)
+    }
+
+    const currentUrl = this.currentUrl
+    if (!currentUrl) throw new Error("Cannot recycle the browser session before the startup URL is resolved")
+
+    this.driverAdapter = this.createDriver(this._driverConfig)
+    this.getDriverAdapter().setBaseUrl(currentUrl)
+    this.debugLog("Starting replacement driver after a stalled startup readiness lookup")
+    await this.getDriverAdapter().start()
+    await this.setTimeouts(10000)
+
+    this.debugLog("Visiting root path on the replacement driver")
+    const rootPath = this.getRootPath()
+    await this.visitInitialRootPath(rootPath)
+    this.debugLog(`Visited root path ${rootPath} on the replacement driver`)
   }
 
   /**
