@@ -340,4 +340,134 @@ describe("SystemTest.start", () => {
     expect(replacementDriverAdapter.start).toHaveBeenCalledTimes(1)
     expect(systemTest.isStarted()).toBeTrue()
   })
+
+  it("recycles the browser session and retries the readiness lookups after a renderer stall", async () => {
+    const originalHost = process.env.SYSTEM_TEST_HOST
+    process.env.SYSTEM_TEST_HOST = "expo-dev-server"
+    try {
+      const systemTest = new SystemTest()
+      const driverAdapter = {
+        setBaseUrl: jasmine.createSpy("setBaseUrl"),
+        setTimeouts: jasmine.createSpy("setTimeouts").and.resolveTo(undefined),
+        start: jasmine.createSpy("start").and.resolveTo(undefined),
+        stop: jasmine.createSpy("stop").and.resolveTo(undefined)
+      }
+      const replacementDriverAdapter = {
+        setBaseUrl: jasmine.createSpy("replacementSetBaseUrl"),
+        setTimeouts: jasmine.createSpy("replacementSetTimeouts").and.resolveTo(undefined),
+        start: jasmine.createSpy("replacementStart").and.resolveTo(undefined),
+        stop: jasmine.createSpy("replacementStop").and.resolveTo(undefined)
+      }
+      systemTest.driverAdapter = /** @type {any} */ (driverAdapter)
+      spyOn(systemTest, "startWebSocketServer").and.resolveTo(undefined)
+      spyOn(systemTest, "waitForClientWebSocket").and.resolveTo(undefined)
+      class ElementLookupDeadlineError extends Error {}
+      const stallError = new Error(
+        "Couldn't get elements with selector: body > #root: Wait timed out after 9999ms (selector: body > #root)",
+        {cause: new ElementLookupDeadlineError("Wait timed out after 9999ms")}
+      )
+      const warnings = spyOn(console, "warn")
+      let readinessCalls = 0
+      spyOn(systemTest, "visitInitialRootPath").and.resolveTo(undefined)
+      spyOn(systemTest, "assertWebStartupReadiness").and.callFake(() => {
+        readinessCalls += 1
+        return readinessCalls === 1 ? Promise.reject(stallError) : Promise.resolve()
+      })
+      spyOn(systemTest, "createDriver").and.returnValue(/** @type {any} */ (replacementDriverAdapter))
+
+      await systemTest.start()
+
+      expect(systemTest.isStarted()).toBeTrue()
+      expect(driverAdapter.stop).toHaveBeenCalledTimes(1)
+      expect(systemTest.createDriver).toHaveBeenCalledTimes(1)
+      expect(replacementDriverAdapter.setBaseUrl).toHaveBeenCalledTimes(1)
+      expect(replacementDriverAdapter.start).toHaveBeenCalledTimes(1)
+      expect(replacementDriverAdapter.setTimeouts).toHaveBeenCalledWith(10000)
+      expect(systemTest.visitInitialRootPath).toHaveBeenCalledTimes(2)
+      expect(systemTest.assertWebStartupReadiness).toHaveBeenCalledTimes(2)
+      expect(replacementDriverAdapter.stop).not.toHaveBeenCalled()
+      const warningMessages = warnings.calls.allArgs().map((args) => args.map(String).join(" "))
+      expect(warningMessages.some((message) => message.includes("recycling the browser session"))).toBeTrue()
+    } finally {
+      if (originalHost === undefined) delete process.env.SYSTEM_TEST_HOST
+      else process.env.SYSTEM_TEST_HOST = originalHost
+    }
+  })
+
+  it("fails startup without recycling when a readiness lookup fails for a non-stall reason", async () => {
+    const originalHost = process.env.SYSTEM_TEST_HOST
+    process.env.SYSTEM_TEST_HOST = "expo-dev-server"
+    try {
+      const systemTest = new SystemTest()
+      const driverAdapter = {
+        setBaseUrl: jasmine.createSpy("setBaseUrl"),
+        setTimeouts: jasmine.createSpy("setTimeouts").and.resolveTo(undefined),
+        start: jasmine.createSpy("start").and.resolveTo(undefined),
+        stop: jasmine.createSpy("stop").and.resolveTo(undefined)
+      }
+      systemTest.driverAdapter = /** @type {any} */ (driverAdapter)
+      spyOn(systemTest, "startWebSocketServer").and.resolveTo(undefined)
+      spyOn(systemTest, "waitForClientWebSocket").and.resolveTo(undefined)
+      const lookupError = new Error("element not found: body > #root")
+      spyOn(systemTest, "visitInitialRootPath").and.resolveTo(undefined)
+      spyOn(systemTest, "assertWebStartupReadiness").and.rejectWith(lookupError)
+      spyOn(systemTest, "takeScreenshot").and.resolveTo(undefined)
+      spyOn(systemTest, "createDriver")
+
+      const failure = await systemTest.start().catch((error) => error)
+
+      expect(failure).toBe(lookupError)
+      expect(driverAdapter.stop).not.toHaveBeenCalled()
+      expect(systemTest.createDriver).not.toHaveBeenCalled()
+      expect(systemTest.assertWebStartupReadiness).toHaveBeenCalledTimes(1)
+    } finally {
+      if (originalHost === undefined) delete process.env.SYSTEM_TEST_HOST
+      else process.env.SYSTEM_TEST_HOST = originalHost
+    }
+  })
+
+  it("stops after one recycle when the replacement readiness attempt also stalls", async () => {
+    const originalHost = process.env.SYSTEM_TEST_HOST
+    process.env.SYSTEM_TEST_HOST = "expo-dev-server"
+    try {
+      const systemTest = new SystemTest()
+      const driverAdapter = {
+        setBaseUrl: jasmine.createSpy("setBaseUrl"),
+        setTimeouts: jasmine.createSpy("setTimeouts").and.resolveTo(undefined),
+        start: jasmine.createSpy("start").and.resolveTo(undefined),
+        stop: jasmine.createSpy("stop").and.resolveTo(undefined)
+      }
+      const replacementDriverAdapter = {
+        setBaseUrl: jasmine.createSpy("replacementSetBaseUrl"),
+        setTimeouts: jasmine.createSpy("replacementSetTimeouts").and.resolveTo(undefined),
+        start: jasmine.createSpy("replacementStart").and.resolveTo(undefined),
+        stop: jasmine.createSpy("replacementStop").and.resolveTo(undefined)
+      }
+      systemTest.driverAdapter = /** @type {any} */ (driverAdapter)
+      spyOn(systemTest, "startWebSocketServer").and.resolveTo(undefined)
+      spyOn(systemTest, "waitForClientWebSocket").and.resolveTo(undefined)
+      class ElementLookupDeadlineError extends Error {}
+      const firstStall = new Error("first readiness stall", {cause: new ElementLookupDeadlineError("Wait timed out after 9999ms")})
+      const secondStall = new Error("second readiness stall", {cause: new ElementLookupDeadlineError("Wait timed out after 9999ms")})
+      let readinessCalls = 0
+      spyOn(systemTest, "visitInitialRootPath").and.resolveTo(undefined)
+      spyOn(systemTest, "assertWebStartupReadiness").and.callFake(() => {
+        readinessCalls += 1
+        return readinessCalls === 1 ? Promise.reject(firstStall) : Promise.reject(secondStall)
+      })
+      spyOn(systemTest, "createDriver").and.returnValue(/** @type {any} */ (replacementDriverAdapter))
+      spyOn(systemTest, "takeScreenshot").and.resolveTo(undefined)
+
+      const failure = await systemTest.start().catch((error) => error)
+
+      expect(failure).toBe(secondStall)
+      expect(driverAdapter.stop).toHaveBeenCalledTimes(1)
+      expect(systemTest.createDriver).toHaveBeenCalledTimes(1)
+      expect(replacementDriverAdapter.start).toHaveBeenCalledTimes(1)
+      expect(systemTest.assertWebStartupReadiness).toHaveBeenCalledTimes(2)
+    } finally {
+      if (originalHost === undefined) delete process.env.SYSTEM_TEST_HOST
+      else process.env.SYSTEM_TEST_HOST = originalHost
+    }
+  })
 })
