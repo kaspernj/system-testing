@@ -40,6 +40,12 @@ builds:
       - npm run test:appium:web
   build_3:
     name: Appium Android
+    # The Android toolchain state this build installs (SDK, NDK, emulator
+    # system image, AVD, gradle caches) is build-phase output, not a reusable
+    # dependency install: persisting it pushed the shared project cache to
+    # ~31 GiB against its 32 GiB cap and ping-ponged it against the lean
+    # sibling builds' commits on every run.
+    persist_workspace: false
     devices:
       - /dev/kvm:/dev/kvm
     environment:
